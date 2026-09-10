@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, afterEach } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   desktopBuildRecordFilename,
   desktopUpdateMetadataFilename,
@@ -7,6 +10,9 @@ import {
   resolveDesktopAutoUpdateTarget,
   resolveDesktopUploadConfig,
 } from '../scripts/desktop-auto-update-environment.mjs'
+
+const roots: string[] = []
+afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 
 describe('desktop auto-update environment', () => {
   it('defaults packages and uploads to the test deployment', () => {
@@ -46,6 +52,29 @@ describe('desktop auto-update environment', () => {
       secretIdEnvName: 'DOWNLOAD_PROD_COS_SECRET_ID',
       secretKeyEnvName: 'DOWNLOAD_PROD_COS_SECRET_KEY',
     })
+  })
+
+  it('uses the deployment policy update URL without a public fallback', () => {
+    expect(resolveDesktopAutoUpdateConfig({
+      DSH_DESKTOP_DEPLOYMENT_POLICY_FILE: '/tmp/policy.json',
+      DSH_DESKTOP_DEPLOYMENT_POLICY_UPDATE_BASE_URL: 'https://updates.example.com/releases/',
+    }, 'darwin', 'arm64')).toMatchObject({
+      environment: 'deployment-policy',
+      target: 'mac-arm64',
+      origin: 'https://updates.example.com',
+      keyPrefix: 'releases/mac-arm64',
+      publicUrl: 'https://updates.example.com/releases/mac-arm64/',
+    })
+  })
+
+  it('reads the update URL from the deployment policy file', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-update-policy-'))
+    roots.push(root)
+    const policy = join(root, 'policy.json')
+    writeFileSync(policy, JSON.stringify({ updateBaseUrl: 'https://updates.example.com/releases/' }))
+    expect(resolveDesktopAutoUpdateConfig({
+      DSH_DESKTOP_DEPLOYMENT_POLICY_FILE: policy,
+    }, 'darwin', 'arm64').publicUrl).toBe('https://updates.example.com/releases/mac-arm64/')
   })
 
   it('requires the selected deployment origin for packages and bucket only for uploads', () => {

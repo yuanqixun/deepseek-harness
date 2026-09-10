@@ -34,6 +34,11 @@ import {
 import type { DesktopPaths } from './paths.ts'
 import { parseDesktopRelease, type DesktopRelease } from './release.ts'
 import { extractPnpmStoreArchives, mergePnpmStore } from './seed-store.ts'
+import {
+  OFFICIAL_DESKTOP_NPM_REGISTRY,
+  resolveDesktopDeploymentPolicy,
+  type DesktopDeploymentPolicy,
+} from './deployment-policy.ts'
 
 /** Files the package transaction copies between active and staging projects. */
 const DESKTOP_PROJECT_FILES = [
@@ -42,6 +47,7 @@ const DESKTOP_PROJECT_FILES = [
   'pnpm-workspace.yaml',
   'desktop-release.json',
   DESKTOP_PACKAGE_SET_FILE,
+  'deployment-policy.json',
 ] as const
 
 /** Desktop plugin record derived from the installed profile. */
@@ -106,8 +112,8 @@ const DESKTOP_PROFILE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-
 const WORKSPACE_SETTINGS = 'nodeLinker: hoisted\nautoInstallPeers: false\nstrictDepBuilds: true\n'
 const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9][a-z0-9._~-]*\/[a-z0-9][a-z0-9._~-]*|[a-z0-9][a-z0-9._~-]*)$/u
 const VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z.+_-]*$/u
+const FILE_TARBALL_PATTERN = /^file:[^\s\\]+\.tgz$/u
 const MAX_PNPM_DIAGNOSTIC_BYTES = 64 * 1024
-const DESKTOP_REGISTRY = 'https://registry.npmjs.org/'
 
 function errorOf(reason: unknown, fallback: string): Error {
   return reason instanceof Error ? reason : new Error(fallback)
@@ -137,6 +143,10 @@ function releaseFile(projectDir: string): DesktopRelease {
   return parseDesktopRelease(readJson(join(projectDir, 'desktop-release.json')))
 }
 
+function hasReleaseMetadata(projectDir: string): boolean {
+  return existsSync(join(projectDir, 'desktop-release.json'))
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -154,12 +164,18 @@ function assertVersion(version: string): void {
   if (!VERSION_PATTERN.test(version)) throw new Error(`desktop project: invalid exact version ${JSON.stringify(version)}`)
 }
 
+function assertPolicyDependencyVersion(version: string): void {
+  if (!VERSION_PATTERN.test(version) && !FILE_TARBALL_PATTERN.test(version)) {
+    throw new Error(`desktop seed: invalid preinstalled bundle version ${JSON.stringify(version)}`)
+  }
+}
+
 /**
  * Validate one registry package spec and return its requested package name when explicit.
  * @param spec - npm registry name with an optional version or tag.
  * @returns package name, or undefined when the spec's final name is registry-resolved.
  */
-export function packageNameFromSpec(spec: string): string | undefined {
+export function packageNameFromSpec(spec: string, options: { allowFileTarballVersion?: boolean } = {}): string | undefined {
   if (spec === '' || spec.startsWith('-') || /[\s\\]/u.test(spec) || spec.includes('://') || spec.startsWith('file:')) {
     throw new Error(`desktop project: unsupported npm package spec ${JSON.stringify(spec)}`)
   }
@@ -169,14 +185,32 @@ export function packageNameFromSpec(spec: string): string | undefined {
     const versionAt = spec.indexOf('@', slash)
     const name = versionAt === -1 ? spec : spec.slice(0, versionAt)
     assertPackageName(name)
-    if (versionAt !== -1) assertVersion(spec.slice(versionAt + 1))
+    if (versionAt !== -1) {
+      const version = spec.slice(versionAt + 1)
+      if (options.allowFileTarballVersion === true && FILE_TARBALL_PATTERN.test(version)) return name
+      assertVersion(version)
+    }
     return name
   }
   const versionAt = spec.indexOf('@')
   const name = versionAt === -1 ? spec : spec.slice(0, versionAt)
   assertPackageName(name)
-  if (versionAt !== -1) assertVersion(spec.slice(versionAt + 1))
+  if (versionAt !== -1) {
+    const version = spec.slice(versionAt + 1)
+    if (options.allowFileTarballVersion === true && FILE_TARBALL_PATTERN.test(version)) return name
+    assertVersion(version)
+  }
   return name
+}
+
+function packageDependencyFromPreinstalledBundle(spec: string): readonly [string, string] {
+  const name = packageNameFromSpec(spec, { allowFileTarballVersion: true })
+  if (name === undefined) throw new Error(`desktop seed: preinstalled bundle ${JSON.stringify(spec)} has no package name`)
+  const versionAt = spec.startsWith('@') ? spec.indexOf('@', spec.indexOf('/') + 1) : spec.indexOf('@')
+  if (versionAt === -1) return [name, '*']
+  const version = spec.slice(versionAt + 1)
+  assertPolicyDependencyVersion(version)
+  return [name, version]
 }
 
 function removeOwnedDirectory(path: string): void {
@@ -195,6 +229,13 @@ function copyMetadata(source: string, target: string): void {
   for (const filename of DESKTOP_PROJECT_FILES) {
     const from = join(source, filename)
     if (existsSync(from)) copyFileSync(from, join(target, filename), constants.COPYFILE_EXCL)
+  }
+  if (existsSync(join(source, 'local-bundles'))) {
+    cpSync(join(source, 'local-bundles'), join(target, 'local-bundles'), {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+    })
   }
   cpSync(join(source, DESKTOP_PACKAGES_DIR), join(target, DESKTOP_PACKAGES_DIR), {
     recursive: true,
@@ -288,6 +329,27 @@ function pluginRecords(projectDir: string): readonly DesktopPluginRecord[] {
   return profilePluginNames(projectDir).map(name => inspectPlugin(projectDir, name))
 }
 
+function recoverableProfilePluginNames(projectDir: string): readonly string[] {
+  const value = readJson(join(projectDir, 'package.json'))
+  const dsh = isRecord(value) && isRecord(value.dsh) ? value.dsh : undefined
+  const profile = isRecord(dsh?.profile) ? dsh.profile : undefined
+  if (!Array.isArray(profile?.bundles) || !profile.bundles.every(bundle => typeof bundle === 'string')) return []
+  const bundles = profile.bundles
+  if (!DESKTOP_PROFILE_BUNDLES.every((bundle, index) => bundles[index] === bundle)) return []
+  const plugins = bundles.slice(DESKTOP_PROFILE_BUNDLES.length)
+  if (new Set(bundles).size !== bundles.length) return []
+  for (const plugin of plugins) assertPackageName(plugin)
+  return plugins
+}
+
+function recoverablePluginRecords(projectDir: string): readonly DesktopPluginRecord[] {
+  try {
+    return recoverableProfilePluginNames(projectDir).map(name => inspectPlugin(projectDir, name))
+  } catch {
+    return []
+  }
+}
+
 function writeProfilePlugins(projectDir: string, plugins: readonly DesktopPluginRecord[]): void {
   const manifest = projectManifest(projectDir)
   writeJson(join(projectDir, 'package.json'), {
@@ -336,6 +398,7 @@ export class DesktopProjectManager {
   constructor(
     readonly paths: DesktopPaths,
     readonly runtime: DesktopRuntimeExecutables,
+    readonly policy: DesktopDeploymentPolicy = resolveDesktopDeploymentPolicy(),
   ) {}
 
   /** Recover an interrupted directory replacement before reading the active project. */
@@ -400,7 +463,11 @@ export class DesktopProjectManager {
       if (target.version !== electronVersion) {
         throw new Error(`desktop project: seed ${target.version} does not match Electron ${electronVersion}`)
       }
-      if (existsSync(this.paths.profile) && this.releaseVersion() === target.version
+      const activeProfileHasMetadata = existsSync(this.paths.profile) && hasReleaseMetadata(this.paths.profile)
+      const previousPlugins = existsSync(this.paths.profile)
+        ? recoverablePluginRecords(this.paths.profile)
+        : []
+      if (activeProfileHasMetadata && this.releaseVersion() === target.version
         && this.dshVersion() === target.version
         && this.installedPackageVersion(DESKTOP_HOST_PACKAGE) === target.version) {
         verifyDesktopCorePackageSet(this.paths.profile, target.version)
@@ -410,17 +477,16 @@ export class DesktopProjectManager {
       const stagingProfile = this.newStagingProfile()
       try {
         if (existsSync(this.paths.profile)) {
-          const plugins = pluginRecords(this.paths.profile)
           copyMetadata(seedDir, stagingProfile)
           await this.runPnpm(stagingProfile, ['install', '--offline', '--frozen-lockfile', '--trust-lockfile'])
-          if (plugins.length > 0) {
+          if (previousPlugins.length > 0) {
             await this.runPnpm(stagingProfile, [
               'add',
-              ...plugins.map(plugin => `${plugin.name}@${plugin.version}`),
+              ...previousPlugins.map(plugin => `${plugin.name}@${plugin.version}`),
               '--save-exact',
               '--offline',
             ])
-            writeProfilePlugins(stagingProfile, plugins)
+            writeProfilePlugins(stagingProfile, previousPlugins)
           }
         } else {
           copyMetadata(seedDir, stagingProfile)
@@ -563,7 +629,7 @@ export class DesktopProjectManager {
     await new Promise<void>((settle, reject) => {
       const child = spawn(this.runtime.node, [
         this.runtime.pnpm,
-        `--config.registry=${DESKTOP_REGISTRY}`,
+        `--config.registry=${this.policy.npmRegistryUrl || OFFICIAL_DESKTOP_NPM_REGISTRY}`,
         `--config.store-dir=${this.paths.pnpm.store}`,
         '--config.enable-global-virtual-store=false',
         `--config.userconfig=${npmrc}`,
@@ -574,7 +640,7 @@ export class DesktopProjectManager {
         env: {
           ...inherited,
           COREPACK_HOME: this.paths.pnpm.home,
-          NPM_CONFIG_REGISTRY: DESKTOP_REGISTRY,
+          NPM_CONFIG_REGISTRY: this.policy.npmRegistryUrl || OFFICIAL_DESKTOP_NPM_REGISTRY,
           NPM_CONFIG_STORE_DIR: this.paths.pnpm.store,
           NPM_CONFIG_USERCONFIG: npmrc,
           PATH: `${dirname(this.runtime.node)}${delimiter}${process.env.PATH ?? ''}`,
@@ -683,15 +749,25 @@ export class DesktopProjectManager {
 }
 
 /** Create seed metadata for one exact Electron and dsh release. */
-export function createSeedMetadata(seedDir: string, release: DesktopRelease): void {
+export function createSeedMetadata(
+  seedDir: string,
+  release: DesktopRelease,
+  policy: DesktopDeploymentPolicy = resolveDesktopDeploymentPolicy(),
+): void {
   mkdirSync(seedDir, { recursive: true, mode: 0o700 })
   const packageSet = verifyDesktopCorePackageSet(seedDir, release.version)
+  const preinstalledDependencies = Object.fromEntries(policy.preinstalledBundles.map(packageDependencyFromPreinstalledBundle))
+  const preinstalledBundleNames = policy.preinstalledBundles.map((spec) => {
+    const name = packageNameFromSpec(spec, { allowFileTarballVersion: true })
+    if (name === undefined) throw new Error(`desktop seed: preinstalled bundle ${JSON.stringify(spec)} has no package name`)
+    return name
+  })
   const manifest: DesktopProjectManifest = {
     name: PROJECT_NAME,
     private: true,
     version: '0.0.0',
-    dependencies: desktopCorePackageOverrides(packageSet),
-    dsh: { profile: { bundles: [...DESKTOP_PROFILE_BUNDLES] } },
+    dependencies: { ...desktopCorePackageOverrides(packageSet), ...preinstalledDependencies },
+    dsh: { profile: { bundles: [...DESKTOP_PROFILE_BUNDLES, ...preinstalledBundleNames] } },
   }
   writeJson(join(seedDir, 'package.json'), manifest)
   writeFileSync(
@@ -700,6 +776,7 @@ export function createSeedMetadata(seedDir: string, release: DesktopRelease): vo
     { mode: 0o600 },
   )
   writeJson(join(seedDir, 'desktop-release.json'), release)
+  writeJson(join(seedDir, 'deployment-policy.json'), policy)
 }
 
 /**

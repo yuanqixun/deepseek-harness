@@ -246,6 +246,26 @@ describe('desktop project transactions', () => {
     expect(invocation.env.npm_config_registry).toBeUndefined()
   })
 
+  it('reinstalls a profile whose release metadata is missing', async () => {
+    const root = temporaryRoot()
+    const seed = join(root, 'seed')
+    createTestSeedMetadata(seed, release())
+    writeFileSync(join(seed, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n')
+    archiveStore(seed)
+    writeIntegrity(seed)
+    const paths = resolveDesktopPaths(join(root, '.dsh'))
+    const manager = new DesktopProjectManager(paths, { node: process.execPath, pnpm: writeFakePnpm(root) })
+
+    await manager.applyRelease(seed, '1.0.0', hooks())
+    await manager.mutate({ type: 'plugin-add', spec: '@scope/legacy-plugin@2.0.0' }, hooks())
+    expect(manager.listPlugins()).toEqual([{ name: '@scope/legacy-plugin', version: '2.0.0' }])
+    rmSync(join(paths.profile, 'desktop-release.json'))
+
+    await expect(manager.applyRelease(seed, '1.0.0', hooks())).resolves.toBe(true)
+    expect(manager.releaseVersion()).toBe('1.0.0')
+    expect(manager.listPlugins()).toEqual([{ name: '@scope/legacy-plugin', version: '2.0.0' }])
+  })
+
   it('restores the active project when the replacement backend cannot start', async () => {
     const root = temporaryRoot()
     const seed = join(root, 'seed')
@@ -367,6 +387,79 @@ describe('desktop project transactions', () => {
     expect(invocation.args).toContain('@scope/plugin@2.0.0')
     expect(invocation.args).toContain('--config.registry=https://registry.npmjs.org/')
     expect(invocation.env.NPM_CONFIG_REGISTRY).toBe('https://registry.npmjs.org/')
+  })
+
+  it('uses the deployment policy registry for plugin mutations', async () => {
+    const root = temporaryRoot()
+    const seed = join(root, 'seed')
+    const log = join(root, 'pnpm-log.json')
+    createTestSeedMetadata(seed, release())
+    writeFileSync(join(seed, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n')
+    archiveStore(seed)
+    writeIntegrity(seed)
+    const paths = resolveDesktopPaths(join(root, '.dsh'))
+    const manager = new DesktopProjectManager(
+      paths,
+      { node: process.execPath, pnpm: writeFakePnpm(root) },
+      { schemaVersion: 1, name: 'enterprise', npmRegistryUrl: 'https://registry.example.com/npm/', preinstalledBundles: [], allowedBuilds: {} },
+    )
+    await manager.applyRelease(seed, '1.0.0', hooks())
+    const previousLog = process.env.TEST_PNPM_LOG
+    process.env.TEST_PNPM_LOG = log
+    try {
+      await manager.mutate({ type: 'plugin-add', spec: '@scope/plugin@2.0.0' }, hooks())
+    } finally {
+      if (previousLog === undefined) delete process.env.TEST_PNPM_LOG
+      else process.env.TEST_PNPM_LOG = previousLog
+    }
+
+    const invocation = JSON.parse(readFileSync(log, 'utf8')) as { args: string[]; env: Record<string, string> }
+    expect(invocation.args).toContain('--config.registry=https://registry.example.com/npm/')
+    expect(invocation.env.NPM_CONFIG_REGISTRY).toBe('https://registry.example.com/npm/')
+  })
+
+  it('adds policy preinstalled bundles to the seed dependency graph', () => {
+    const root = temporaryRoot()
+    const seed = join(root, 'seed')
+    writeCorePackageSet(seed, '1.0.0')
+    createSeedMetadata(seed, release(), {
+      schemaVersion: 1,
+      name: 'enterprise',
+      npmRegistryUrl: 'https://registry.example.com/npm/',
+      preinstalledBundles: ['@scope/market@3.2.1', 'local-market@file:/opt/dsh/local-market-1.0.0.tgz'],
+      allowedBuilds: {},
+    })
+    const manifest = JSON.parse(readFileSync(join(seed, 'package.json'), 'utf8')) as {
+      dependencies: Record<string, string>
+      dsh: { profile: { bundles: string[] } }
+    }
+    expect(manifest.dependencies['@scope/market']).toBe('3.2.1')
+    expect(manifest.dependencies['local-market']).toBe('file:/opt/dsh/local-market-1.0.0.tgz')
+    expect(manifest.dsh.profile.bundles).toContain('@scope/market')
+    expect(manifest.dsh.profile.bundles).toContain('local-market')
+  })
+
+  it('copies local preinstalled bundle archives into the active profile', async () => {
+    const root = temporaryRoot()
+    const seed = join(root, 'seed')
+    writeCorePackageSet(seed, '1.0.0')
+    createSeedMetadata(seed, release(), {
+      schemaVersion: 1,
+      name: 'enterprise',
+      npmRegistryUrl: 'https://registry.example.com/npm/',
+      preinstalledBundles: ['local-market@file:local-bundles/local-market.tgz'],
+      allowedBuilds: {},
+    })
+    mkdirSync(join(seed, 'local-bundles'), { recursive: true })
+    writeFileSync(join(seed, 'local-bundles', 'local-market.tgz'), 'market archive')
+    writeFileSync(join(seed, 'pnpm-lock.yaml'), 'lockfileVersion: 9\n')
+    archiveStore(seed)
+    writeIntegrity(seed)
+    const paths = resolveDesktopPaths(join(root, '.dsh'))
+    const manager = new DesktopProjectManager(paths, { node: process.execPath, pnpm: writeFakePnpm(root) })
+
+    await expect(manager.applyRelease(seed, '1.0.0', hooks())).resolves.toBe(true)
+    expect(readFileSync(join(paths.profile, 'local-bundles', 'local-market.tgz'), 'utf8')).toBe('market archive')
   })
 
   it('reconciles dsh to the packaged release without removing desktop plugins', async () => {

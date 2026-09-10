@@ -1,9 +1,11 @@
 /** Resolve the Desktop auto-update channel and its Tencent COS destination. */
 
 import { prerelease, valid } from 'semver'
+import { existsSync, readFileSync } from 'node:fs'
 
 /** Environment variable that selects the Desktop update deployment. */
 export const DESKTOP_AUTO_UPDATE_ENV = 'DSH_DESKTOP_AUTO_UPDATE_ENV'
+export const DESKTOP_DEPLOYMENT_UPDATE_BASE_URL = 'DSH_DESKTOP_DEPLOYMENT_POLICY_UPDATE_BASE_URL'
 
 const UPDATE_ENVIRONMENTS = {
   test: {
@@ -30,6 +32,7 @@ const UPDATE_TARGETS = new Set(['mac-arm64', 'mac-x64', 'win-x64'])
  * @returns {'test' | 'production'} Validated deployment name.
  */
 export function resolveDesktopAutoUpdateEnvironment(env) {
+  if (deploymentUpdateBaseUrl(env) !== undefined) return 'deployment-policy'
   const value = env[DESKTOP_AUTO_UPDATE_ENV]?.trim() || 'test'
   if (value !== 'test' && value !== 'production') {
     throw new Error(`desktop auto-update: ${DESKTOP_AUTO_UPDATE_ENV} must be "test" or "production"`)
@@ -132,6 +135,20 @@ function httpsOrigin(value, name) {
 export function resolveDesktopAutoUpdateConfig(env, platform, arch) {
   const environment = resolveDesktopAutoUpdateEnvironment(env)
   const target = resolveDesktopAutoUpdateTarget(platform, arch)
+  if (environment === 'deployment-policy') {
+    const base = deploymentUpdateBaseUrl(env)
+    if (base === undefined) throw new Error('desktop auto-update: deployment policy has no updateBaseUrl')
+    const parsed = new URL(base)
+    const basePath = parsed.pathname.replace(/\/+$/u, '')
+    const keyPrefix = `${basePath.replace(/^\/+/u, '')}/${target}`
+    return {
+      environment,
+      target,
+      origin: parsed.origin,
+      keyPrefix,
+      publicUrl: `${parsed.origin}/${keyPrefix}/`,
+    }
+  }
   const deployment = UPDATE_ENVIRONMENTS[environment]
   let origin = deployment.fixedOrigin
   if (origin === undefined) {
@@ -147,6 +164,36 @@ export function resolveDesktopAutoUpdateConfig(env, platform, arch) {
     keyPrefix,
     publicUrl: `${origin}/${keyPrefix}/`,
   }
+}
+
+function deploymentUpdateBaseUrl(env) {
+  const direct = env[DESKTOP_DEPLOYMENT_UPDATE_BASE_URL]?.trim()
+  if (direct !== undefined && direct !== '') return httpsBase(direct, DESKTOP_DEPLOYMENT_UPDATE_BASE_URL)
+  const policyPath = env.DSH_DESKTOP_DEPLOYMENT_POLICY_FILE?.trim()
+  if (policyPath === undefined || policyPath === '' || !existsSync(policyPath)) return undefined
+  let policy
+  try {
+    policy = JSON.parse(readFileSync(policyPath, 'utf8'))
+  } catch {
+    throw new Error(`desktop auto-update: invalid deployment policy ${policyPath}`)
+  }
+  if (typeof policy.updateBaseUrl !== 'string' || policy.updateBaseUrl.trim() === '') return undefined
+  return httpsBase(policy.updateBaseUrl, 'deployment policy updateBaseUrl')
+}
+
+function httpsBase(value, name) {
+  let parsed
+  try {
+    parsed = new URL(value)
+  }
+  catch {
+    throw new Error(`desktop auto-update: ${name} must be an absolute HTTPS URL`)
+  }
+  if (parsed.protocol !== 'https:' || parsed.username !== '' || parsed.password !== ''
+    || parsed.search !== '' || parsed.hash !== '') {
+    throw new Error(`desktop auto-update: ${name} must be an absolute HTTPS URL without credentials, query, or fragment`)
+  }
+  return parsed.toString()
 }
 
 /**

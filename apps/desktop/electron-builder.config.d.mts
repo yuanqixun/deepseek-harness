@@ -1,17 +1,17 @@
 /** Electron-builder fields asserted by the Desktop release tests. */
 export interface DesktopElectronBuilderConfig {
   readonly appId: string
+  readonly productName: string
+  readonly artifactName: string
   readonly directories: {
     readonly output: string
   }
-  readonly extraResources: readonly [
-    { readonly from: string, readonly to: 'runtime' },
-    { readonly from: string, readonly to: 'seed' },
-  ]
+  readonly extraResources: readonly { readonly from: string, readonly to: string }[]
   readonly mac: {
     readonly identity: string | undefined
     readonly forceCodeSigning: boolean
     readonly notarize: boolean
+    readonly icon?: string
   }
   readonly dmg: {
     readonly sign: boolean

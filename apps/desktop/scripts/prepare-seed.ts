@@ -6,6 +6,7 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, 
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, relative, resolve, sep } from 'node:path'
 import { createSeedMetadata } from '../src/project-manager.ts'
+import { resolveDesktopDeploymentPolicy } from '../src/deployment-policy.ts'
 import { DESKTOP_HOST_PROTOCOL_VERSION } from '../src/host-protocol.ts'
 import { parseDesktopRelease, type DesktopRelease } from '../src/release.ts'
 import {
@@ -48,6 +49,41 @@ function manifestVersion(path: string, subject: string): string {
   return manifest.version
 }
 
+function packageNameFromSpec(spec: string): string {
+  const slash = spec.startsWith('@') ? spec.indexOf('/') : -1
+  const versionAt = spec.startsWith('@') ? spec.indexOf('@', slash + 1) : spec.indexOf('@')
+  return versionAt === -1 ? spec : spec.slice(0, versionAt)
+}
+
+function prepareLocalBundlePolicy(seedRoot: string): ReturnType<typeof resolveDesktopDeploymentPolicy> {
+  const policy = resolveDesktopDeploymentPolicy(process.env)
+  const encoded = process.env.DSH_DESKTOP_LOCAL_BUNDLE_ARCHIVES?.trim()
+  if (encoded === undefined || encoded === '') return policy
+  let archives: Record<string, string>
+  try {
+    archives = JSON.parse(encoded) as Record<string, string>
+  } catch (error) {
+    throw new Error('desktop seed: DSH_DESKTOP_LOCAL_BUNDLE_ARCHIVES must be a JSON object', { cause: error })
+  }
+  const localRoot = join(seedRoot, 'local-bundles')
+  mkdirSync(localRoot, { recursive: true, mode: 0o700 })
+  const replacements = new Map<string, string>()
+  for (const [name, source] of Object.entries(archives)) {
+    if (typeof source !== 'string' || source === '') throw new Error(`desktop seed: invalid local bundle archive for ${name}`)
+    const filename = `${name.replaceAll('/', '__').replaceAll('@', '')}.tgz`
+    const destination = join(localRoot, filename)
+    copyFileSync(resolve(source), destination)
+    replacements.set(name, `file:local-bundles/${filename}`)
+  }
+  return {
+    ...policy,
+    preinstalledBundles: policy.preinstalledBundles.map((spec) => {
+      const replacement = replacements.get(packageNameFromSpec(spec))
+      return replacement === undefined ? spec : `${packageNameFromSpec(spec)}@${replacement}`
+    }),
+  }
+}
+
 function desktopRelease(): DesktopRelease {
   const version = manifestVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   const dshVersion = manifestVersion(resolve(APP_ROOT, '..', '..', 'package.json'), 'root dsh package')
@@ -72,9 +108,11 @@ function runPnpm(args: readonly string[]): Promise<void> {
     const userConfig = join(config, 'npmrc')
     mkdirSync(config, { recursive: true })
     writeFileSync(userConfig, '')
+    const registry = process.env.DSH_DESKTOP_BUILD_NPM_REGISTRY?.trim()
+      || resolveDesktopDeploymentPolicy(process.env).npmRegistryUrl
     const child = spawn(NODE, [
       PNPM,
-      '--config.registry=https://registry.npmjs.org/',
+      `--config.registry=${registry}`,
       `--config.store-dir=${STORE_ROOT}`,
       '--config.enable-global-virtual-store=false',
       `--config.userconfig=${userConfig}`,
@@ -86,7 +124,7 @@ function runPnpm(args: readonly string[]): Promise<void> {
         ...Object.fromEntries(Object.entries(process.env).filter(([name]) => (
           !/^DSH_DESKTOP_/u.test(name) && !/^(?:npm|pnpm|corepack)_/iu.test(name)
         ))),
-        NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/',
+        NPM_CONFIG_REGISTRY: registry,
         NPM_CONFIG_STORE_DIR: STORE_ROOT,
         NPM_CONFIG_USERCONFIG: userConfig,
         PATH: `${dirname(NODE)}${delimiter}${process.env.PATH ?? ''}`,
@@ -146,9 +184,10 @@ async function main(): Promise<void> {
   mkdirSync(STORE_ROOT, { recursive: true })
   try {
     const release = desktopRelease()
+    const deploymentPolicy = prepareLocalBundlePolicy(SEED_ROOT)
     copyFileSync(join(PACKAGE_SET_ROOT, DESKTOP_PACKAGE_SET_FILE), join(SEED_ROOT, DESKTOP_PACKAGE_SET_FILE))
     cpSync(join(PACKAGE_SET_ROOT, DESKTOP_PACKAGES_DIR), join(SEED_ROOT, DESKTOP_PACKAGES_DIR), { recursive: true })
-    createSeedMetadata(SEED_ROOT, release)
+    createSeedMetadata(SEED_ROOT, release, deploymentPolicy)
     await runPnpm(['install', '--lockfile-only'])
     verifyDesktopCoreLockfile(
       readFileSync(join(SEED_ROOT, 'pnpm-lock.yaml'), 'utf8'),
@@ -162,7 +201,7 @@ async function main(): Promise<void> {
     const targetPlatform = process.env.DSH_DESKTOP_TARGET_PLATFORM ?? process.platform
     let signedMachOFiles: number | undefined
     let macOSSigning: ReturnType<typeof resolveMacOSSigningEnvironment> | undefined
-    if (targetPlatform === 'darwin') {
+    if (targetPlatform === 'darwin' && process.env.DSH_DESKTOP_UNSIGNED !== '1') {
       macOSSigning = resolveMacOSSigningEnvironment(process.env)
       const signing = await signMacOSSeedStore(
         STORE_ROOT,

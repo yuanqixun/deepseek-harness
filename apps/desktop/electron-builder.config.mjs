@@ -11,6 +11,7 @@ import {
 } from './scripts/windows-sign.mjs'
 import { resolveDesktopAutoUpdateConfig } from './scripts/desktop-auto-update-environment.mjs'
 import { desktopTargetBuildPaths } from './scripts/desktop-build-paths.mjs'
+import { existsSync } from 'node:fs'
 
 /**
  * Create electron-builder configuration from one release environment.
@@ -25,13 +26,14 @@ export function createElectronBuilderConfig(
   hostArch = process.arch,
 ) {
   const appId = resolveDesktopAppId(env)
+  const unsigned = env.DSH_DESKTOP_UNSIGNED === '1'
   const targetPlatform = env.DSH_DESKTOP_TARGET_PLATFORM
   const resolvedPlatform = targetPlatform ?? hostPlatform
   const resolvedArch = env.DSH_DESKTOP_TARGET_ARCH ?? hostArch
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = targetPlatform === 'win32'
-  const macOSSigning = packagesMacOS ? resolveMacOSSigningEnvironment(env) : undefined
-  if (packagesMacOS) resolveMacOSNotarizationEnvironment(env)
+  const macOSSigning = packagesMacOS && !unsigned ? resolveMacOSSigningEnvironment(env) : undefined
+  if (packagesMacOS && !unsigned) resolveMacOSNotarizationEnvironment(env)
   const windowsSigner = packagesWindows
     ? createWindowsTokenSigner({
         certificateFile: env.DSH_DESKTOP_WINDOWS_CER_FILE,
@@ -45,10 +47,20 @@ export function createElectronBuilderConfig(
   }
   const update = resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
   const buildPaths = desktopTargetBuildPaths(update.target)
+  const productName = env.DSH_DESKTOP_PRODUCT_NAME ?? 'DeepSeek Harness'
+  const artifactName = env.DSH_DESKTOP_ARTIFACT_NAME
+    ?? (productName === 'DeepSeek Harness'
+      ? 'deepseek-harness-${version}-${os}-${arch}.${ext}'
+      : `${productName}-${'${version}'}-${'${os}'}-${'${arch}'}.${'${ext}'}`)
+  const macIcon = env.DSH_DESKTOP_MAC_ICON
+  const policyFile = env.DSH_DESKTOP_DEPLOYMENT_POLICY_FILE
+  const policyResource = policyFile !== undefined && existsSync(policyFile)
+    ? [{ from: policyFile, to: 'deployment-policy.json' }]
+    : []
   return {
     appId,
-    productName: 'DeepSeek Harness',
-    artifactName: 'deepseek-harness-${version}-${os}-${arch}.${ext}',
+    productName,
+    artifactName,
     directories: { output: buildPaths.artifacts },
     asar: true,
     files: [
@@ -60,25 +72,27 @@ export function createElectronBuilderConfig(
     extraResources: [
       { from: buildPaths.runtime, to: 'runtime' },
       { from: buildPaths.seed, to: 'seed' },
+      ...policyResource,
     ],
     mac: {
       category: 'public.app-category.developer-tools',
       identity: macOSSigning?.signingIdentity,
-      forceCodeSigning: true,
+      forceCodeSigning: !unsigned,
       hardenedRuntime: true,
-      notarize: true,
+      notarize: !unsigned,
       target: ['dmg', 'zip'],
+      ...(macIcon === undefined ? {} : { icon: macIcon }),
     },
     dmg: {
-      sign: true,
+      sign: !unsigned,
       writeUpdateInfo: false,
     },
     afterSign: context => {
-      if (context.electronPlatformName !== 'darwin') return
+      if (context.electronPlatformName !== 'darwin' || unsigned) return
       verifyMacOSSignatureAfterSign(context, macOSSigning ?? resolveMacOSSigningEnvironment(env))
     },
     artifactBuildCompleted: artifact => {
-      if (!artifact.file.endsWith('.dmg')) return
+      if (unsigned || !artifact.file.endsWith('.dmg')) return
       return notarizeMacOSDiskImageArtifact(
         artifact,
         env,

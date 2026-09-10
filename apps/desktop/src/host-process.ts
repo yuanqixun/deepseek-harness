@@ -4,6 +4,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { once } from 'node:events'
 import { join } from 'node:path'
 import { Readable, Writable } from 'node:stream'
+import type { DesktopDeploymentPolicy } from './deployment-policy.ts'
 import {
   DESKTOP_HOST_PROTOCOL_VERSION,
   DESKTOP_PIPE_CHUNK_BYTES,
@@ -93,6 +94,7 @@ export class DesktopHostProcess {
     private readonly node: string,
     private readonly projectDir: string,
     private readonly inspectPort?: number,
+    private readonly policy?: DesktopDeploymentPolicy,
   ) {}
 
   /** Start the child once and resolve only after its complete composition is active. */
@@ -106,9 +108,12 @@ export class DesktopHostProcess {
       ...(this.inspectPort === undefined ? [] : ['--allow-linked-profile']),
     ], {
       cwd: this.projectDir,
-      env: Object.fromEntries(Object.entries(process.env).filter(([name]) => (
-        name !== 'NODE_OPTIONS' && !/^DSH_DESKTOP_/u.test(name) && !/^(?:npm|pnpm|corepack)_/iu.test(name)
-      ))),
+      env: {
+        ...Object.fromEntries(Object.entries(process.env).filter(([name]) => (
+          name !== 'NODE_OPTIONS' && !/^DSH_DESKTOP_/u.test(name) && !/^(?:npm|pnpm|corepack)_/iu.test(name)
+        ))),
+        ...(this.policy?.pipIndexUrl === undefined ? {} : { PIP_INDEX_URL: this.policy.pipIndexUrl }),
+      },
       stdio: ['ignore', 'pipe', 'pipe', 'pipe', 'pipe', 'ipc'],
     })
     const requestPipe = child.stdio[DESKTOP_REQUEST_PIPE_FD]

@@ -1,6 +1,7 @@
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
 
 import { readFile, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -11,6 +12,7 @@ import {
   Menu,
   protocol,
   type IpcMainInvokeEvent,
+  type MenuItemConstructorOptions,
 } from 'electron'
 import { resolveDesktopPaths } from './paths.ts'
 import { DesktopProjectManager, type DesktopProjectHooks } from './project-manager.ts'
@@ -19,6 +21,7 @@ import { DESKTOP_IPC, type DesktopUpdateState } from './ipc.ts'
 import { formatDesktopMessage, resolveDesktopLocale } from './locale.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
+import { readDesktopDeploymentPolicyFile, resolveDesktopDeploymentPolicy } from './deployment-policy.ts'
 
 const SCHEME = 'dsh-app'
 let focusPrimaryWindow = (): void => {}
@@ -98,6 +101,16 @@ function createWindow(preload: string): BrowserWindow {
   window.webContents.on('will-navigate', (event, url) => {
     if (new URL(url).protocol !== `${SCHEME}:`) event.preventDefault()
   })
+  window.webContents.on('context-menu', (_event, params) => {
+    if (!params.isEditable) return
+    Menu.buildFromTemplate([
+      { role: 'cut' },
+      { role: 'copy' },
+      { role: 'paste' },
+      { type: 'separator' },
+      { role: 'selectAll' },
+    ]).popup({ window })
+  })
   return window
 }
 
@@ -133,10 +146,14 @@ async function serveShellAsset(request: Request): Promise<Response> {
 async function main(): Promise<void> {
   const resources = runtimeResources()
   const paths = resolveDesktopPaths()
+  const policyPath = join(resources.seed, 'deployment-policy.json')
+  const policy = existsSync(policyPath)
+    ? readDesktopDeploymentPolicyFile(policyPath)
+    : resolveDesktopDeploymentPolicy()
   const development = developmentProject()
   const activeProject = development ?? paths.profile
   const hostInspectPort = developmentHostInspectPort(development !== undefined)
-  const manager = new DesktopProjectManager(paths, resources)
+  const manager = new DesktopProjectManager(paths, resources, policy)
   if (development === undefined) manager.recover()
   let host: DesktopHostProcess | undefined
   let mainWindow: BrowserWindow | undefined
@@ -157,7 +174,7 @@ async function main(): Promise<void> {
   }
 
   const startHost = async (projectDir = activeProject): Promise<DesktopHostProcess> => {
-    const next = new DesktopHostProcess(resources.node, projectDir, hostInspectPort)
+    const next = new DesktopHostProcess(resources.node, projectDir, hostInspectPort, policy)
     await next.start()
     return next
   }
@@ -325,7 +342,7 @@ async function main(): Promise<void> {
     void pluginWindow.loadURL(`${SCHEME}://shell/plugin-manager.html`)
   }
 
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{
+  const menuTemplate: MenuItemConstructorOptions[] = [{
     label: process.platform === 'darwin' ? app.name : messages.application,
     submenu: [
       {
@@ -338,7 +355,8 @@ async function main(): Promise<void> {
       { type: 'separator' },
       { role: 'quit' },
     ],
-  }]))
+  }, { role: 'editMenu' }]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate))
 
   const createMainWindow = (): BrowserWindow => {
     const window = createWindow(appPreload)

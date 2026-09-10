@@ -64,6 +64,34 @@ describe('desktop macOS release signature', () => {
     expect(typeof config.artifactBuildCompleted).toBe('function')
   })
 
+  it('allows an explicitly unsigned local directory build', async () => {
+    const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
+    const config = createElectronBuilderConfig({
+      ...RELEASE_ENVIRONMENT,
+      DSH_DESKTOP_UNSIGNED: '1',
+    }, 'darwin', 'arm64')
+    expect(config.mac).toMatchObject({ forceCodeSigning: false, notarize: false })
+    expect(config.dmg).toMatchObject({ sign: false })
+  })
+
+  it('uses the configured product name and macOS icon while preserving official defaults', async () => {
+    const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
+    const official = createElectronBuilderConfig(RELEASE_ENVIRONMENT, 'darwin', 'arm64')
+    expect(official.productName).toBe('DeepSeek Harness')
+    expect(official.mac.icon).toBeUndefined()
+
+    const enterprise = createElectronBuilderConfig({
+      ...RELEASE_ENVIRONMENT,
+      DSH_DESKTOP_PRODUCT_NAME: 'dshwork',
+      DSH_DESKTOP_MAC_ICON: '/tmp/dshwork.icns',
+    }, 'darwin', 'arm64')
+    expect(enterprise).toMatchObject({
+      productName: 'dshwork',
+      artifactName: 'dshwork-${version}-${os}-${arch}.${ext}',
+      mac: { icon: '/tmp/dshwork.icns' },
+    })
+  })
+
   it('validates Windows signing without requiring macOS identifiers for a Windows target', async () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     expect(() => createElectronBuilderConfig({

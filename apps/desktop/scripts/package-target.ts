@@ -96,18 +96,26 @@ export function withoutWindowsSigningEnvironment(environment: NodeJS.ProcessEnv)
  * Select signing and NSIS-compatible archive filters for electron-builder.
  * @param environment - Target packaging environment.
  * @param unsigned - Whether to create a local unsigned Windows artifact.
- * @returns Packaging environment without certificate inputs for unsigned builds.
+ * @param internalDmg - Whether to create an internal unsigned macOS disk image.
+ * @returns Packaging environment without release credential inputs for local builds.
  */
-export function desktopElectronBuilderEnvironment(environment: NodeJS.ProcessEnv, unsigned: boolean): NodeJS.ProcessEnv {
-  const selected: NodeJS.ProcessEnv = { ...environment, DSH_DESKTOP_UNSIGNED: unsigned ? '1' : '0' }
+export function desktopElectronBuilderEnvironment(
+  environment: NodeJS.ProcessEnv, unsigned: boolean, internalDmg = false,
+): NodeJS.ProcessEnv {
+  const selected: NodeJS.ProcessEnv = {
+    ...environment,
+    DSH_DESKTOP_UNSIGNED: unsigned ? '1' : '0',
+    ...(internalDmg ? { DSH_DESKTOP_INTERNAL_DMG: '1' } : {}),
+  }
   // The bundled NSIS decoder cannot extract 7-Zip's automatic ARM64-filtered entries.
   if (environment.DSH_DESKTOP_TARGET_PLATFORM === 'win32') selected.ELECTRON_BUILDER_7Z_FILTER = 'BCJ'
-  if (!unsigned) return selected
+  if (!unsigned && !internalDmg) return selected
   return {
     ...Object.fromEntries(Object.entries(withoutWindowsSigningEnvironment(selected))
-      .filter(([name]) => !/^(?:WIN_)?CSC_/iu.test(name))),
+      .filter(([name]) => !/^(?:DSH_DESKTOP_MACOS_|APPLE_|(?:WIN_)?CSC_)/iu.test(name))),
     CSC_IDENTITY_AUTO_DISCOVERY: 'false',
-    DSH_DESKTOP_UNSIGNED: '1',
+    DSH_DESKTOP_UNSIGNED: unsigned ? '1' : '0',
+    ...(internalDmg ? { DSH_DESKTOP_INTERNAL_DMG: '1' } : {}),
   }
 }
 
@@ -196,6 +204,7 @@ interface DesktopPackageInvocation {
   readonly directory: boolean
   readonly prepareOnly: boolean
   readonly unsigned: boolean
+  readonly internalDmg: boolean
   readonly check: boolean
   /** Build identifier to publish under, when this build does not publish the product version. */
   readonly requestedBuildVersion: string | undefined
@@ -228,6 +237,7 @@ export function parseDesktopPackageInvocation(
       dir: { type: 'boolean', default: false },
       'prepare-only': { type: 'boolean', default: false },
       unsigned: { type: 'boolean', default: false },
+      'internal-dmg': { type: 'boolean', default: false },
       check: { type: 'boolean', default: false },
       'build-version': { type: 'string' },
     },
@@ -236,6 +246,10 @@ export function parseDesktopPackageInvocation(
   const name = positionals[0] ?? hostTargetName(hostPlatform, hostArch)
   if (values.unsigned && name !== 'win-x64') throw new Error('desktop package: --unsigned requires win-x64')
   if (values.unsigned && values['prepare-only']) throw new Error('desktop package: --unsigned cannot use --prepare-only')
+  if (values['internal-dmg'] && name !== 'mac-arm64') throw new Error('desktop package: --internal-dmg requires mac-arm64')
+  if (values['internal-dmg'] && (values.unsigned || values['prepare-only'] || values.dir)) {
+    throw new Error('desktop package: --internal-dmg cannot combine with --unsigned, --prepare-only, or --dir')
+  }
   const requestedBuildVersion = values['build-version']?.trim()
   if (values['build-version'] !== undefined && (requestedBuildVersion === undefined || requestedBuildVersion === '')) {
     throw new Error('desktop package: --build-version requires a value')
@@ -245,6 +259,7 @@ export function parseDesktopPackageInvocation(
     directory: values.dir,
     prepareOnly: values['prepare-only'],
     unsigned: values.unsigned,
+    internalDmg: values['internal-dmg'],
     check: values.check,
     requestedBuildVersion,
   }
@@ -324,8 +339,8 @@ async function resolveRequestedBuildVersion(
   const paths = desktopTargetBuildPaths(invocation.target.name)
   return suggestDesktopBuildVersion({
     productVersion, target: invocation.target.name, environment,
-    // Unsigned builds land beside the signed output, so numbering has to read the directory this run writes.
-    artifactsRoot: invocation.unsigned ? paths.unsignedArtifacts : paths.artifacts,
+    // Local builds land beside the release output, so numbering reads the directory this run writes.
+    artifactsRoot: invocation.unsigned ? paths.unsignedArtifacts : invocation.internalDmg ? paths.internalArtifacts : paths.artifacts,
   })
 }
 
@@ -341,7 +356,7 @@ async function main(): Promise<void> {
   if (invocation.check) {
     validateDesktopPackageEnvironment(environment, target, invocation)
     await requireDesktopToolchain(target.platform, environment)
-    process.stdout.write(`desktop package: ${target.name} would publish ${buildVersion}; local configuration and toolchain valid, signing and notarization were not attempted\n`)
+    process.stdout.write(`desktop package: ${target.name} would package ${buildVersion}; local configuration and toolchain valid, signing and notarization were not attempted\n`)
     return
   }
   process.stdout.write(`desktop package: ${target.name} publishes ${buildVersion}${buildVersion === productVersion ? '' : ` for product version ${productVersion}`}\n`)
@@ -349,7 +364,11 @@ async function main(): Promise<void> {
   Object.assign(environment, desktopBuildCommitEnvironment(packaged))
   const secrets = Object.entries(environment).filter(([name]) => /KEY|SECRET|TOKEN|PASSWORD|APPLE_ID/iu.test(name)).map(([, value]) => value ?? '')
   const run = createPackagingRun(join(APP_ROOT, '.desktop-build', 'packaging-runs'), {
-    target: target.name, unsigned: invocation.unsigned, directory: invocation.directory, prepareOnly: invocation.prepareOnly,
+    target: target.name,
+    unsigned: invocation.unsigned,
+    internalDmg: invocation.internalDmg,
+    directory: invocation.directory,
+    prepareOnly: invocation.prepareOnly,
     version: buildVersion, productVersion, node: process.version,
     commit: packaged.commit,
     dirty: packaged.dirty,
@@ -361,7 +380,7 @@ async function main(): Promise<void> {
   try {
     await packagingStep(run.directory, 'configuration', async () => { validateDesktopPackageEnvironment(environment, target, invocation) }, secrets)
     await packagingStep(run.directory, 'toolchain', () => requireDesktopToolchain(target.platform, environment), secrets)
-    if (target.platform === 'darwin') {
+    if (target.platform === 'darwin' && !invocation.internalDmg) {
       const settings = resolveMacOSPackageSettings(environment)
       recordPackagingEvent(run.directory, { type: 'macos-settings', packConcurrency: settings.packConcurrency,
         downloadProxyConfigured: settings.downloadProxy !== undefined,
@@ -402,8 +421,11 @@ export async function packageTarget(
   const mac = target.platform === 'darwin' ? resolveMacOSPackageSettings(environment) : undefined
   const packArguments = mac === undefined ? [] : ['--concurrency', String(mac.packConcurrency)]
   const buildPaths = desktopTargetBuildPaths(target.name)
+  const artifactsRoot = invocation.unsigned
+    ? buildPaths.unsignedArtifacts
+    : invocation.internalDmg ? buildPaths.internalArtifacts : buildPaths.artifacts
   const releaseRecordPath = join(buildPaths.artifacts, desktopBuildRecordFilename(target.name))
-  if (!invocation.prepareOnly && !invocation.unsigned) {
+  if (!invocation.prepareOnly && !invocation.unsigned && !invocation.internalDmg) {
     rmSync(releaseRecordPath, { force: true })
     rmSync(`${releaseRecordPath}.tmp`, { force: true })
   }
@@ -414,7 +436,7 @@ export async function packageTarget(
     DSH_DESKTOP_TARGET_ARCH: target.arch,
   }
   const downloadEnv = macOSDownloadEnvironment(targetEnv, mac?.downloadProxy)
-  const electronBuilderEnv = desktopElectronBuilderEnvironment(downloadEnv, invocation.unsigned)
+  const electronBuilderEnv = desktopElectronBuilderEnvironment(downloadEnv, invocation.unsigned, invocation.internalDmg)
   for (const name of WINDOWS_SIGNING_ENV_NAMES) {
     if (!invocation.unsigned && environment[name] !== undefined) electronBuilderEnv[name] = environment[name]
   }
@@ -470,10 +492,14 @@ export async function packageTarget(
   await execute(['run', 'prepare:runtime', ...(signPrimaryRuntime ? ['--defer-primary-runtime-smoke'] : [])], downloadEnv)
   if (signPrimaryRuntime) await execute(['run', 'sign:primary-runtime'], electronBuilderEnv)
   await execute(['run', 'prepare:packages'], targetEnv)
-  await execute(['run', 'prepare:dsh', ...(signPrimaryRuntime ? ['--defer-runtime-smoke'] : [])], downloadEnv)
+  await execute(['run', 'prepare:dsh', ...(signPrimaryRuntime ? ['--defer-runtime-smoke'] : [])],
+    invocation.internalDmg ? electronBuilderEnv : downloadEnv)
   if (signPrimaryRuntime) await execute(['run', 'sign:primary-runtime', '--dsh'], electronBuilderEnv)
   if (invocation.prepareOnly) return
-  if (target.platform === 'darwin' && !invocation.directory) {
+  if (invocation.internalDmg) {
+    await execute(desktopElectronBuilderArguments(target, false), electronBuilderEnv)
+    await execute(['exec', 'tsx', 'scripts/smoke-packaged-runtime.ts', '--internal-dmg'], electronBuilderEnv)
+  } else if (target.platform === 'darwin' && !invocation.directory) {
     await execute([
       ...desktopElectronBuilderArguments(target, true),
       '--config.mac.notarize=false',
@@ -496,8 +522,10 @@ export async function packageTarget(
     await signedStage('artifacts', () => execute(desktopElectronBuilderArguments(target, invocation.directory), electronBuilderEnv))
     await execute(['exec', 'tsx', 'scripts/smoke-packaged-runtime.ts', ...(invocation.unsigned ? ['--unsigned'] : [])], targetEnv)
   }
-  if (!invocation.directory && !invocation.unsigned) writeReleaseRecord(target, electronBuilderEnv, buildPaths.artifacts)
-  if (journal) recordPackagingEvent(journal, { type: 'artifacts', directory: buildPaths.artifacts })
+  if (!invocation.directory && !invocation.unsigned && !invocation.internalDmg) {
+    writeReleaseRecord(target, electronBuilderEnv, buildPaths.artifacts)
+  }
+  if (journal) recordPackagingEvent(journal, { type: 'artifacts', directory: artifactsRoot })
 }
 
 if (process.argv[1] !== undefined && import.meta.filename === resolve(process.argv[1])) await main()

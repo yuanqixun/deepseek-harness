@@ -79,4 +79,12 @@ describe('desktop build version discovery', () => {
     await expect(suggestDesktopBuildVersion({ productVersion: PRERELEASE, target: 'win-x64', environment: {}, date: DATE, artifactsRoot }))
       .resolves.toBe(`${PRERELEASE}.${DATE}.3`)
   })
+
+  it('counts internal macOS disk images written under their own suffix', async () => {
+    const artifactsRoot = await artifactsWith([
+      `deepseek-harness-${PRERELEASE}.${DATE}.2-mac-arm64-internal.dmg`,
+    ])
+    await expect(suggestDesktopBuildVersion({ productVersion: PRERELEASE, target: 'mac-arm64', environment: {}, date: DATE, artifactsRoot }))
+      .resolves.toBe(`${PRERELEASE}.${DATE}.3`)
+  })
 })

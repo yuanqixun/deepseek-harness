@@ -85,6 +85,12 @@ describe('desktop package target', () => {
       .toThrow(/cannot use --prepare-only/u)
   })
 
+  it('accepts only a standalone internal macOS arm64 disk image', () => {
+    expect(parseDesktopPackageInvocation(['mac-arm64', '--internal-dmg'], 'darwin', 'arm64')).toMatchObject({ internalDmg: true })
+    expect(() => parseDesktopPackageInvocation(['mac-x64', '--internal-dmg'], 'darwin', 'arm64')).toThrow(/requires mac-arm64/u)
+    expect(() => parseDesktopPackageInvocation(['mac-arm64', '--internal-dmg', '--dir'], 'darwin', 'arm64')).toThrow(/cannot combine/u)
+  })
+
   it('removes ambient certificate inputs for unsigned builds and overrides an inherited signing mode', () => {
     const environment = {
       DSH_DESKTOP_APP_ID: 'com.example.desktop',
@@ -101,6 +107,14 @@ describe('desktop package target', () => {
       DSH_DESKTOP_UNSIGNED: '1',
     })
     expect(desktopElectronBuilderEnvironment(environment, false)).toEqual({ ...environment, DSH_DESKTOP_UNSIGNED: '0' })
+  })
+
+  it('removes macOS signing inputs for internal disk images', () => {
+    expect(desktopElectronBuilderEnvironment({
+      DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example (TEAMID1234)', APPLE_API_KEY: 'secret.p8', CSC_LINK: 'secret.p12',
+    }, false, true)).toEqual({
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false', DSH_DESKTOP_UNSIGNED: '0', DSH_DESKTOP_INTERNAL_DMG: '1',
+    })
   })
 
   it.each([false, true])('pins the Windows archive filter for the NSIS decoder (unsigned: %s)', (unsigned) => {

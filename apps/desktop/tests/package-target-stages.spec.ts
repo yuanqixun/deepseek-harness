@@ -113,6 +113,16 @@ it('checks the assembled macOS runtime before notarizing and recording the relea
   expect(writeFileSync).toHaveBeenCalledOnce()
 })
 
+it('creates an internal macOS disk image without notarization or a release record', async () => {
+  const { run, stages } = supervisor()
+  await packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--internal-dmg'], 'darwin', 'arm64'), environment, run)
+  expect(stages).toContain('exec electron-builder --config electron-builder.config.mjs --mac --arm64 --publish never')
+  expect(stages.at(-1)).toBe('exec tsx scripts/smoke-packaged-runtime.ts --internal-dmg')
+  expect(withMacOSNotarizationProxy).not.toHaveBeenCalled()
+  expect(packageMacOSArtifacts).not.toHaveBeenCalled()
+  expect(writeFileSync).not.toHaveBeenCalled()
+})
+
 it.each([false, true])('refuses macOS notarization and release records after an assembled-runtime failure (directory=%s)', async (directory) => {
   const { run } = supervisor('exec tsx scripts/smoke-packaged-runtime.ts')
   await expect(packageTarget(parseDesktopPackageInvocation(['mac-arm64', ...(directory ? ['--dir'] : [])], 'darwin', 'arm64'), environment, run))

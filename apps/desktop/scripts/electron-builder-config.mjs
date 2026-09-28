@@ -51,7 +51,6 @@ export function createElectronBuilderConfig(
   preparedRuntimeVersion = undefined,
 ) {
   const appId = resolveDesktopAppId(env)
-  const policy = resolveDesktopPolicyEnvironment(env)
   const targetPlatform = env.DSH_DESKTOP_TARGET_PLATFORM
   const resolvedPlatform = targetPlatform ?? hostPlatform
   const resolvedArch = env.DSH_DESKTOP_TARGET_ARCH ?? hostArch
@@ -59,12 +58,20 @@ export function createElectronBuilderConfig(
     throw new Error('desktop package: DSH_DESKTOP_UNSIGNED must be 0 or 1')
   }
   const unsigned = env.DSH_DESKTOP_UNSIGNED === '1'
+  if (env.DSH_DESKTOP_INTERNAL_DMG !== undefined && !['0', '1'].includes(env.DSH_DESKTOP_INTERNAL_DMG)) {
+    throw new Error('desktop package: DSH_DESKTOP_INTERNAL_DMG must be 0 or 1')
+  }
+  const internalDmg = env.DSH_DESKTOP_INTERNAL_DMG === '1'
   if (unsigned && resolvedPlatform !== 'win32') throw new Error('desktop package: unsigned builds require Windows')
+  if (internalDmg && (resolvedPlatform !== 'darwin' || resolvedArch !== 'arm64' || unsigned)) {
+    throw new Error('desktop package: internal disk images require unsigned mac-arm64 packaging')
+  }
+  const policy = internalDmg ? undefined : resolveDesktopPolicyEnvironment(env)
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = resolvedPlatform === 'win32'
   if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()
-  const macOSSigning = packagesMacOS ? resolveMacOSSigningEnvironment(env) : undefined
-  if (packagesMacOS) resolveMacOSNotarizationEnvironment(env)
+  const macOSSigning = packagesMacOS && !internalDmg ? resolveMacOSSigningEnvironment(env) : undefined
+  if (packagesMacOS && !internalDmg) resolveMacOSNotarizationEnvironment(env)
   const buildPaths = desktopTargetBuildPaths(resolveDesktopBuildTarget(env, hostPlatform, hostArch))
   let primaryRuntimeDestination
   let dshDestination
@@ -90,7 +97,7 @@ export function createElectronBuilderConfig(
   if (windowsSigner !== undefined) {
     installWindowsNsisBootstrapSigner({ sign: windowsSigner })
   }
-  const update = unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
+  const update = unsigned || internalDmg ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
   if (preparedRuntime !== undefined) buildPaths.dsh = preparedRuntime
   // electron-builder merges extraMetadata into the packaged manifest, so a build version here reaches
   // the artifact names, the update feed, and the installed app.getVersion() the updater compares against.
@@ -102,14 +109,14 @@ export function createElectronBuilderConfig(
     protocols: [{ name: 'DeepSeek Harness', schemes: ['dsh'] }],
     extraMetadata: {
       dshDesktopAppId: appId,
-      dshMandatoryUpdatePolicy: policy,
+      ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },
     },
     productName: 'DeepSeek Harness',
-    // Unsigned builds carry their own suffix so a shared file can never pass for a release artifact.
-    artifactName: `deepseek-harness-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : ''}.\${ext}`,
-    directories: { output: unsigned ? buildPaths.unsignedArtifacts : buildPaths.artifacts },
+    // Local artifacts carry their own suffix and output directory so they cannot pass for release builds.
+    artifactName: `deepseek-harness-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : internalDmg ? '-internal' : ''}.\${ext}`,
+    directories: { output: unsigned ? buildPaths.unsignedArtifacts : internalDmg ? buildPaths.internalArtifacts : buildPaths.artifacts },
     asar: true,
     electronDist: buildPaths.electron,
     electronFuses: { runAsNode: true },
@@ -153,16 +160,16 @@ export function createElectronBuilderConfig(
       // macOS matches the application locale against this bundle, not Electron Framework resources.
       extendInfo: { CFBundleLocalizations: ['en', 'zh_CN'] },
       identity: macOSSigning?.signingIdentity,
-      forceCodeSigning: true,
-      hardenedRuntime: true,
+      forceCodeSigning: !internalDmg,
+      hardenedRuntime: !internalDmg,
       extendInfo: { NSMicrophoneUsageDescription: 'DeepSeek Harness uses your microphone to transcribe speech into message drafts.' },
       // ASAR-unpacked native runtime files are pre-signed; PAK resources are sealed by their enclosing bundle.
       signIgnore: ['/Contents/Resources/app\\.asar\\.unpacked/dsh(?:/|$)', '/Contents/Resources/runtime/primary-runtime(?:/|$)', '\\.pak$'],
-      notarize: true,
-      target: ['dmg', 'zip'],
+      notarize: !internalDmg,
+      target: internalDmg ? ['dmg'] : ['dmg', 'zip'],
     },
     dmg: {
-      sign: true,
+      sign: !internalDmg,
       writeUpdateInfo: false,
     },
     beforePack: async context => {
@@ -203,6 +210,7 @@ export function createElectronBuilderConfig(
         await verifyWindowsAsarUnpack(buildPaths.dsh, context.packager.getResourcesDir(context.appOutDir), windowsCode)
       }
       if (context.electronPlatformName !== 'darwin') return
+      if (internalDmg) return
       const appPath = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
       if (update !== undefined) {
         await verifyMacOSAppUpdateConfig(appPath, resolveMacOSAppUpdateFeed(context.packager.config.publish),
@@ -211,6 +219,7 @@ export function createElectronBuilderConfig(
       verifyMacOSSignatureAfterSign(context, macOSSigning ?? resolveMacOSSigningEnvironment(env))
     },
     artifactBuildCompleted: artifact => {
+      if (internalDmg) return
       if (!artifact.file.endsWith('.dmg')) return
       return notarizeMacOSDiskImageArtifact(
         artifact,

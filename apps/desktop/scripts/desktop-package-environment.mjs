@@ -73,12 +73,19 @@ function requireReadableFile(environment, name) {
  * Validate release configuration before preparation without invoking a token or Apple's services.
  * @param {NodeJS.ProcessEnv} environment File-owned release settings.
  * @param {{ platform: 'win32' | 'darwin', arch: string }} target Selected release target.
- * @param {{ unsigned?: boolean, prepareOnly?: boolean }} options Explicit packaging mode.
+ * @param {{ unsigned?: boolean, internalDmg?: boolean, prepareOnly?: boolean }} options Explicit packaging mode.
  * @returns {void}
  */
 export function validateDesktopPackageEnvironment(environment, target, options = {}) {
   resolveDesktopAppId(environment)
   resolveNpmRegistry(environment)
+  if (options.internalDmg) {
+    if (target.platform !== 'darwin' || target.arch !== 'arm64') {
+      throw new Error('desktop package: --internal-dmg requires mac-arm64')
+    }
+    resolveMacOSPackageSettings(environment)
+    return
+  }
   resolveDesktopPolicyEnvironment(environment)
   if (target.platform === 'darwin') resolveMacOSPackageSettings(environment)
   else resolveWindowsPackageSettings(environment)

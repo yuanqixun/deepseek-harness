@@ -33,14 +33,17 @@
   en: 4cd8a8da6977928d
   zh: 9f624855a2edac37
 /deepseek-harness-desktop/package/release-versions:
-  en: f461b255133384cc
-  zh: 2b9db718f22fdd04
+  en: a1948dc2f45f6f7d
+  zh: d1b2f48d5c5d4559
 /deepseek-harness-desktop/package/runtime-file-selection:
   en: f0e345fd89868803
   zh: fd2c775ad23fa2f0
 /deepseek-harness-desktop/package/upload-updates:
   en: c64d7fe2fe2534b7
   zh: 2188e1ae99ab4b33
+/deepseek-harness-desktop/package/internal-macos-disk-image:
+  en: 2836c0950d97932d
+  zh: 3716576d9d7d3fad
 /deepseek-harness-desktop/package/unsigned-windows-test-installer:
   en: cfd5780dd26a8e46
   zh: f7a16b1ede793b7b
@@ -48,14 +51,14 @@
   en: f176a8b1c7de3064
   zh: 6ea2dbe6bb808c34
 /deepseek-harness-desktop/package/windows-ev-signing:
-  en: 8efe3498dbe8686d
-  zh: a88c16f20a9430f3
+  en: 7451625f73dbcde1
+  zh: 32679aeeae4f7abe
 /deepseek-harness-desktop/updates:
   en: d0df867b69cbffa4
   zh: eeb47b79b86fe5ee
 /deepseek-harness-desktop/updates/mandatory-update-policy:
-  en: 2f789a4949fafb12
-  zh: d8b28c01cfee11b7
+  en: b47b4cdc1cd74082
+  zh: 5f898fc56201bdad
 /deepseek-harness-desktop/updates/local-updater-qualification:
   en: bc50fd8a4d96c227
   zh: fb0a6ce80c31cda6

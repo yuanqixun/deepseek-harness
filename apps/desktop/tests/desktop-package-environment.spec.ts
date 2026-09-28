@@ -190,6 +190,15 @@ describe('Desktop local packaging configuration', () => {
       }).toThrow(/APPLE_KEYCHAIN/u)
     })
   })
+
+  it('accepts an internal macOS disk image without update, signing, or notarization settings', () => {
+    expect(() => {
+      validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: RELEASE.DSH_DESKTOP_APP_ID }, MACOS, { internalDmg: true })
+    }).not.toThrow()
+    expect(() => {
+      validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: RELEASE.DSH_DESKTOP_APP_ID }, WINDOWS, { internalDmg: true })
+    }).toThrow(/requires mac-arm64/u)
+  })
 })
 
 it('owns macOS tuning in the local file and validates it before signing credentials', async () => {

@@ -1,0 +1,235 @@
+openapi: 3.1.0
+info:
+  title: dsh-auth Host API
+  version: 1.0.0
+  description: Host-only API for one-time CAS login delivery. Browser authorization and CAS callbacks are not API operations.
+servers:
+  - url: https://dsh-auth.example.invalid
+paths:
+  /api/v1/login-requests:
+    post:
+      operationId: createLoginRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/LoginRequest'
+                - $ref: '#/components/schemas/CreateProof'
+            examples:
+              create:
+                value:
+                  enterprise_id: hxfl
+                  app_id: com.deepseek.harness
+                  device_id: 7f47f8e8-3d92-4aa4-8e1b-0c03fd12e3bc
+                  request_id: -Y5g2OQMWoY30Wtp_0ewDA
+                  challenge: x3R0-lUnubHraLHBj9f1n2YqF1OeHVG99tILCEFyM8c
+                  challenge_method: S256
+                  device_description: DSH Desktop on macOS
+                  verifier: A7yEM2X52o5XbK4k4d4Wl7_N2CPlvKD_RvtCsYpiC8E
+      responses:
+        '201':
+          description: A new login request.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginRequestCreated' }
+        '200':
+          description: The original request after a proof-bound retry. The expiry is unchanged.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginRequestCreated' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidProof' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/login-requests/{request_id}/status:
+    post:
+      operationId: readLoginRequestStatus
+      parameters: [ { $ref: '#/components/parameters/RequestId' } ]
+      requestBody: { $ref: '#/components/requestBodies/Proof' }
+      responses:
+        '200':
+          description: The proof-holder's current request state without identity or credential data.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginStatus' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidProof' }
+        '410': { $ref: '#/components/responses/Expired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/login-requests/{request_id}/cancel:
+    post:
+      operationId: cancelLoginRequest
+      parameters: [ { $ref: '#/components/parameters/RequestId' } ]
+      requestBody: { $ref: '#/components/requestBodies/Proof' }
+      responses:
+        '200':
+          description: The resulting terminal request state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginStatus' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidProof' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { $ref: '#/components/responses/Expired' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/login-requests/{request_id}/exchange:
+    post:
+      operationId: exchangeLoginRequest
+      parameters: [ { $ref: '#/components/parameters/RequestId' } ]
+      requestBody: { $ref: '#/components/requestBodies/Proof' }
+      responses:
+        '200':
+          description: The only response that delivers the application's opaque access token.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Exchange' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidProof' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { $ref: '#/components/responses/Expired' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/me:
+    get:
+      operationId: readCurrentUser
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '200':
+          description: The current application session and trusted user data.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CurrentSession' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /api/v1/logout:
+    post:
+      operationId: logoutApplicationSession
+      security: [ { bearerAuth: [] } ]
+      responses:
+        '204': { description: The application session is revoked. Repeating this request does not reactivate it. }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  parameters:
+    RequestId:
+      name: request_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/RequestId' }
+  requestBodies:
+    Proof:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Proof' }
+          examples:
+            proof:
+              value: { verifier: A7yEM2X52o5XbK4k4d4Wl7_N2CPlvKD_RvtCsYpiC8E }
+  responses:
+    InvalidRequest:
+      description: The request does not satisfy the API's fixed field or value rules.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { invalid: { value: { code: invalid_request, message: The request is invalid. } } } } }
+    InvalidProof:
+      description: The request identifier is unknown or the proof is invalid. No request details are disclosed.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { invalid: { value: { code: invalid_proof, message: The request cannot be authenticated. } } } } }
+    InvalidToken:
+      description: The bearer token is unknown, expired, revoked, or belongs to another deployment binding.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { invalid: { value: { code: invalid_token, message: The application session is unavailable. } } } } }
+    Conflict:
+      description: The requested transition is not valid for the request's current state.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { conflict: { value: { code: state_conflict, message: The login request cannot transition from its current state. } } } } }
+    Expired:
+      description: A proof-authenticated request has expired.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { expired: { value: { code: request_expired, message: The login request has expired. } } } } }
+    RateLimited:
+      description: The proof-holder must wait before polling again.
+      headers: { Retry-After: { required: true, schema: { type: integer, minimum: 1 } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { limited: { value: { code: rate_limited, message: Retry after the advertised interval. } } } } }
+    Unavailable:
+      description: A required dependency is unavailable. The Host must deny business access until online validation succeeds.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' }, examples: { unavailable: { value: { code: dependency_unavailable, message: The authentication service is unavailable. } } } } }
+  schemas:
+    RequestId: { type: string, pattern: '^[A-Za-z0-9_-]{22,128}$' }
+    Verifier: { type: string, pattern: '^[A-Za-z0-9_-]{43,128}$' }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [enterprise_id, app_id, device_id, request_id, challenge, challenge_method, device_description]
+      properties:
+        enterprise_id: { type: string, minLength: 1, maxLength: 64, pattern: '^[a-z][a-z0-9-]*$' }
+        app_id: { type: string, minLength: 1, maxLength: 255 }
+        device_id: { type: string, format: uuid }
+        request_id: { $ref: '#/components/schemas/RequestId' }
+        challenge: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+        challenge_method: { type: string, const: S256 }
+        device_description: { type: string, minLength: 1, maxLength: 256 }
+    CreateProof:
+      type: object
+      additionalProperties: false
+      required: [verifier]
+      properties: { verifier: { $ref: '#/components/schemas/Verifier' } }
+    Proof:
+      type: object
+      additionalProperties: false
+      required: [verifier]
+      properties: { verifier: { $ref: '#/components/schemas/Verifier' } }
+    LoginState:
+      type: string
+      enum: [pending_auth, pending_confirmation, approved, exchanged, cancelled, rejected, expired]
+    LoginRequestCreated:
+      type: object
+      additionalProperties: false
+      required: [request_id, verification_uri, user_code, expires_at, interval_seconds]
+      properties:
+        request_id: { $ref: '#/components/schemas/RequestId' }
+        verification_uri: { type: string, format: uri }
+        user_code: { type: string, pattern: '^[A-Z0-9]{6,12}$' }
+        expires_at: { type: string, format: date-time }
+        interval_seconds: { type: integer, minimum: 1, maximum: 300 }
+    LoginStatus:
+      type: object
+      additionalProperties: false
+      required: [status, expires_at, interval_seconds]
+      properties:
+        status: { $ref: '#/components/schemas/LoginState' }
+        expires_at: { type: string, format: date-time }
+        interval_seconds: { type: integer, minimum: 1, maximum: 300 }
+    User:
+      type: object
+      additionalProperties: false
+      required: [enterprise_id, issuer, subject]
+      properties:
+        enterprise_id: { type: string }
+        issuer: { type: string, format: uri }
+        subject: { type: string, minLength: 1, maxLength: 512 }
+        display_name: { type: string, minLength: 1, maxLength: 512 }
+    Exchange:
+      type: object
+      additionalProperties: false
+      required: [access_token, token_type, expires_at, session_id, user]
+      properties:
+        access_token: { type: string, minLength: 32, writeOnly: true }
+        token_type: { type: string, const: Bearer }
+        expires_at: { type: string, format: date-time }
+        session_id: { type: string, format: uuid }
+        user: { $ref: '#/components/schemas/User' }
+    CurrentSession:
+      type: object
+      additionalProperties: false
+      required: [session_id, expires_at, user]
+      properties:
+        session_id: { type: string, format: uuid }
+        expires_at: { type: string, format: date-time }
+        user: { $ref: '#/components/schemas/User' }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: { type: string, enum: [invalid_request, invalid_proof, invalid_token, state_conflict, request_expired, rate_limited, dependency_unavailable] }
+        message: { type: string, minLength: 1, maxLength: 512 }

@@ -8,7 +8,9 @@
 
 DSH 端仅依赖 [api-v1.openapi.yaml](api-v1.openapi.yaml) 所定义的 `1.0.0` API。服务端在接口与真实 CAS 2.0 联调完成前，必须提供可重复的本地 HTTPS 测试部署、API 契约结果和脱敏的 CAS service 注册证据。企业发行前，双方记录同一个 API 版本、dsh-auth 部署 origin、企业标识与 app_id；服务端密钥、数据库凭据和 CAS 管理凭据不进入本仓库。
 
-服务端任务 2–4 当前仍未交付。本仓库不能将轮询、兑换、`/me` 或退出声明为已验证，也不能以 mock 成功代替真实 CAS 2.0 联调。DSH 可先用固定协议 fixture 验证 Host 状态机、准入和凭据隔离；跨仓库验收仍由任务 10.1–10.5 负责。
+服务端代码已在 `sso-cas` 本地 `main` 分支准备，当前未推送提交为 `c302eba`、`bf10e90` 和 `2d46406`。它们包括 dsh-auth 部署结构、PostgreSQL/Flyway/Spring Session JDBC 迁移、proof-bound Host API、CAS 浏览器往返和 `sso-dsh.superbpm.com` 代理配置。已执行 `mvn -q -DskipTests package`；按用户指示，尚未运行 Docker、PostgreSQL、CAS 或集成测试。
+
+因此服务端任务 2–4 仍未交付。本仓库不能将轮询、兑换、`/me` 或退出声明为已验证，也不能以 mock 成功代替真实 CAS 2.0 联调。DSH 可先用固定协议 fixture 验证 Host 状态机、准入和凭据隔离；跨仓库验收仍由任务 10.1–10.5 负责。
 
 ## 联调准入条件
 

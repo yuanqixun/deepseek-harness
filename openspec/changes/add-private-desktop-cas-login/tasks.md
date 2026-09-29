@@ -1,5 +1,12 @@
 # Tasks
 
+## 当前实施进度（2026-09-30）
+
+- 任务 1 的协议、规格映射和两仓库交接记录已完成。
+- `sso-cas` 工作区已在未推送的 `main` 上完成 `c302eba`、`bf10e90` 和 `2d46406`：`dsh-auth` 模块、PostgreSQL/Flyway/Spring Session JDBC 迁移、proof-bound Host API、CAS 浏览器往返和 `sso-dsh.superbpm.com` 代理配置均已有代码。
+- 已执行 `mvn -q -DskipTests package`，仅验证服务端编译打包；按用户要求，没有启动 Docker、PostgreSQL、CAS 或任何集成测试。因此任务 2–4 仍保持未勾选，不能宣称交付或联调通过。
+- DSH Host、Desktop、`dsh-pro-auth`、Client 和企业构建任务尚未开始；跨项目验收任务 10 尚未开始。
+
 ## 1. 协议与实施依赖
 
 - [x] 1.1 按 [design.md](design.md) 固化 `/api/v1` 请求、响应、错误码和状态转换的机器可校验定义及有效/无效样例；验证六类接口、重复创建证明、CAS 用户字段和终态均有样例，且不含 TokenHub 权限、额度或模型密钥字段。

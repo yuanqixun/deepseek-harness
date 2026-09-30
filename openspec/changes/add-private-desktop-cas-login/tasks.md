@@ -3,8 +3,22 @@
 ## 当前实施进度（2026-09-30）
 
 - 任务 1 的协议、规格映射和两仓库交接记录已完成。
-- `sso-cas` 工作区已在未推送的 `main` 上完成 `c302eba`、`bf10e90` 和 `2d46406`：`dsh-auth` 模块、PostgreSQL/Flyway/Spring Session JDBC 迁移、proof-bound Host API、CAS 浏览器往返和 `sso-dsh.superbpm.com` 代理配置均已有代码。
-- 已执行 `mvn -q -DskipTests package`，仅验证服务端编译打包；按用户要求，没有启动 Docker、PostgreSQL、CAS 或任何集成测试。因此任务 2–4 仍保持未勾选，不能宣称交付或联调通过。
+- `sso-cas` 的 `main` 已有提交 `c302eba`、`bf10e90` 和 `2d46406`；其工作区另有未提交改动，补齐本地开发 profile、V2 限流与 V3 浏览器终态迁移、限流与过期清理、CAS 浏览器授权安全处理及 API 行为。
+- dsh-auth Compose 现同时启动本地 PostgreSQL 与 CAS 8.0.2；本地服务注册已由 CAS 加载。已执行 `docker compose config --quiet`、`mvn -DskipTests package` 和 README 中的 `SPRING_PROFILES_ACTIVE=local mvn spring-boot:run`；数据库处于 Flyway V3，CAS `/cas/login` 返回 200，dsh-auth `/actuator/health` 返回 `UP`。没有执行浏览器登录或 CAS 验票。
+- 任务 2.1 已完成：新增 Spring 配置启动校验测试并对齐 OpenAPI 的 enterprise_id 格式和长度、CAS issuer URI、public origin、超时及必需配置行为；app_id 接受 1–255 字符。执行 `mvn -f dsh-auth/pom.xml package`，7 项配置测试通过；本机 dsh-auth health 返回 `UP`。无效配置测试只启动配置属性上下文，不连接数据库或 CAS。
+- 任务 2.2 已完成：新增 V4 扩大 `login_request`、`app_session` 的 `app_id` 列到 255 字符；PostgreSQL Testcontainers 验证空库迁移至 V3、保留数据升级至 V4、重复请求键和重复应用会话被拒绝，以及并发 browser_flow 占用恰有一个成功。执行 `mvn -f dsh-auth/pom.xml -Ppostgres-integration -Dit.test=DatabaseMigrationIT verify` 成功，正常 `mvn -f dsh-auth/pom.xml package` 也成功。
+- 任务 2.3 已完成：新增 PostgreSQL-backed API 集成覆盖创建/原样重试且不延长 TTL、绑定冲突不覆盖、超长输入与未知 JSON 字段拒绝、状态/取消必须持有 verifier、未知 ID 与错误 verifier 不泄漏详情、创建限流返回 Retry-After。`mvn -f dsh-auth/pom.xml -Ppostgres-integration verify` 完整通过（7 个配置测试、1 个迁移集成测试、5 个 API 集成测试）；未触发 CAS 网络调用。
+- 任务 2.4 已完成：过期请求的 status/cancel/exchange 在返回 410 前会提交 `expired` 终态；集成测试验证清理任务未参与请求处理时仍拒绝过期操作，并由清理任务按保留期删除终态记录。单独停止 PostgreSQL 后，请求返回通用 503，不转入内存态。`mvn -f dsh-auth/pom.xml -Ppostgres-integration verify` 通过（7 个配置测试、1 个迁移测试、6 个 API 测试、1 个数据库不可用测试）。
+- 任务 3.1 已完成：无 CAS 网络访问的 PostgreSQL/API 测试确认授权页面 GET 不批准请求、无效 CSRF 不能启动 flow、同一浏览器会话的第二个活跃 flow 返回冲突且不覆盖第一条，另一浏览器会话可同时保有活跃 flow。`mvn -f dsh-auth/pom.xml -Ppostgres-integration -Dit.test=LoginRequestApiIT#authorizationGetDoesNotApproveAndStartRequiresTheSessionCsrfToken+allowsOnlyOneActiveFlowPerBrowserSessionButAllowsDifferentBrowsers verify` 通过。
+- 任务 3.2 已完成本地范围：CAS 协议实现拆分为独立 `CasTicketValidator`，只接受固定 public origin 下带服务端 flow 的 callback service，将数据库原值发送给固定 CAS 2.0 endpoint；XML 使用安全解析，限制响应 64 KiB 和完整请求超时。受控本地 HTTP endpoint 的 5 项单测通过，覆盖 service/ticket 编码、错误 service、CAS/HTTP 失败、格式/命名空间/重复 user 错误、超限响应与响应体超时；PostgreSQL 回调测试覆盖缺失、未知和已占用 flow，并已通过。真实 CAS 往返另由 10.1 验收。
+- 任务 3.3 已完成本地范围：受控慢速验票和 PostgreSQL 测试验证 A 到期、B 在同一浏览器启动后，A 的迟到回调不能修改 A/B 状态；过期请求和 flow 会在回调拒绝事务中按数据库时间落为终态。验票结果不确定时 flow 转为 failed，旧票据不能重用，同一请求可以开始新的 CAS 往返。终态测试先在移除落库逻辑时按预期失败，再恢复实现后通过；本机 PostgreSQL 与 Testcontainers 用例均通过。
+- 任务 3.4 的本地确认/拒绝实现及 PostgreSQL 用例已覆盖 subject/device HTML 转义、无效 CSRF 不批准、拒绝后刷新不恢复及过期确认拒绝；真实 CAS 已登录会话行为由 10.1 联调确认。任务 3.5 的 Nginx 模板和安全响应配置已写入，但真实 CAS service 注册与 CAS/代理访问日志仍待云端检查。
+- 任务 2.5 已完成；服务端基础任务 2 已完成。`dsh-auth` 全量 PostgreSQL Testcontainers 验证通过：8 项配置测试、1 项迁移测试、15 项 API 测试、1 项数据库不可用测试（共 17 项集成测试）；验证未访问 CAS。
+- 任务 3.1–3.5 的本地实现及测试范围已完成。完整 `mvn -f dsh-auth/pom.xml -Ppostgres-integration verify` 通过：13 项单测、28 项集成测试（27 通过，opt-in 本机 PostgreSQL 竞态测试在此命令下跳过）；本机 PostgreSQL 竞态测试另以 `mvn -f dsh-auth/pom.xml -Dtest=BrowserAuthorizationRaceLocalIT -Ddsh.auth.local-db-it=true test` 通过。所有验证均未访问真实 CAS。真实 CAS 注册、浏览器往返及代理/CAS 实际日志检查仍由 10.1、10.4 验收。
+- 任务 4.1 已完成：PostgreSQL 并发兑换只一个成功、只存 token SHA-256 摘要、重复兑换不再返回 token；约束故障注入验证事务失败保留 approved 且不创建会话或返回令牌。响应丢失后的客户端重新登录仍由跨项目联调验证。
+- 任务 4.2 已完成：`/me` 和 `/logout` 无效应用令牌返回 `401 invalid_token`；API 测试覆盖可信身份与企业/app 绑定、过期及撤销拒绝、重复退出幂等，响应不扩展到未经 CAS 提供的权限/额度。
+- 任务 4.3 已完成本地双实例验收：`LoginRequestApiIT` 启动两个独立 Spring WebApplicationContext，共用 PostgreSQL Testcontainers；验证 JDBC 浏览器 session 跨实例可用、应用 session 可跨实例查询和撤销，并用同步屏障竞争确认/取消、取消/兑换、确认/过期。`mvn -f dsh-auth/pom.xml -Ppostgres-integration verify` 通过 8 项配置测试及 22 项集成测试；用例清空共享表，退出时关闭第二实例，Testcontainers 清理数据库。
+- 任务 4.4 已完成本地范围：README 增加不访问 CAS 的 create/status/cancel curl 样例，并在正在运行的本地 dsh-auth 上执行成功（`pending_auth` 后 `cancelled`）；清理了本次创建的唯一请求。Testcontainers 的日志与数据库测试验证 verifier、模拟 ST 和明文应用令牌不进入应用日志或持久化字段；真实 CAS/代理日志观察仍按任务 3.5、10.4 留待云端。
 - DSH Host、Desktop、`dsh-pro-auth`、Client 和企业构建任务尚未开始；跨项目验收任务 10 尚未开始。
 
 ## 1. 协议与实施依赖
@@ -15,26 +29,26 @@
 
 ## 2. dsh-auth 基础与请求存储（sso-cas 配套工作）
 
-- [ ] 2.1 创建独立 Spring Boot dsh-auth 模块及 PostgreSQL、Spring Session JDBC 配置，校验服务 origin、企业/应用标识、超时和有效期；验证模块构建、健康检查及缺失或无效必需配置时明确失败，App1 保持演示用途。
-- [ ] 2.2 建立 login_request、browser_flow、app_session 及浏览器会话的版本化数据库迁移和约束；用真实 PostgreSQL 验证空库初始化、升级、重复请求键、每请求最多一个应用会话及浏览器往返原子占用。
-- [ ] 2.3 实现请求创建、状态查询和取消接口，限制输入长度、校验证明并执行配置化限流；测试合法重试不延长 TTL、冲突不覆盖、仅有 ID/challenge 无权查询或取消，以及未知 ID 不泄漏详情。
-- [ ] 2.4 实现按数据库时间判断的过期、终态不可逆和保留期清理；测试未运行清理任务仍拒绝过期操作，数据库不可用时不降级为内存登录态。
-- [ ] 2.5 编写模块 README、配置和数据库迁移说明；实际执行其中的启动与迁移步骤，记录数据库依赖、秘密注入及不含 TokenHub 的首期范围。
+- [x] 2.1 创建独立 Spring Boot dsh-auth 模块及 PostgreSQL、Spring Session JDBC 配置，校验服务 origin、企业/应用标识、超时和有效期；验证模块构建、健康检查及缺失或无效必需配置时明确失败，App1 保持演示用途。
+- [x] 2.2 建立 login_request、browser_flow、app_session 及浏览器会话的版本化数据库迁移和约束；用真实 PostgreSQL 验证空库初始化、升级、重复请求键、每请求最多一个应用会话及浏览器往返原子占用。
+- [x] 2.3 实现请求创建、状态查询和取消接口，限制输入长度、校验证明并执行配置化限流；测试合法重试不延长 TTL、冲突不覆盖、仅有 ID/challenge 无权查询或取消，以及未知 ID 不泄漏详情。
+- [x] 2.4 实现按数据库时间判断的过期、终态不可逆和保留期清理；测试未运行清理任务仍拒绝过期操作，数据库不可用时不降级为内存登录态。
+- [x] 2.5 编写模块 README、配置和数据库迁移说明；实际执行其中的启动与迁移步骤，记录数据库依赖、秘密注入及不含 TokenHub 的首期范围。
 
 ## 3. CAS 2.0 浏览器授权（sso-cas 配套工作）
 
-- [ ] 3.1 实现授权入口、受 CSRF 保护的开始操作及逐次 browser_flow 绑定；测试页面 GET 不批准登录，同一浏览器的第二条往返不能覆盖第一条，不同浏览器可并发。
-- [ ] 3.2 实现固定 HTTPS origin/path 加 flow 的 service 构造、原始 service 存储和 CAS 2.0 `/serviceValidate` 验票；测试拒绝任意回调、缺失或错误 flow、无效/重复票据、错误 service、无效 XML 及验票超时，用户仅来自验票响应。
-- [ ] 3.3 实现验票处理权原子占用及验票后的条件更新；以可控并发测试验证 A 取消或过期、B 开始后，A 的迟到回跳不能批准 B 或恢复 A，验票结果不确定时要求重新登录。
-- [ ] 3.4 实现可信账号、短确认码、设备描述展示及确认/拒绝页面；测试已有 CAS 会话仍需确认、CSRF 失败不能批准、设备描述安全转义、拒绝和刷新不能恢复授权。
-- [ ] 3.5 配置精确 CAS service 注册、代理日志脱敏、安全 cookie、no-store、no-referrer 及票据清理跳转；集成测试验证 ST 不进入访问日志或后续页面引用，文档说明回调 URL 的协议例外及真实 CAS 联调步骤。
+- [x] 3.1 实现授权入口、受 CSRF 保护的开始操作及逐次 browser_flow 绑定；测试页面 GET 不批准登录，同一浏览器的第二条往返不能覆盖第一条，不同浏览器可并发。
+- [x] 3.2 实现固定 origin/path 加 flow 的 service 构造、原始 service 存储和 CAS 2.0 `/serviceValidate` 验票；受控协议测试覆盖错误 service、CAS 失败/无效 XML、错误响应、响应大小与超时；PostgreSQL 回调测试覆盖缺失、未知和已占用 flow，可信 subject 仅来自 CAS 响应。真实 CAS 注册/往返由 10.1 验收。
+- [x] 3.3 实现验票处理权原子占用及验票后的条件更新；以可控慢速验票测试验证 A 过期、B 开始后，A 的迟到回跳不能批准 B 或恢复 A，且过期终态正确持久化；验票结果不确定时要求重新登录。
+- [x] 3.4 实现可信账号、短确认码、设备描述展示及确认/拒绝页面；本地 PostgreSQL 测试覆盖确认页展示、CSRF 失败不能批准、账号和设备描述安全转义、拒绝及刷新不恢复、过期确认拒绝。真实 CAS 已有 SSO 会话仍显示确认页由 10.1 验收。
+- [x] 3.5 配置精确 CAS service 注册模板、代理 callback/validation access log 关闭、安全 cookie、no-store、no-referrer 及票据清理跳转；本地配置和集成测试验证安全响应头、票据清理回跳及应用日志/数据库无 ST。真实 CAS service 注册及代理/CAS 日志实测由 10.1、10.4 验收；README 记录回调协议例外和真实联调步骤。
 
 ## 4. 应用会话与云端并发（sso-cas 配套工作）
 
-- [ ] 4.1 实现 approved 请求的一次性事务兑换和 opaque token 摘要存储；真实数据库测试验证并发兑换最多一次成功、提交失败不发令牌、响应丢失后重试返回已消费且不重复返回令牌。
-- [ ] 4.2 实现 `/me`、应用退出与固定有效期，无 refresh token；测试过期和撤销令牌被拒绝、身份及企业/应用绑定正确、重复退出不激活会话，不返回虚构的姓名、权限或额度。
-- [ ] 4.3 验证两个服务实例共享请求、浏览器会话和撤销状态；通过同步屏障控制确认、取消、兑换与过期的竞争，验证胜出结果符合状态机，测试资源按用例隔离且可完整清理。
-- [ ] 4.4 更新接口与部署说明，加入兑换响应丢失、数据库不可用、应用退出和 CAS 退出的区别；运行文档中的 HTTP 样例并确认请求日志、异常和数据库中没有 verifier、ST 或明文应用令牌。
+- [x] 4.1 实现 approved 请求的一次性事务兑换和 opaque token 摘要存储；真实数据库测试验证并发兑换最多一次成功、提交失败不发令牌、已消费请求重试不重复返回令牌。
+- [x] 4.2 实现 `/me`、应用退出与固定有效期，无 refresh token；测试过期和撤销令牌被拒绝、身份及企业/app 绑定正确、重复退出不激活会话，不返回虚构的姓名、权限或额度。
+- [x] 4.3 验证两个服务实例共享请求、浏览器会话和撤销状态；通过同步屏障控制确认、取消、兑换与过期的竞争，验证胜出结果符合状态机，测试资源按用例隔离且可完整清理。
+- [x] 4.4 更新接口与部署说明，加入兑换响应丢失、数据库不可用、应用退出和 CAS 退出的区别；运行文档中的 HTTP 样例并确认本地应用请求/异常日志和数据库中没有 verifier、模拟 ST 或明文应用令牌。真实 CAS 与反向代理日志仍由 3.5、10.4 云端验收覆盖。
 
 ## 5. 通用 Host 准入
 

@@ -8,9 +8,9 @@
 
 DSH 端仅依赖 [api-v1.openapi.yaml](api-v1.openapi.yaml) 所定义的 `1.0.0` API。服务端在接口与真实 CAS 2.0 联调完成前，必须提供可重复的本地 HTTPS 测试部署、API 契约结果和脱敏的 CAS service 注册证据。企业发行前，双方记录同一个 API 版本、dsh-auth 部署 origin、企业标识与 app_id；服务端密钥、数据库凭据和 CAS 管理凭据不进入本仓库。
 
-服务端代码已在 `sso-cas` 本地 `main` 分支准备，当前未推送提交为 `c302eba`、`bf10e90` 和 `2d46406`。它们包括 dsh-auth 部署结构、PostgreSQL/Flyway/Spring Session JDBC 迁移、proof-bound Host API、CAS 浏览器往返和 `sso-dsh.superbpm.com` 代理配置。已执行 `mvn -q -DskipTests package`；按用户指示，尚未运行 Docker、PostgreSQL、CAS 或集成测试。
+服务端基础代码已在 `sso-cas` 本地 `main` 分支提交 `c302eba`、`bf10e90` 和 `2d46406`；dsh-auth 的后续实现仍有未提交工作区改动。dsh-auth 本地 Compose 同时启动 PostgreSQL 与 CAS 8.0.2，CAS 已加载 localhost 服务注册。PostgreSQL Testcontainers 的配置、迁移、API、过期和数据库不可用验证均通过；最近一次 `mvn -f dsh-auth/pom.xml -Ppostgres-integration verify` 通过 8 项配置测试及 17 项集成测试。测试没有调用 CAS。浏览器 CAS 回跳、真实 ST 验票、代理/CAS 日志观察及阿里云部署尚未验收。
 
-因此服务端任务 2–4 仍未交付。本仓库不能将轮询、兑换、`/me` 或退出声明为已验证，也不能以 mock 成功代替真实 CAS 2.0 联调。DSH 可先用固定协议 fixture 验证 Host 状态机、准入和凭据隔离；跨仓库验收仍由任务 10.1–10.5 负责。
+dsh-auth 的 2.1–2.5、3.1–3.5 与 4.1–4.4 已有本地实现及相应测试证据。任务 4.3 使用两个独立 Spring 应用上下文验证共享浏览器 session、应用会话与撤销，并覆盖确认/取消、取消/兑换、确认/过期竞态；任务 4.4 的 README HTTP 示例已在本机执行，应用日志和数据库的秘密排除测试通过。任务 3.2 的受控 CAS 协议单测及 PostgreSQL 缺失/未知/重复 flow 回调测试通过；任务 3.3 的慢速验票竞态测试验证 A 过期、B 开始后 A 的迟到回调不改变任一请求，并验证验票失败后旧 flow 终结且可重新开始。任务 3.5 的 service 注册模板、Nginx 日志配置和响应安全已在代码及应用测试中覆盖。真实 CAS 往返、云端精确注册及 CAS/代理实际日志观察须部署后验收（10.1、10.4）。DSH 准入与桌面侧任务由本仓库后续实施。
 
 ## 联调准入条件
 

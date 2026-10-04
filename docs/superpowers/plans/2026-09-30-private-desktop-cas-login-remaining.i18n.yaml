@@ -1,0 +1,52 @@
+# Bilingual-pair consistency record for 2026-09-30-private-desktop-cas-login-remaining.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/superpowers/plans/2026-09-30-private-desktop-cas-login-remaining.md
+/private-desktop-cas-login-remaining-work-implementation-plan:
+  en: f827a849b7683c48
+  zh: 0e960fe9e00be46c
+/private-desktop-cas-login-remaining-work-implementation-plan/global-constraints:
+  en: 0e81b2002845e265
+  zh: 1f0bcd178576aa3a
+/private-desktop-cas-login-remaining-work-implementation-plan/review-focus:
+  en: e3da7e5e01f01e47
+  zh: 8d6dbe83567553c8
+/private-desktop-cas-login-remaining-work-implementation-plan/source-map-and-phase-boundaries:
+  en: 1354f3c69bef249a
+  zh: b939db551518a5da
+/private-desktop-cas-login-remaining-work-implementation-plan/execution-phases:
+  en: 126400a6241a2cce
+  zh: 8d424f683e70b419
+/private-desktop-cas-login-remaining-work-implementation-plan/execution-phases/phase-1-dsh-auth-persistence-and-request-lifecycle-tasks-2-1-2-5:
+  en: d99f23d9599d39f1
+  zh: 3b665cce60b84186
+/private-desktop-cas-login-remaining-work-implementation-plan/execution-phases/phase-2-cas-browser-authorization-implementation-tasks-3-1-3-5:
+  en: 0fcae884acaf29df
+  zh: c56de4a052b245a2
+/private-desktop-cas-login-remaining-work-implementation-plan/execution-phases/phase-3-application-sessions-and-deployment-semantics-tasks-4-1-4-4:
+  en: bd0bce9928f915f8
+  zh: 856ebdf4d7ef85c0
+/private-desktop-cas-login-remaining-work-implementation-plan/execution-phases/phase-4-generic-host-admission-and-safe-drain-tasks-5-1-5-7:
+  en: d14c61ee00a9505d
+  zh: 6893fee6606e9122
+/private-desktop-cas-login-remaining-work-implementation-plan/execution-phases/phase-5-desktop-launch-recovery-and-bootstrap-tasks-6-1-6-4:
+  en: 694f929545502f85
+  zh: e1f220350f8ec830
+/private-desktop-cas-login-remaining-work-implementation-plan/execution-phases/phase-6-dsh-pro-auth-host-plugin-tasks-7-1-7-7:
+  en: 0f964f6ed1aa5992
+  zh: b752caf5a7f0798b
+/private-desktop-cas-login-remaining-work-implementation-plan/execution-phases/phase-7-client-auth-experience-tasks-8-1-8-3:
+  en: cb73f33fbfaf71d1
+  zh: 50532e5751fbdbec
+/private-desktop-cas-login-remaining-work-implementation-plan/execution-phases/phase-8-enterprise-build-composition-and-upgrade-compatibility-tasks-9-1-9-4:
+  en: d7a816b4515aff0d
+  zh: ae86595405560d45
+/private-desktop-cas-login-remaining-work-implementation-plan/execution-phases/phase-9-cloud-cas-and-cross-project-acceptance-tasks-10-1-10-5:
+  en: 38ce3e85cd69edd7
+  zh: ea7767fae7fc7d63
+/private-desktop-cas-login-remaining-work-implementation-plan/decisions-rulings:
+  en: 1441a316eac90fa9
+  zh: a7a0e0cf822f80cf
+/private-desktop-cas-login-remaining-work-implementation-plan/self-review:
+  en: 035a0dee1be64410
+  zh: e80105fb391dc3d4

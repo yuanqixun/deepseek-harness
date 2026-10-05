@@ -242,6 +242,7 @@ export class CommandUiRuntime extends Service implements CommandUiContract {
         ...(contribution.label === undefined ? {} : { label: contribution.label() }),
         ...(contribution.description === undefined ? {} : { description: contribution.description() }),
         ...(contribution.icon === undefined ? {} : { icon: contribution.icon }),
+        ...(contribution.menuSection === undefined ? {} : { menuSection: contribution.menuSection }),
       })
     }
     const visible = rows.filter(c => req.position === 'leading' || c.hint === undefined)

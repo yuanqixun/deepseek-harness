@@ -101,6 +101,8 @@ export type CommandUiSpec = PopupSelectSpec | ActionSpec
 export interface CommandContribution {
   /** Command name without the leading slash (unique across contributions). */
   readonly name: string
+  /** Place this command in the composer Add section; defaults to Commands. */
+  readonly menuSection?: 'add' | 'commands'
   /** Localized menu row title; the name itself when absent. */
   label?(): string
   /** Localized menu row description; the row shows none when absent. */

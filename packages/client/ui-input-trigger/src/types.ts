@@ -62,6 +62,8 @@ export interface InputTriggerCandidate {
   readonly hint?: string
   /** Optional visual heading shared by adjacent candidates; sectioned groups omit their source-title row. */
   readonly section?: string
+  /** Preferred composer menu section for contributed commands. */
+  readonly menuSection?: 'add' | 'commands'
   /** Opaque source-owned pick payload. */
   readonly value?: string
   /**

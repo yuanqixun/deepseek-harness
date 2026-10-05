@@ -15,7 +15,7 @@ import type { BuiltinCommandName } from './resolution.ts'
 /** The menu's two sections. */
 export type MenuSection = 'add' | 'commands'
 
-/** Row names per section, highest usage first; rows outside both lists close the Commands section in catalog order. */
+/** Built-in row names per section, highest usage first; contributed rows may request a section. */
 const SECTION_ROWS: Readonly<Record<MenuSection, readonly string[]>> = {
   add: ['file', 'goal', 'plan', 'feedback'],
   commands: ['compact', 'permission', 'model', 'export'],
@@ -79,8 +79,13 @@ export function sectionRows(rows: readonly InputTriggerCandidate[], t: Translate
       const row = byName.get(name)
       return row === undefined ? [] : [row]
     })
-  const add = pick(SECTION_ROWS.add).map(row => ({ ...row, section: t('section.add') }))
-  const commands = [...pick(SECTION_ROWS.commands), ...rows.filter(row => !listed.has(row.name))]
+  const addBuiltins = pick(SECTION_ROWS.add)
+  const file = addBuiltins.filter(row => row.name === 'file')
+  const addRest = addBuiltins.filter(row => row.name !== 'file')
+  const contributedAdd = rows.filter(row => row.menuSection === 'add' && !listed.has(row.name))
+  const add = [...file, ...contributedAdd, ...addRest]
+    .map(row => ({ ...row, section: t('section.add') }))
+  const commands = [...pick(SECTION_ROWS.commands), ...rows.filter(row => !listed.has(row.name) && row.menuSection !== 'add')]
     .map(row => ({ ...row, section: t('section.commands') }))
   return [...add, ...commands]
 }

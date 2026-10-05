@@ -388,15 +388,17 @@ describe('candidates', () => {
       const { command, source } = await bench({ commands: () => Promise.resolve({ commands: SHIPPED }) })
       command.register(modelContribution())
       command.register(fileContribution())
+      command.register({ name: 'document', label: () => '文档', menuSection: 'add', available: () => true, ui: { kind: 'action', run: vi.fn() } })
       const rows = await source.candidates(proj('s1'), req(''))
       expect(rows.map(row => row.name)).toEqual([
-        'file', 'goal', 'plan', 'feedback', 'compact', 'permission', 'model', 'export', 'deploy',
+        'file', 'document', 'goal', 'plan', 'feedback', 'compact', 'permission', 'model', 'export', 'deploy',
       ])
       expect(rows.map(row => row.section)).toEqual([
-        ...Array<string>(4).fill('command:section.add'),
+        ...Array<string>(5).fill('command:section.add'),
         ...Array<string>(5).fill('command:section.commands'),
       ])
-      expect(rows[1]).toEqual({
+      expect(rows[1]).toMatchObject({ name: 'document', label: '文档', menuSection: 'add', section: 'command:section.add' })
+      expect(rows[2]).toEqual({
         name: 'goal',
         label: 'command:label.goal',
         description: 'command:description.goal',
@@ -405,9 +407,9 @@ describe('candidates', () => {
         section: 'command:section.add',
       })
       expect(rows[0]).toEqual({ name: 'file', label: 'command:label.file', icon: Glyph, section: 'command:section.add' })
-      expect(rows[6]).toMatchObject({ name: 'model', label: '模型', description: '选择本会话使用的模型', icon: Glyph })
+      expect(rows[7]).toMatchObject({ name: 'model', label: '模型', description: '选择本会话使用的模型', icon: Glyph })
       // A third-party command keeps its catalog text and gets no glyph.
-      expect(rows[8]).toEqual({ name: 'deploy', description: 'third-party command', section: 'command:section.commands' })
+      expect(rows[9]).toEqual({ name: 'deploy', description: 'third-party command', section: 'command:section.commands' })
     })
 
     it('a same-name override keeps its own presentation even when it copies the first-party description', async () => {

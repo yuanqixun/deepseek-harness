@@ -65,6 +65,7 @@ export class HostConnectionService extends Service implements HostConnectionHand
   readonly operator: PeerScope
   private readonly interceptors = new Map<string, ConnectionRpcInterceptor>()
   private readonly fetchRoutes = new Map<string, RegisteredFetchRoute>()
+  private webContext: Context | undefined
 
   /**
    * Provide the Host half over the active HTTP server.
@@ -80,6 +81,14 @@ export class HostConnectionService extends Service implements HostConnectionHand
     super(ctx, 'connection')
     this.operator = new OperatorPeer(ctx)
     ctx.effect(() => () => this.operator.dispose(), 'client-connection: operator Peer')
+  }
+
+  /** Use the injected Web context for RPC routes registered by Web plugins.
+   * @param ctx - the Context that owns the active `webServer` injection.
+   * @returns nothing.
+   */
+  setWebContext(ctx: Context): void {
+    this.webContext = ctx
   }
 
   /** Generic channel registry scoped to the Context reading this service. */
@@ -174,6 +183,7 @@ export class HostConnectionService extends Service implements HostConnectionHand
     handler: ConnectionRpcHandler,
   ): () => Promise<void> {
     assertChannel(channel)
+    owner = this.webContext ?? owner
     const fetchHandler = rpcFetchHandler(channel, handler, this.operator)
     const route: WebRoute = {
       kind: 'prefix',

@@ -16,6 +16,7 @@ import {
   type ClientRequest,
   type ConnectionConfig,
   type HostConnectionHandle,
+  type HostConnectionService,
   type PeerScope,
 } from '../src/index.ts'
 import { DEFAULT_MAX_REQUEST_BODY_BYTES } from '../src/http-bridge.ts'
@@ -127,6 +128,21 @@ function browserCookie(connection: HostConnectionHandle, authority: string): str
 }
 
 describe('connection node half', () => {
+  it('registers RPC routes against the injected Web context', async () => {
+    const { ctx, connection, dispose } = await mounted()
+    const routes: WebRoute[] = []
+    const upgrades: WebUpgradeRoute[] = []
+    const webCtx = new Context()
+    webCtx.provide('webServer', fakeHttpServer(routes, upgrades) as WebServer)
+    try {
+      ;(ctx.get('connection') as HostConnectionService).setWebContext(webCtx)
+      const remove = connection.rpc.handle('/nested-context', async () => ({ ok: true, value: null }))
+      expect(routes.map(route => route.path)).toEqual(['/nested-context'])
+      await remove()
+      expect(routes).toEqual([])
+    } finally { await dispose() }
+  })
+
   it('runs request admission after authentication and removes it with its owning fiber', async () => {
     const { ctx, routes, connection, dispose } = await mounted()
     let admitted = 0

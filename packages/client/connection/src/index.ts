@@ -137,6 +137,7 @@ export async function apply(ctx: Context, config?: ConnectionConfig): Promise<vo
     await BrowserAuth.create(ctx.root, ctx.credentials, cookieMaxAgeDays),
   )
   ctx.inject(['webServer'], (webCtx) => {
+    connection.setWebContext(webCtx)
     assertImageBodyCapacity(webCtx, maxRequestBodyBytes)
     webCtx.on('webserver/index-inject', (table) => {
       table.push({ kind: 'global', name: '__DSH_CONNECTION_RECOVERY__', value: recovery })

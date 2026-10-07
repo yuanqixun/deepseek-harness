@@ -16,6 +16,8 @@
 - 侧栏入口始终只显示用户图标，不在侧栏常驻显示用户名；已认证时悬浮提示显示用户名。菜单首项以用户名和用户图标显示 CAS 身份，选择后打开 Modal；用户名与显示名相同时详情只显示一次。
 - 菜单内置用户名/用户图标、设置/齿轮图标和“登出”/退出图标。设置项调用 owner 的 `openSettings()`；登出项调用 Host 现有 `logout` RPC，RPC 完成后通过 `openOnboarding('dsh-pro-auth')` 回到 CAS 登录界面。
 - 退出只清除本地 DSH 进程持有的 CAS 身份，不请求 CAS `/logout`，也不宣称关闭浏览器全局 SSO 会话。
+- 用户选择“登出”后先显示本地确认对话框；只有确认才调用 logout RPC，取消则保留当前身份。面向用户的说明仅解释退出当前 DSH 账号并返回登录页面，不提 CAS 会话实现。
+- 登录 onboarding 使用标准 `Modal` 标题“系统登录”、单点登录主操作和“取消并关闭”操作。说明用户如何开始验证、在哪里完成，以及返回 DSH 后会自动继续。Modal 遮罩阻止背景交互，并将 DSH 根节点设为 inert；取消尝试关闭当前 Web 标签，若浏览器禁止脚本关闭则导航到 `about:blank`。
 - 由账户菜单注册的 slot 声明 `dsh-pro-auth.menu.item` 子列表，并把子列表作为 `Menu` 的组件子项渲染。后续插件可以贡献独立的本地化菜单行并复用 `MenuItemButton` 键盘遍历。
 - 启动器与 onboarding 共用同一个 `CasLoginController`，不增加 RPC 轮询器；退出、refresh 和连接重置令旧身份立即失效。Profile 未加载插件时其 `settings.launcher` 无替换注册，原设置触发器继续作为 fallback。
 - 身份只驻留 Host/Client 内存，不保存至设置、Session、日志、分析事件或模型可见请求。

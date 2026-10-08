@@ -25,6 +25,7 @@ import { PluginRefreshToast, type PluginRefreshToastFace } from './PluginRefresh
 import { PluginsPanelIcon } from './PluginsPanelIcon.tsx'
 import { configLedgerSource } from './config-ledger.ts'
 import { PluginManagerController } from './manager-store.ts'
+import { createPluginAddActions } from './add-default-action.ts'
 import { en, zh, type PluginManagerLocaleKey } from './locales.ts'
 import { createNavigationStore } from './navigation-store.ts'
 import type {} from './slot-contract.ts'
@@ -44,6 +45,7 @@ declare module '@deepseek-ai/cordis' {
 }
 
 export type { PluginManagerPageProps } from './PluginManagerPage.tsx'
+export type { PluginAddActions, PluginAddDefaultAction } from './add-default-action.ts'
 export type { ConfigLedger, OfficialItem } from './config-ledger.ts'
 export type { PluginManagerFace } from './manager-store.ts'
 export type { PluginManagerLocaleKey } from './locales.ts'
@@ -76,7 +78,9 @@ export const inject = ['slots', 'locale', 'remote', 'remote.pluginManager', 'rem
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-plugin-manager: dictionaries')
   const t = ctx.locale.bind(NS)
-  const controller = new PluginManagerController(ctx)
+  const addActions = createPluginAddActions()
+  ctx.effect(() => ctx.reflect.provide('pluginAddActions', addActions), 'ui-plugin-manager: default add action')
+  const controller = new PluginManagerController(ctx, addActions)
   ctx.effect(() => () => { controller.dispose() }, 'ui-plugin-manager: controller')
   // The Host says when what is installed, enabled, or composed changed — from
   // this page, the CLI, or another browser — and streams install output.

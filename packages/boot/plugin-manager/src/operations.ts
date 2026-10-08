@@ -280,8 +280,29 @@ function bundleComponentManifests(manifest: ProfileManifest, dir: string, anchor
  * @param options Output, activation and cancellation policy.
  * @returns Exit status, whether the silence bound stopped the run, and the diagnostic path.
  * A compatibility denial returns exit code 1. Service output is bounded; CLI output uses inherited descriptors.
+ * An unexpected pnpm store error migrates this profile once with the selected pnpm, then retries the command once.
  */
 export async function runProfilePnpm(
+  context: PackageOperationContext, args: readonly string[], options: PackageOperationOptions,
+): Promise<PackageResult> {
+  const result = await runProfilePnpmOnce(context, args, options)
+  if (result.exitCode === 0 || !result.output.includes('ERR_PNPM_UNEXPECTED_STORE') || options.signal?.aborted) return result
+
+  // A newer bundled pnpm cannot operate on node_modules linked from an older store.
+  // Rebuild only this profile with the selected executable, then retry the requested operation once.
+  const migration = await runProfilePnpmOnce(context, ['install', '--no-frozen-lockfile', '--config.confirmModulesPurge=false'], {
+    ...options, activateNewBundles: false,
+  })
+  if (migration.exitCode !== 0 || options.signal?.aborted) {
+    const diagnostic = '\ndsh: this profile uses a pnpm store from an older pnpm version; its dependencies could not be migrated. Run `dsh plugin install` after resolving the reported error.\n'
+    options.onOutput?.(diagnostic, 'stderr')
+    return { ...migration, output: `${migration.output}${diagnostic}` }
+  }
+  return runProfilePnpmOnce(context, args, options)
+}
+
+/** Run one pnpm command without attempting a profile store migration. */
+async function runProfilePnpmOnce(
   context: PackageOperationContext, args: readonly string[], options: PackageOperationOptions,
 ): Promise<PackageResult> {
   const dir = context.dir ?? resolveProfileDir(context.profile, context.home)

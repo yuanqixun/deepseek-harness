@@ -173,6 +173,8 @@ pnpm run dev:desktop     # build, then launch Desktop
 
 Arguments after a Web command reach `dsh web`, for example `pnpm run dev:web --no-open --port 3081`; `dev:web` also accepts `--skip-build` to reuse the existing artifact tree and `--no-serve` to run only the rebuild watchers beside a server started elsewhere. Both Web commands use the normal Harness home, while the Desktop commands use the isolated development home described in the [Desktop README](../apps/desktop/README.md). The root `Makefile` names the same commands as `make web`, `make dev-web`, `make desktop`, `make dev-desktop`, and `make build`; `ARGS='--no-open'` forwards options.
 
+To load the separately maintained private market during local Web development, set `DSH_CONFIG_ENV_DIR` to the directory containing named `config.json` files and pass `--config-env <name>` to `dev:web`, for example `DSH_CONFIG_ENV_DIR=/secure/dsh-config pnpm run dev:web -- --config-env hxfl`. The launcher builds the sibling `../deepseek-harness-plugins/dsh-private-market` checkout for that run; `DSH_PRIVATE_MARKET_SOURCE` selects another checkout. Without `--config-env`, the market source and configuration are not read.
+
 ### TODO markers
 
 Use one of three comment tags to flag known issues in the code, ordered by urgency:

@@ -177,6 +177,8 @@ pnpm run dev:desktop     # build, then launch Desktop
 
 Web 命令后面的参数会传给 `dsh web`，例如 `pnpm run dev:web --no-open --port 3081`；`dev:web` 还接受 `--skip-build` 复用现有产物树，以及 `--no-serve` 只运行重建 watcher、配合别处启动的服务器。两个 Web 命令使用正常的 Harness home，而 Desktop 命令使用 [Desktop README](../apps/desktop/README.zh.md) 描述的隔离开发 home。根目录 `Makefile` 以 `make web`、`make dev-web`、`make desktop`、`make dev-desktop` 和 `make build` 命名同一套命令；`ARGS='--no-open'` 用于转发参数。
 
+本地 Web 开发需要加载独立维护的私有市场时，将 `DSH_CONFIG_ENV_DIR` 设为包含具名 `config.json` 文件的目录，并向 `dev:web` 传入 `--config-env <name>`，例如 `DSH_CONFIG_ENV_DIR=/secure/dsh-config pnpm run dev:web -- --config-env hxfl`。启动器会为本次运行构建 sibling checkout `../deepseek-harness-plugins/dsh-private-market`；`DSH_PRIVATE_MARKET_SOURCE` 可指定其他 checkout。不传 `--config-env` 时，不读取市场源码或配置。
+
 ### TODO 标记
 
 请使用以下三种注释标签之一标记代码中的已知问题，按紧急程度排序：

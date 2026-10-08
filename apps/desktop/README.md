@@ -233,6 +233,24 @@ pnpm run package:desktop:mac:x64
 pnpm run package:desktop:win:x64
 ```
 
+To include the independent private market for a deployment, provide its named environment directory and pass `--config-env` to a package command, for example `DSH_CONFIG_ENV_DIR=/secure/dsh-config pnpm run package:desktop:mac:arm64 -- --config-env hxfl`. Packaging builds `../deepseek-harness-plugins/dsh-private-market` (or `DSH_PRIVATE_MARKET_SOURCE`), adds its immutable package tarball and Official optional-bundle metadata to that target, and records the environment, configuration digest, package version, and tarball integrity. The bundle remains disabled in the default profile; enabling it applies the selected catalog URL, credential reference, and registry. The `config.json` contains no credential value:
+
+```json
+{
+  "schemaVersion": 1,
+  "environment": "hxfl",
+  "plugins": {
+    "privateMarket": {
+      "catalogUrl": "https://plugins.example/catalog.json",
+      "catalogCredentialRef": "DSH_PRIVATE_MARKET_TOKEN",
+      "registryUrl": "https://npm.example/"
+    }
+  }
+}
+```
+
+The file must be at `$DSH_CONFIG_ENV_DIR/hxfl/config.json`; without `--config-env`, Desktop packaging does not read or include the private market.
+
 The macOS arm64 command requires Apple Silicon. The macOS x64 command runs on Intel macOS or Apple Silicon with Rosetta. The Windows x64 command requires Windows x64. Linux is not a supported Desktop release target.
 
 Each target owns its packed package inputs, prepared runtime, package set, dsh tree, pnpm preparation state, unpacked application, update metadata, and final artifacts under `apps/desktop/.desktop-build/targets/<target>/`. The Electron archive cache remains shared under `.desktop-build/downloads` because every archive name includes its version, platform, and architecture and is verified before extraction. A target build never consumes another target's mutable preparation state.

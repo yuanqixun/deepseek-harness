@@ -35,6 +35,8 @@ interface FakePnpm {
   output: string
   /** Exit code of the `install` run that repairs a post-install refusal. */
   repairExit: number
+  /** Number of package commands that should report a stale pnpm store before succeeding. */
+  storeMismatches: number
   /** What the pre-install `pnpm view` lookup answers for one spec; `{}` declares no peers. */
   view: (spec: string) => { exitCode: number; stdout: string }
   /** The specs the pre-install check asked `pnpm view` about, in order. */
@@ -69,6 +71,7 @@ function fixture() {
     exitCode: 0,
     output: '',
     repairExit: 0,
+    storeMismatches: 0,
     view: () => ({ exitCode: 0, stdout: '{}' }),
     views: [],
   }
@@ -82,7 +85,12 @@ function fixture() {
       const answer = pnpm.view(spec)
       return result(answer.exitCode, answer.stdout)
     }
+    if (argv.includes('--no-frozen-lockfile')) return result(pnpm.repairExit, '')
     if (argv.includes('--frozen-lockfile') || argv.includes('--config.lockfile=false')) return result(pnpm.repairExit, '')
+    if (pnpm.storeMismatches > 0) {
+      pnpm.storeMismatches--
+      return result(1, 'ERR_PNPM_UNEXPECTED_STORE: dependencies use an older pnpm store')
+    }
     return result(pnpm.exitCode, pnpm.output, () => { pnpm.mutate(runDir) })
   })
   onTestFinished(() => { command.run.mockReset(); treeWait.skip = false; rmSync(home, { recursive: true, force: true }) })
@@ -260,6 +268,36 @@ it('runs an invocation that names no command without a registry lookup', async (
   expect(await runProfilePnpm(context, ['--version'], { execution: 'service', outputBytes: 8192 }))
     .toMatchObject({ exitCode: 0 })
   expect(pnpm.views).toEqual([])
+})
+
+it('migrates a profile store with the selected pnpm and retries the requested operation once', async () => {
+  const { context, pnpm } = fixture()
+  pnpm.storeMismatches = 1
+
+  expect(await runProfilePnpm(context, ['add', 'plugin'], { execution: 'service', outputBytes: 8192 }))
+    .toMatchObject({ exitCode: 0 })
+  expect(command.run.mock.calls.map(call => call[1])).toEqual([
+    ['view', 'plugin', 'name', 'version', 'peerDependencies', '--json', '--config.fetch-retries=0'],
+    ['add', 'plugin'],
+    ['install', '--no-frozen-lockfile', '--config.confirmModulesPurge=false'],
+    ['view', 'plugin', 'name', 'version', 'peerDependencies', '--json', '--config.fetch-retries=0'],
+    ['add', 'plugin'],
+  ])
+})
+
+it('does not retry after a profile store migration fails', async () => {
+  const { context, pnpm } = fixture()
+  pnpm.storeMismatches = 1
+  pnpm.repairExit = 1
+
+  const outcome = await runProfilePnpm(context, ['add', 'plugin'], { execution: 'service', outputBytes: 8192 })
+  expect(outcome.exitCode).toBe(1)
+  expect(outcome.output).toContain('could not be migrated')
+  expect(command.run.mock.calls.map(call => call[1])).toEqual([
+    ['view', 'plugin', 'name', 'version', 'peerDependencies', '--json', '--config.fetch-retries=0'],
+    ['add', 'plugin'],
+    ['install', '--no-frozen-lockfile', '--config.confirmModulesPurge=false'],
+  ])
 })
 
 it('installs an incompatible path spec the profile exempts', async () => {

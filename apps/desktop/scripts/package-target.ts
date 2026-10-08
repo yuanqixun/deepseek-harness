@@ -1,7 +1,7 @@
 /** Build one release target with matching Electron and dsh architecture. */
 
 import { spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { join, resolve } from 'node:path'
 import {
@@ -24,6 +24,8 @@ import { suggestDesktopBuildVersion } from './desktop-build-version-discovery.ts
 import { desktopBuildCommitEnvironment, readDesktopBuildCommit, resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { requireDesktopToolchain } from './desktop-toolchain-preflight.ts'
 import { withMacOSNotarizationProxy } from './macos-notarization-proxy.ts'
+import { packagePrivateMarket, resolvePrivateMarketSource } from './private-market-package.ts'
+import { readPrivateMarketEnvironment } from '../../../scripts/config-environment.ts'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const REPOSITORY_ROOT = resolve(APP_ROOT, '..', '..')
@@ -154,6 +156,7 @@ function writeReleaseRecord(
   const buildVersion = resolveDesktopBuildVersion(environment, dshVersion)
   const packaged = resolveDesktopBuildCommit(environment)
   const update = resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
+  const marketRecord = join(desktopTargetBuildPaths(target.name).packedDsh, 'private-market-build.json')
   const recordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
   const temporaryPath = `${recordPath}.tmp`
   writeFileSync(temporaryPath, `${JSON.stringify({
@@ -162,6 +165,7 @@ function writeReleaseRecord(
     version: buildVersion,
     environment: update.environment,
     publicUrl: update.publicUrl,
+    ...(existsSync(marketRecord) ? { privateMarket: JSON.parse(readFileSync(marketRecord, 'utf8')) } : {}),
     // Upload reads this to tag the commit a production release was packaged from.
     ...packaged === undefined ? {} : { commit: packaged.commit, dirty: packaged.dirty },
   }, null, 2)}\n`)
@@ -206,6 +210,8 @@ interface DesktopPackageInvocation {
   readonly unsigned: boolean
   readonly internalDmg: boolean
   readonly check: boolean
+  /** Named private deployment environment whose market package is included, when selected. */
+  readonly configEnvironment: string | undefined
   /** Build identifier to publish under, when this build does not publish the product version. */
   readonly requestedBuildVersion: string | undefined
 }
@@ -240,6 +246,7 @@ export function parseDesktopPackageInvocation(
       'internal-dmg': { type: 'boolean', default: false },
       check: { type: 'boolean', default: false },
       'build-version': { type: 'string' },
+      'config-env': { type: 'string' },
     },
   })
   if (positionals.length > 1) throw new Error('desktop package: expected at most one target')
@@ -261,6 +268,7 @@ export function parseDesktopPackageInvocation(
     unsigned: values.unsigned,
     internalDmg: values['internal-dmg'],
     check: values.check,
+    configEnvironment: values['config-env'],
     requestedBuildVersion,
   }
 }
@@ -355,6 +363,12 @@ async function main(): Promise<void> {
   environment[DESKTOP_BUILD_VERSION_ENV] = buildVersion
   if (invocation.check) {
     validateDesktopPackageEnvironment(environment, target, invocation)
+    if (invocation.configEnvironment !== undefined) {
+      readPrivateMarketEnvironment(environment.DSH_CONFIG_ENV_DIR ?? process.env.DSH_CONFIG_ENV_DIR, invocation.configEnvironment)
+      const source = resolvePrivateMarketSource(REPOSITORY_ROOT, environment)
+      const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as { name?: unknown }
+      if (manifest.name !== '@deepseek-ai/dsh-private-market') throw new Error(`desktop package: invalid private market source ${source}`)
+    }
     await requireDesktopToolchain(target.platform, environment)
     process.stdout.write(`desktop package: ${target.name} would package ${buildVersion}; local configuration and toolchain valid, signing and notarization were not attempted\n`)
     return
@@ -471,6 +485,19 @@ export async function packageTarget(
   }
   await execute(['run', 'build:official'], buildEnv, REPOSITORY_ROOT)
   await execute(['run', 'release:pack', '--family', 'dsh', '--out', buildPaths.packedDsh, ...packArguments], buildEnv, REPOSITORY_ROOT)
+  if (invocation.configEnvironment !== undefined) {
+    const source = resolvePrivateMarketSource(REPOSITORY_ROOT, environment)
+    await execute(['run', 'build'], buildEnv, source)
+    const marketRecord = await packagePrivateMarket({
+      repositoryRoot: REPOSITORY_ROOT,
+      source,
+      configRoot: environment.DSH_CONFIG_ENV_DIR ?? process.env.DSH_CONFIG_ENV_DIR,
+      environment: invocation.configEnvironment,
+      output: buildPaths.packedDsh,
+      runPnpm: (args, cwd) => execute(args, buildEnv, cwd),
+    })
+    if (run !== undefined) recordPackagingEvent(run.directory, { type: 'private-market', ...marketRecord })
+  }
   await execute([
     '--dir',
     'apps/desktop-host',

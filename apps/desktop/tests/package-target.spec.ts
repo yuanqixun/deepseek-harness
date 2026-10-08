@@ -58,6 +58,16 @@ describe('desktop package target', () => {
       .toThrow(/--build-version requires a value/u)
   })
 
+  it('consumes a named private-market build environment', () => {
+    expect(parseDesktopPackageInvocation(['mac-arm64', '--config-env', 'hxfl'], 'darwin', 'arm64').configEnvironment)
+      .toBe('hxfl')
+    expect(parseDesktopPackageInvocation(['mac-arm64', '--config-env=hxfl'], 'darwin', 'arm64').configEnvironment)
+      .toBe('hxfl')
+    expect(parseDesktopPackageInvocation(['mac-arm64'], 'darwin', 'arm64').configEnvironment).toBeUndefined()
+    expect(() => parseDesktopPackageInvocation(['mac-arm64', '--config-env'], 'darwin', 'arm64'))
+      .toThrow(/config-env.*argument missing/u)
+  })
+
   it('keeps electron-builder publishing disabled for the separate validated upload', () => {
     const target = resolveDesktopPackageTarget('mac-arm64', 'darwin', 'arm64')
     expect(desktopElectronBuilderArguments(target, false)).toEqual([

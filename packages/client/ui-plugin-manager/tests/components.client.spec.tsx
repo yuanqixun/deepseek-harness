@@ -11,6 +11,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { MenuItemButton } from '@deepseek-ai/dsh-client-ui-primitives'
 import { StrictMode, type ReactNode } from 'react'
 import { createNavigationStore } from '../src/client/navigation-store.ts'
+import { createPluginAddActions } from '../src/client/add-default-action.ts'
 import { PluginManagerPage } from '../src/client/PluginManagerPage.tsx'
 import { PluginRefreshToast } from '../src/client/PluginRefreshToast.tsx'
 import type { PluginManagerPageProps } from '../src/client/index.ts'
@@ -107,6 +108,7 @@ function renderTab(
     ensure: vi.fn(),
     refresh: vi.fn(),
     openInstall: vi.fn(),
+    openDefaultAddAction: vi.fn(),
     closeInstall: vi.fn(),
     editInstallSpec: vi.fn(),
     runInstall: vi.fn(),
@@ -206,11 +208,11 @@ describe('PluginManagerPage', () => {
     fireEvent.keyDown(add, { key: 'ArrowDown' })
     const install = screen.getByRole('menuitem', { name: new RegExp(en.installExisting) })
     const create = screen.getByRole('menuitem', { name: 'Create a plugin' })
-    expect(screen.getAllByRole('menuitem')).toEqual([install, create])
-    expect(document.activeElement).toBe(install)
-    fireEvent.keyDown(install, { key: 'ArrowDown' })
+    expect(screen.getAllByRole('menuitem')).toEqual([create, install])
     expect(document.activeElement).toBe(create)
-    fireEvent.keyDown(create, { key: 'Escape' })
+    fireEvent.keyDown(create, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(install)
+    fireEvent.keyDown(install, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()
     expect(document.activeElement).toBe(add)
     expect(actions.openInstall).not.toHaveBeenCalled()
@@ -233,6 +235,32 @@ describe('PluginManagerPage', () => {
     expect(document.activeElement).toBe(screen.getByRole('textbox', { name: en.installSpecLabel }))
   })
 
+  it('opens the registered default add flow from the primary button', () => {
+    const { actions } = renderTab()
+    fireEvent.click(screen.getByRole('button', { name: en.addPlugin }))
+    expect(actions.openDefaultAddAction).toHaveBeenCalledOnce()
+    expect(actions.openInstall).not.toHaveBeenCalled()
+  })
+
+  it('runs the highest-priority default add action and falls back when none is registered', () => {
+    const registry = createPluginAddActions()
+    const fallback = vi.fn()
+    const lowerPriority = vi.fn()
+    const higherPriority = vi.fn()
+    registry.register({ id: 'later', order: 10, onSelect: lowerPriority })
+    const dispose = registry.register({ id: 'market', order: -10, onSelect: higherPriority })
+    expect(registry.runDefault(fallback)).toBe(true)
+    expect(higherPriority).toHaveBeenCalledOnce()
+    expect(lowerPriority).not.toHaveBeenCalled()
+    expect(fallback).not.toHaveBeenCalled()
+    dispose()
+    expect(registry.runDefault(fallback)).toBe(true)
+    expect(lowerPriority).toHaveBeenCalledOnce()
+    const empty = createPluginAddActions()
+    expect(empty.runDefault(fallback)).toBe(false)
+    expect(fallback).toHaveBeenCalledOnce()
+  })
+
   it('keeps primary installation and mouse-selected creation on separate buttons', () => {
     const createPlugin = vi.fn()
     const { actions } = renderTab({}, {}, {
@@ -248,7 +276,8 @@ describe('PluginManagerPage', () => {
     fireEvent.pointerDown(add, { pointerType: 'mouse', button: 0 })
     fireEvent.pointerUp(add, { pointerType: 'mouse', button: 0 })
     fireEvent.click(add)
-    expect(actions.openInstall).toHaveBeenCalledOnce()
+    expect(actions.openDefaultAddAction).toHaveBeenCalledOnce()
+    expect(actions.openInstall).not.toHaveBeenCalled()
     expect(screen.queryByRole('menu')).toBeNull()
     actions.openInstall.mockClear()
     for (const label of ['Create a plugin', 'Describe it to the agent']) {
@@ -339,7 +368,8 @@ describe('PluginManagerPage', () => {
     set({ status: 'ready' })
     expect(screen.getByText(en.empty)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: en.addPlugin }))
-    expect(actions.openInstall).toHaveBeenCalledTimes(1)
+    expect(actions.openDefaultAddAction).toHaveBeenCalledTimes(1)
+    expect(actions.openInstall).not.toHaveBeenCalled()
   })
 
   it('shows skeletons only while loading and keeps ready cards during refresh and switching', () => {

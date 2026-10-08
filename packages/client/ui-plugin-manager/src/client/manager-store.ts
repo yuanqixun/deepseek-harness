@@ -32,6 +32,7 @@ import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { LocalizedText, PluginLocalizedMeta } from '@deepseek-ai/dsh-package-manifest'
 import type { SettingsDescribeFace, ConfigForms } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { ConfigLedger } from './config-ledger.ts'
+import type { PluginAddActions } from './add-default-action.ts'
 import { shortName } from './presentation.ts'
 
 /** The action a failed notice names. */
@@ -316,6 +317,8 @@ export interface PluginManagerFace {
   /** Read the Host again. */
   refresh: () => void
   openInstall: () => void
+  /** Run the registered primary add action, or open the existing install dialog. */
+  openDefaultAddAction: () => void
   /** Hide immediately, abort a check, or request cancellation while retaining the Host-owned installation. */
   closeInstall: () => void
   editInstallSpec: (text: string) => void
@@ -531,6 +534,7 @@ export class PluginManagerController {
    */
   constructor(
     private readonly ctx: ClientContext,
+    private readonly addActions: PluginAddActions = { register: () => () => {}, runDefault: (fallback) => { fallback(); return false } },
   ) {
     this.store = createSnapshotStore<PluginManagerState>({
       status: 'idle', refreshStatus: 'idle', packages: [], busy: [], notice: null,
@@ -561,25 +565,30 @@ export class PluginManagerController {
    * @returns the tab's snapshot sources and its actions.
    */
   inject(configLedger: HostObservable<ConfigLedger>, resolveText: PluginManagerFace['resolveText']): PluginManagerFace {
+    const openInstall = (): void => {
+      this.ctx.get('productAnalytics')?.track('plugin_add_button_click', {})
+      const install = this.getSnapshot().install
+      if (install.requestId === undefined) {
+        // A new dialog starts from the registry last used here and reads what the Host offers; a hidden install reopens as it is.
+        this.patch({ install: { ...IDLE_INSTALL, open: true, registry: this.registryMemory.getSnapshot() ?? OFFICIAL_REGISTRY } })
+        const read: RegistryRead = { choice: this.getSnapshot().install.registry }
+        this.registryRead = read
+        read.done = this.readRegistries(read).finally(() => { delete read.done })
+      } else {
+        this.patchInstall({ open: true })
+      }
+      void this.reconcileInstall()
+    }
     return {
       resolveText,
       hooks: { pluginManager: this.store, configLedger, configurations: this.ctx.configForms.describe() },
       configForm: id => this.ctx.configForms.get(id),
       ensure: () => { if (this.getSnapshot().status === 'idle') void this.load() },
       refresh: () => { void this.refresh() },
-      openInstall: () => {
-        this.ctx.get('productAnalytics')?.track('plugin_add_button_click', {})
-        const install = this.getSnapshot().install
-        if (install.requestId === undefined) {
-          // A new dialog starts from the registry last used here and reads what the Host offers; a hidden install reopens as it is.
-          this.patch({ install: { ...IDLE_INSTALL, open: true, registry: this.registryMemory.getSnapshot() ?? OFFICIAL_REGISTRY } })
-          const read: RegistryRead = { choice: this.getSnapshot().install.registry }
-          this.registryRead = read
-          read.done = this.readRegistries(read).finally(() => { delete read.done })
-        } else {
-          this.patchInstall({ open: true })
-        }
-        void this.reconcileInstall()
+      openInstall,
+      openDefaultAddAction: () => {
+        const usedDefault = this.addActions.runDefault(openInstall)
+        if (usedDefault) this.ctx.get('productAnalytics')?.track('plugin_add_button_click', {})
       },
       closeInstall: () => {
         if (isInstallPending(this.getSnapshot().install.phase)) {

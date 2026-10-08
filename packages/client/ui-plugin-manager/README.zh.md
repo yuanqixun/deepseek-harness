@@ -41,8 +41,8 @@ kind: "package-reference"
 
 | 按钮或菜单项 | 结果 |
 | --- | --- |
-| **添加插件** | 打开安装对话框并聚焦包名输入框。 |
-| 箭头：**选择添加插件方式** | 打开包含安装及插件贡献动作的菜单。 |
+| **添加插件** | 执行优先级最高的已注册添加动作；没有注册动作时打开安装对话框。 |
+| 箭头：**选择添加插件方式** | 打开包含插件贡献动作和安装项的菜单。 |
 | **安装第三方插件** | 关闭菜单，打开同一对话框，从包名、Git 仓库或本地目录安装。 |
 | **让 Agent 创建插件** | 由 [ui-agent-preset](../ui-agent-preset/README.zh.md#use-this-package) 提供此项时，关闭菜单并进入创造模式，制作 DSH 插件。 |
 
@@ -108,7 +108,7 @@ Host 入口通过生成的 Remote 接口暴露 `pluginRegistryProbe.fastest()`�
 
 浏览器插件通过 `ctx.slots.inject()` 注册 `plugins` 侧栏入口与它的 `main` 面板，使两者跟随 slot 延迟声明、本地化变化与销毁。页面为全局页面，不属于任何 Session。显示文本来自包元信息与页面字典。
 
-添加控件复用 `Button`、`Menu` 和 `MenuItemButton`。两个安装入口调用同一个 `openInstall` 回调，使用 `InstallDialog` 与 `PluginManagerController`。root 作用域的 list slot `plugins.add.actions` 接受贡献的 `MenuItemButton` 行，放在安装项之后；每个贡献者接收 `onDismiss()` 回调，在开始动作前关闭菜单。
+添加控件复用 `Button`、`Menu` 和 `MenuItemButton`。主按钮执行优先级最高的 `pluginAddActions` 注册动作；没有注册动作时打开现有安装对话框。箭头菜单仍提供内置安装器和 root 作用域的 `plugins.add.actions` 贡献项；贡献项排在内置安装项之前，每个贡献者接收 `onDismiss()` 回调，在开始动作前关闭菜单。
 
 ### store
 

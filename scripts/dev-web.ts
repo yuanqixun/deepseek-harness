@@ -19,7 +19,7 @@
  * MUST NOT run beside `pnpm run build`: both write the same `lib/` and
  * `apps/web/dist/` trees. The build stage here finishes before any watcher starts.
  *
- * Usage: `pnpm run dev:web [--skip-build] [--no-serve] [--poll[=ms]] [dsh web arguments]`.
+ * Usage: `pnpm run dev:web [--config-env <name>] [--skip-build] [--no-serve] [--poll[=ms]] [dsh web arguments]`.
  * `--skip-build` requires the artifact tree from a prior complete build: every
  * watcher is incremental over the previous stage's output and none of them
  * bootstraps a missing tree. `--no-serve` keeps only the watchers, for a
@@ -38,7 +38,7 @@
  * `watch` through API-level inline config (tsdown workspace mode fills inline
  * keys under each package's file config, and no package config defines it).
  */
-import { globSync, readFileSync } from 'node:fs'
+import { cpSync, existsSync, globSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { execa } from 'execa'
@@ -50,6 +50,8 @@ import {
   repositoryClientBuildEnvironment,
 } from './client-build-environment.ts'
 import { pnpmInvocation } from './pnpm-invocation.ts'
+import { readPrivateMarketEnvironment } from './config-environment.ts'
+import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 
@@ -80,6 +82,8 @@ export function devWebBuildEnvironment(
 
 /** Resolved `dev-web` command line: the script's own flags plus the arguments forwarded to `dsh web`. */
 export interface DevWebArguments {
+  /** Named private deployment configuration consumed by this launcher. */
+  readonly configEnvironment: string | undefined
   /** Skip the complete `pnpm run build` that otherwise precedes the watchers. */
   readonly skipBuild: boolean
   /** Start `dsh web`; false keeps only the rebuild watchers beside an already running server. */
@@ -94,23 +98,33 @@ export interface DevWebArguments {
 const DEFAULT_POLL_INTERVAL = 500
 
 /**
- * Parse the script's command line. `--skip-build`, `--no-serve`, and `--poll[=ms]`
- * belong to this script; a bare `--` is dropped; every other token is forwarded
- * to `dsh web`.
+ * Parse the script's command line. `--config-env`, `--skip-build`, `--no-serve`,
+ * and `--poll[=ms]` belong to this script; a bare `--` is dropped; every other
+ * token is forwarded to `dsh web`.
  * @param argv - arguments after the script path.
  * @returns the resolved flags and forwarded arguments.
  * @throws Error when `--poll` carries a non-positive or non-integer interval, or
  * when `--no-serve` leaves forwarded arguments without a `dsh web` process.
  */
 export function parseDevWebArguments(argv: readonly string[]): DevWebArguments {
+  let configEnvironment: string | undefined
   let skipBuild = false
   let serve = true
   let pollInterval: number | undefined
   const appArgs: string[] = []
-  for (const arg of argv) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    if (arg === undefined) continue
     // `pnpm run` forwards a `--` separator verbatim; it carries no meaning here.
     if (arg === '--') continue
     if (arg === '--skip-build') skipBuild = true
+    else if (arg === '--config-env' || arg.startsWith('--config-env=')) {
+      if (configEnvironment !== undefined) throw new Error('dev-web: --config-env may be specified once')
+      const value = arg === '--config-env' ? argv[index + 1] : arg.slice('--config-env='.length)
+      if (value === undefined || value === '' || value.startsWith('--')) throw new Error('dev-web: --config-env requires a name')
+      configEnvironment = value
+      if (arg === '--config-env') index += 1
+    }
     else if (arg === '--no-serve') serve = false
     else if (arg === '--poll' || arg.startsWith('--poll=')) {
       pollInterval = arg === '--poll' ? DEFAULT_POLL_INTERVAL : Number(arg.slice('--poll='.length))
@@ -120,7 +134,159 @@ export function parseDevWebArguments(argv: readonly string[]): DevWebArguments {
   if (!serve && appArgs.length > 0) {
     throw new Error(`dev-web: --no-serve leaves no dsh web process for ${appArgs[0] ?? ''}`)
   }
-  return { skipBuild, serve, pollInterval, appArgs }
+  return { configEnvironment, skipBuild, serve, pollInterval, appArgs }
+}
+
+/** Put launcher-owned overlays before arguments consumed by the Web profile. */
+export function webProfileArguments(options: DevWebArguments, overlay: string | undefined): string[] {
+  return [
+    'web',
+    ...(overlay === undefined ? [] : ['--patch', overlay]),
+    ...options.appArgs,
+  ]
+}
+
+/**
+ * Create a one-run profile overlay for a built private market checkout.
+ * @param source - Independent plugin checkout.
+ * @param configRoot - External deployment configuration directory.
+ * @param environment - Selected named deployment environment.
+ * @returns Temporary runtime package and overlay paths to remove after the Web process exits.
+ */
+export function preparePrivateMarketOverlay(
+  source: string,
+  configRoot: string | undefined,
+  environment: string,
+  profileDirectory: string,
+  runtimeModulesDirectory = join(repoRoot, 'apps/cli/node_modules/@deepseek-ai'),
+): { overlay: string; directory: string; profileLink: string; restoreProfile: () => void } {
+  const settings = readPrivateMarketEnvironment(configRoot, environment)
+  const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as {
+    name?: unknown
+    dsh?: { bundle?: { patch?: unknown }; client?: { platform?: unknown } }
+  }
+  if (manifest.name !== '@deepseek-ai/dsh-private-market') {
+    throw new Error(`dev-web: ${source} is not @deepseek-ai/dsh-private-market`)
+  }
+  if (manifest.dsh?.bundle?.patch !== './cordis.patch.yml' || manifest.dsh.client?.platform !== 'web') {
+    throw new Error(`dev-web: ${source} must declare its bundle patch and Web Client`)
+  }
+  mkdirSync(runtimeModulesDirectory, { recursive: true })
+  const packageDirectory = join(runtimeModulesDirectory, 'dsh-private-market')
+  const profileModules = join(profileDirectory, 'node_modules/@deepseek-ai')
+  const profileLink = join(profileModules, 'dsh-private-market')
+  const profileManifestPath = join(profileDirectory, 'package.json')
+  const originalProfileManifest = readFileSync(profileManifestPath, 'utf8')
+  const profileManifest = JSON.parse(originalProfileManifest) as {
+    dependencies?: Record<string, string>
+  }
+  const patchedProfileManifest = `${JSON.stringify({
+    ...profileManifest,
+    dependencies: {
+      ...profileManifest.dependencies,
+      '@deepseek-ai/dsh-private-market': `link:${packageDirectory}`,
+    },
+  }, null, 2)}\n`
+  if (existsSync(packageDirectory)) {
+    throw new Error(`dev-web: remove existing ${packageDirectory} before loading the sibling private market checkout`)
+  }
+  if (existsSync(profileLink)) {
+    throw new Error(`dev-web: remove existing ${profileLink} before loading the sibling private market checkout`)
+  }
+  mkdirSync(packageDirectory)
+  const excludedPackagePath = /(?:^|[/\\])(?:\.git|node_modules|src|tests|scripts|openspec|\.agents)(?:[/\\]|$)/u
+  try {
+    cpSync(source, packageDirectory, {
+      recursive: true,
+      filter: path => !excludedPackagePath.test(path),
+    })
+    symlinkSync(join(source, 'node_modules'), join(packageDirectory, 'node_modules'), 'dir')
+    const missingOutput = ['lib/index.js', 'lib/client.js', 'lib/typert.host.js', 'lib/typert.remote-client.js']
+      .find(file => !existsSync(join(packageDirectory, file)))
+    if (missingOutput !== undefined) {
+      throw new Error(`dev-web: private market Host, Remote, or Client build output is missing: ${missingOutput}`)
+    }
+    const overlay = join(packageDirectory, '.dev-cordis.patch.yml')
+    writeFileSync(overlay, `${JSON.stringify([
+      { id: 'plugin-manager', config: { registry: settings.registryUrl } },
+      { id: 'private-market', name: '@deepseek-ai/dsh-private-market', config: {
+        catalogUrl: settings.catalogUrl,
+        catalogCredentialRef: settings.catalogCredentialRef ?? '',
+      } },
+    ], null, 2)}\n`, { mode: 0o600 })
+    mkdirSync(profileModules, { recursive: true })
+    symlinkSync(packageDirectory, profileLink, 'dir')
+    writeFileSync(profileManifestPath, patchedProfileManifest)
+    let restored = false
+    const restoreProfile = (): void => {
+      if (restored) return
+      restored = true
+      if (existsSync(profileManifestPath) && readFileSync(profileManifestPath, 'utf8') === patchedProfileManifest) {
+        writeFileSync(profileManifestPath, originalProfileManifest)
+      } else {
+        console.error(`dev-web: kept ${profileManifestPath} because it changed while the private market was loaded`)
+      }
+    }
+    return { overlay, directory: packageDirectory, profileLink, restoreProfile }
+  } catch (error) {
+    rmSync(profileLink, { force: true })
+    rmSync(packageDirectory, { recursive: true, force: true })
+    throw error
+  }
+}
+
+/** Build the independent private market Host, Remote and Client outputs. */
+async function buildPrivateMarket(source: string): Promise<number | null> {
+  const invocation = pnpmInvocation(['--dir', source, 'run', 'build'])
+  const result = await execa(invocation.command, invocation.args, { cwd: repoRoot, stdio: 'inherit', reject: false })
+  return result.exitCode ?? null
+}
+
+/** Watch the built plugin's Host and Client faces and project changed outputs into the isolated runtime copy. */
+function watchPrivateMarket(supervisor: StageSupervisor, source: string, runtimeDirectory: string): void {
+  spawnStage(supervisor, 'private-market Host and Client types', 'pnpm', [
+    '--dir', source, 'exec', 'tsc', '-b', 'tsconfig.json', '--watch', '--preserveWatchOutput',
+  ], false)
+  for (const face of ['host', 'client'] as const) {
+    spawnStage(supervisor, `private-market ${face} bundle`, 'pnpm', [
+      '--dir', source, 'exec', 'tsdown', '--config-loader', 'native', '--env.DSH_BUILD_FACE', face, '--watch',
+    ], false)
+  }
+  const sourceLib = join(source, 'lib')
+  const runtimeLib = join(runtimeDirectory, 'lib')
+  const syncScript = join(runtimeDirectory, 'sync-market-artifacts.mjs')
+  writeFileSync(syncScript, `
+import { copyFileSync, mkdirSync, readdirSync, statSync } from 'node:fs'
+import { dirname, join, relative } from 'node:path'
+const source = process.argv[2]
+const target = process.argv[3]
+const known = new Map()
+function scan(directory) {
+  const result = []
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name)
+    if (entry.isDirectory()) result.push(...scan(path))
+    else if (entry.isFile()) result.push(path)
+  }
+  return result
+}
+function sync() {
+  for (const path of scan(source)) {
+    const stat = statSync(path)
+    const key = relative(source, path)
+    const stamp = stat.mtimeMs + ':' + stat.size
+    if (known.get(key) === stamp) continue
+    const output = join(target, key)
+    mkdirSync(dirname(output), { recursive: true })
+    copyFileSync(path, output)
+    known.set(key, stamp)
+  }
+}
+sync()
+setInterval(sync, 300)
+`, { mode: 0o600 })
+  spawnStage(supervisor, 'private-market artifact projection', process.execPath,
+    [syncScript, sourceLib, runtimeLib], false)
 }
 
 /**
@@ -336,8 +502,24 @@ if (isMain) {
     options = parseDevWebArguments(process.argv.slice(2))
   } catch (error) {
     console.error(error instanceof Error ? error.message : error)
-    console.error('dev-web: usage: pnpm run dev:web [--skip-build] [--no-serve] [--poll[=ms]] [dsh web arguments]')
+    console.error('dev-web: usage: pnpm run dev:web [--config-env <name>] [--skip-build] [--no-serve] [--poll[=ms]] [dsh web arguments]')
     process.exit(1)
+  }
+
+  const privateMarketSource = options.configEnvironment === undefined
+    ? undefined
+    : resolve(process.env.DSH_PRIVATE_MARKET_SOURCE ?? join(repoRoot, '..', 'deepseek-harness-plugins', 'dsh-private-market'))
+  const selectedEnvironment = options.configEnvironment
+  if (selectedEnvironment !== undefined) {
+    try {
+      readPrivateMarketEnvironment(process.env.DSH_CONFIG_ENV_DIR, selectedEnvironment)
+      if (privateMarketSource === undefined) throw new Error('dev-web: private market source was not resolved')
+      const manifest = JSON.parse(readFileSync(join(privateMarketSource, 'package.json'), 'utf8')) as { name?: unknown }
+      if (manifest.name !== '@deepseek-ai/dsh-private-market') throw new Error(`dev-web: invalid plugin source ${privateMarketSource}`)
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : error)
+      process.exit(1)
+    }
   }
 
   // Shutdown is requested once, by a terminal signal or by a stage exiting on
@@ -367,6 +549,31 @@ if (isMain) {
   if (buildExit !== 0) {
     console.error(`dev-web: pnpm run build exited (code ${String(buildExit)})`)
     process.exit(1)
+  }
+
+  let privateMarketOverlay: {
+    overlay: string
+    directory: string
+    profileLink: string
+    restoreProfile: () => void
+  } | undefined
+  if (privateMarketSource !== undefined && selectedEnvironment !== undefined) {
+    const marketBuildExit = await buildPrivateMarket(privateMarketSource)
+    if (marketBuildExit !== 0) {
+      console.error(`dev-web: private market build exited (code ${String(marketBuildExit)})`)
+      process.exit(1)
+    }
+    privateMarketOverlay = preparePrivateMarketOverlay(
+      privateMarketSource, process.env.DSH_CONFIG_ENV_DIR, selectedEnvironment,
+      join(resolveDshHome(), 'profiles', 'web'),
+    )
+    const preparedOverlay = privateMarketOverlay
+    process.once('exit', () => {
+      preparedOverlay.restoreProfile()
+      rmSync(preparedOverlay.profileLink, { force: true })
+      rmSync(preparedOverlay.directory, { recursive: true, force: true })
+    })
+    watchPrivateMarket(supervisor, privateMarketSource, privateMarketOverlay.directory)
   }
 
   const buildEnvironment = devWebBuildEnvironment(repoRoot, process.env)
@@ -418,7 +625,8 @@ if (isMain) {
     // from source exactly as `pnpm dsh web` would.
     if (options.serve) {
       spawnStage(supervisor, 'dsh web', process.execPath, [
-        '--import', 'tsx/esm', 'apps/cli/src/bin.ts', 'web', ...options.appArgs,
+        '--import', 'tsx/esm', 'apps/cli/src/bin.ts',
+        ...webProfileArguments(options, privateMarketOverlay?.overlay),
       ], false)
     }
     console.log(
@@ -435,5 +643,10 @@ if (isMain) {
   const exitCode = await shutdown.promise
   await supervisor.stop({ signal: requested.signal, graceMs: STOP_GRACE_MS })
   for (const bundle of bundles) await bundle[Symbol.asyncDispose]()
+  if (privateMarketOverlay !== undefined) {
+    privateMarketOverlay.restoreProfile()
+    rmSync(privateMarketOverlay.profileLink, { force: true })
+    rmSync(privateMarketOverlay.directory, { recursive: true, force: true })
+  }
   process.exit(exitCode)
 }

@@ -8,6 +8,7 @@ import type { BundleInfo, ChangeResult, ManagementError, PluginEntryId, PluginIn
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ConfigLedger } from '../src/client/config-ledger.ts'
+import { createPluginAddActions, type PluginAddActions } from '../src/client/add-default-action.ts'
 import { offeredRegistries, packageView, PluginManagerController, rowKey, sortPackages } from '../src/client/manager-store.ts'
 
 const INCOMPATIBLE = { name: 'dsh-late', version: '2.0.0', runtimeVersion: '0.1.0', peers: { '@deepseek-ai/dsh': '^0.2.0' } }
@@ -72,7 +73,7 @@ const NO_CONFIG: HostObservable<ConfigLedger> = {
   subscribe: () => () => {},
 }
 
-function bench(overrides: Partial<Record<string, ReturnType<typeof vi.fn>>> = {}, enabled = true) {
+function bench(overrides: Partial<Record<string, ReturnType<typeof vi.fn>>> = {}, enabled = true, addActions?: PluginAddActions) {
   const inventory = { list: overrides.inventory ?? vi.fn(() => Promise.resolve(ok({ entries: [], managementAvailable: true }))) }
   const plugins = {
     listBundles: vi.fn<() => Promise<ReturnType<typeof ok<BundleInfo[]>> | ReturnType<typeof refused>>>(
@@ -96,7 +97,7 @@ function bench(overrides: Partial<Record<string, ReturnType<typeof vi.fn>>> = {}
     configForms: { describe: () => ({ getSnapshot: () => ({ view: { namespaces: [] } }), subscribe: () => () => {} }), get: vi.fn((id: string) => `form:${id}`) },
     remote: { pluginManager: plugins, pluginInventory: inventory, pluginRegistryProbe: probe },
   } as never
-  const controller = new PluginManagerController(ctx)
+  const controller = new PluginManagerController(ctx, addActions)
   onTestFinished(() => { controller.dispose() })
   const face = controller.inject(NO_CONFIG, text => typeof text === 'string' ? text : text.en)
   const state = () => controller.getSnapshot()
@@ -111,6 +112,24 @@ function bench(overrides: Partial<Record<string, ReturnType<typeof vi.fn>>> = {}
 it('hands a custom page the shared configuration form of its entry', () => {
   const { face } = bench()
   expect(face.configForm('bundle#row')).toBe('form:bundle#row' as never)
+})
+
+it('opens the registered default add action instead of the installer', () => {
+  const addActions = createPluginAddActions()
+  const openMarket = vi.fn()
+  addActions.register({ id: 'private-market', order: -100, onSelect: openMarket })
+  const { face, state, track } = bench({}, true, addActions)
+  face.openDefaultAddAction()
+  expect(openMarket).toHaveBeenCalledOnce()
+  expect(state().install.open).toBe(false)
+  expect(track).toHaveBeenCalledWith('plugin_add_button_click', {})
+})
+
+it('opens the existing installer when no default add action is registered', () => {
+  const { face, state, plugins } = bench()
+  face.openDefaultAddAction()
+  expect(state().install.open).toBe(true)
+  expect(plugins.registries).toHaveBeenCalledOnce()
 })
 
 describe('packageView', () => {

@@ -41,7 +41,7 @@ The **Add plugin** control has a main button and a separate arrow for choosing h
 
 | Button or menu item | Result |
 | --- | --- |
-| **Add plugin** | Opens the installation dialog with focus in its package field. |
+| **Add plugin** | Runs the highest-priority registered add action; opens the installation dialog when none is registered. |
 | Arrow: **Choose how to add a plugin** | Opens the menu of installation and plugin-contributed actions. |
 | **Install a third-party plugin** | Closes the menu and opens the same dialog for a package name, Git repository, or local directory. |
 | **Let the agent create a plugin** | When [ui-agent-preset](../ui-agent-preset/README.md#use-this-package) contributes this item, closes the menu and opens Creator to author a DSH plugin. |
@@ -108,7 +108,7 @@ The Host entry exposes `pluginRegistryProbe.fastest()` through the generated Rem
 
 The browser plugin registers the `plugins` sidebar entry and its `main` panel through `ctx.slots.inject()`, so both follow late slot declaration, locale changes and teardown. The page is global and belongs to no Session. Display text comes from package metadata and the page's dictionary.
 
-The add control reuses `Button`, `Menu`, and `MenuItemButton`. Both installation actions call the same `openInstall` callback and use `InstallDialog` and `PluginManagerController`. The root-scoped list slot `plugins.add.actions` accepts contributed `MenuItemButton` rows after the install action; each contribution receives an `onDismiss()` callback to close the menu before starting its action.
+The add control reuses `Button`, `Menu`, and `MenuItemButton`. The primary button runs the highest-priority `pluginAddActions` registration, or opens the existing installation dialog when no action is registered. The arrow menu keeps the built-in installer and root-scoped `plugins.add.actions` contributions available; contributed rows render before the built-in install action, and each contribution receives an `onDismiss()` callback to close the menu before starting its action.
 
 ### The store
 

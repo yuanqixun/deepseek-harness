@@ -53,10 +53,11 @@ type ResolveText = PluginManagerFace['resolveText']
 
 type RowPhase = NonNullable<PackageRow['phase']>
 
-/** The primary action installs; the adjacent menu offers every add-plugin path. */
-function AddPluginMenu({ t, disabled, openInstall, renderSlot }: {
+/** The primary action runs the preferred add flow; the adjacent menu exposes every add-plugin path. */
+function AddPluginMenu({ t, disabled, openDefaultAddAction, openInstall, renderSlot }: {
   readonly t: Translate
   readonly disabled: boolean
+  readonly openDefaultAddAction: () => void
   readonly openInstall: () => void
   readonly renderSlot: RenderConfig
 }): ReactNode {
@@ -65,7 +66,7 @@ function AddPluginMenu({ t, disabled, openInstall, renderSlot }: {
   return (
     <span className={css.addGroup} role="group" aria-label={t('addPlugin')}>
       <Button variant="primary" size="sm" className={css.addPrimary} icon={<IconPlusOutlineRegular size={13} />}
-        disabled={disabled} onClick={() => { onDismiss(); openInstall() }}>
+        disabled={disabled} onClick={() => { onDismiss(); openDefaultAddAction() }}>
         {t('addPlugin')}
       </Button>
       <Menu open={open} onClose={onDismiss} align="end" portal autoFocus listClassName={css.addMenu}
@@ -79,13 +80,13 @@ function AddPluginMenu({ t, disabled, openInstall, renderSlot }: {
             <IconChevronDownOutlineRegular size={12} aria-hidden="true" />
           </Button>
         )}>
+        {renderSlot('plugins.add.actions', { onDismiss })}
         <MenuItemButton icon={<IconDownloadOutlineRegular size={14} />} onSelect={() => { onDismiss(); openInstall() }}>
           <span className={css.addMenuItem}>
             <span>{t('installExisting')}</span>
             <span className={css.addMenuDescription}>{t('installExistingDescription')}</span>
           </span>
         </MenuItemButton>
-        {renderSlot('plugins.add.actions', { onDismiss })}
       </Menu>
     </span>
   )
@@ -1438,7 +1439,13 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
                 </button>
               </Tooltip>
               {state.install.requestId === undefined
-                ? <AddPluginMenu t={t} disabled={!loaded} openInstall={props.openInstall} renderSlot={renderSlot} />
+                ? <AddPluginMenu
+                  t={t}
+                  disabled={!loaded}
+                  openDefaultAddAction={props.openDefaultAddAction}
+                  openInstall={props.openInstall}
+                  renderSlot={renderSlot}
+                />
                 : <Button variant="primary" size="sm" className={css.addButton} icon={<IconPlusOutlineRegular size={13} />} disabled={!loaded} onClick={props.openInstall}>
                   {t('installViewTask')}
                 </Button>}

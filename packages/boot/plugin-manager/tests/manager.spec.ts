@@ -1092,6 +1092,23 @@ it.each(OPTIONAL_BUNDLES)('offers %s switched off and never removable', async (o
   expect(await manager.removeBundle(offered)).toMatchObject({ changed: false, application: 'failed' })
 })
 
+it('offers an installation-declared optional bundle switched off', async () => {
+  const { manager, profile } = await fixture()
+  const offered = '@deepseek-ai/dsh-private-market'
+  const supplied = join(profile.home, 'node_modules', offered)
+  mkdirSync(supplied, { recursive: true })
+  writeFileSync(join(supplied, 'package.json'), JSON.stringify({
+    name: offered, version: '0.1.0', dsh: { bundle: { patch: './cordis.patch.yml' } },
+  }))
+  writeFileSync(join(supplied, 'cordis.patch.yml'), JSON.stringify([]))
+  writeFileSync(profile.installAnchor, JSON.stringify({
+    name: 'installation', dependencies: { [offered]: '0.1.0' }, dsh: { optionalBundles: [offered] },
+  }))
+  expect((await manager.listBundles()).find(row => row.name === offered)).toMatchObject({
+    name: offered, enabled: false, installed: false, optional: true, removable: false,
+  })
+})
+
 it('removes a selected bundle no dependency holds by deselecting it without pnpm', async () => {
   const { manager, dir } = await fixture()
   const manifest = readProfileManifest('test', dir)

@@ -121,6 +121,7 @@ function stringField(manifest: object, field: string): string | undefined {
 /** The fields of the dsh installation's own manifest the manager reads. */
 interface InstallationManifest {
   dependencies?: Record<string, string>
+  dsh?: { optionalBundles?: string[] }
 }
 
 /** What a package manifest says about the package: identity, one-liner, and whether it is a bundle. */
@@ -288,7 +289,7 @@ export class PluginManager extends TypertRemoteService {
     const bundles: BundleInfo[] = []
     for (const name of names) {
       const installed = dependencies.includes(name)
-      const optional = OPTIONAL_BUNDLES.includes(name)
+      const optional = OPTIONAL_BUNDLES.includes(name) || installation.dsh?.optionalBundles?.includes(name) === true
       const enabled = selected.includes(name)
       const shipped = Object.hasOwn(installation.dependencies ?? {}, name)
       // Bundle resolution reads the installation first, so a profile dependency the installation manifest also names,

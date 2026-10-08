@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises'
+import { rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -9,7 +10,9 @@ import {
   discoverLibraryDirs,
   discoverPluginDirs,
   parseDevWebArguments,
+  preparePrivateMarketOverlay,
   StageSupervisor,
+  webProfileArguments,
   watchClientPlugins,
 } from './dev-web.ts'
 import type { StageHandle } from './dev-web.ts'
@@ -76,7 +79,13 @@ describe('StageSupervisor', () => {
 
 describe('parseDevWebArguments', () => {
   it('builds, serves, and watches natively by default', () => {
-    expect(parseDevWebArguments([])).toEqual({ skipBuild: false, serve: true, pollInterval: undefined, appArgs: [] })
+    expect(parseDevWebArguments([])).toEqual({
+      configEnvironment: undefined,
+      skipBuild: false,
+      serve: true,
+      pollInterval: undefined,
+      appArgs: [],
+    })
   })
 
   it('reads the polling interval with its 500ms default', () => {
@@ -90,8 +99,24 @@ describe('parseDevWebArguments', () => {
 
   it('separates its own flags from the arguments forwarded to dsh web', () => {
     expect(parseDevWebArguments(['--skip-build', '--poll', '--no-open', '--port', '8080'])).toEqual({
-      skipBuild: true, serve: true, pollInterval: 500, appArgs: ['--no-open', '--port', '8080'],
+      configEnvironment: undefined, skipBuild: true, serve: true, pollInterval: 500, appArgs: ['--no-open', '--port', '8080'],
     })
+  })
+
+  it('consumes one named configuration selector without forwarding it to dsh web', () => {
+    expect(parseDevWebArguments(['--config-env', 'hxfl', '--no-open'])).toEqual({
+      configEnvironment: 'hxfl', skipBuild: false, serve: true, pollInterval: undefined, appArgs: ['--no-open'],
+    })
+    expect(parseDevWebArguments(['--config-env=superbpm']).configEnvironment).toBe('superbpm')
+    expect(() => parseDevWebArguments(['--config-env'])).toThrow(/requires a name/u)
+    expect(() => parseDevWebArguments(['--config-env', 'hxfl', '--config-env', 'superbpm'])).toThrow(/may be specified once/u)
+  })
+
+  it('puts launcher overlays before Web profile arguments', () => {
+    expect(webProfileArguments(parseDevWebArguments(['--no-open']), '/tmp/private-market.patch')).toEqual([
+      'web', '--patch', '/tmp/private-market.patch', '--no-open',
+    ])
+    expect(webProfileArguments(parseDevWebArguments(['--no-open']), undefined)).toEqual(['web', '--no-open'])
   })
 
   it('runs only the rebuild watchers with --no-serve', () => {
@@ -106,6 +131,72 @@ describe('parseDevWebArguments', () => {
   it('rejects dsh web arguments when no server is started', () => {
     expect(() => parseDevWebArguments(['--no-serve', '--no-open'])).toThrow('--no-serve leaves no dsh web process for --no-open')
   })
+})
+
+it('creates a private-market overlay with temporary profile resolution and restores profile state', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'dsh-private-market-overlay-'))
+  try {
+    const source = join(root, 'plugin')
+    const configRoot = join(root, 'environments')
+    await mkdir(source, { recursive: true })
+    await mkdir(join(source, 'lib'), { recursive: true })
+    await mkdir(join(source, 'node_modules'), { recursive: true })
+    await mkdir(join(configRoot, 'hxfl'), { recursive: true })
+    await writeFile(join(source, 'package.json'), JSON.stringify({
+      name: '@deepseek-ai/dsh-private-market',
+      dsh: { bundle: { patch: './cordis.patch.yml' }, client: { platform: 'web' } },
+    }))
+    await writeFile(join(source, 'lib', 'index.js'), 'export function apply() {}\n')
+    await writeFile(join(source, 'lib', 'client.js'), 'export {}\n')
+    await writeFile(join(source, 'lib', 'typert.host.js'), 'export {}\n')
+    await writeFile(join(source, 'lib', 'typert.remote-client.js'), 'export {}\n')
+    await writeFile(join(configRoot, 'hxfl', 'config.json'), JSON.stringify({
+      schemaVersion: 1,
+      environment: 'hxfl',
+      plugins: { privateMarket: {
+        catalogUrl: 'https://market.example/catalog.json',
+        catalogCredentialRef: 'MARKET_TOKEN',
+        registryUrl: 'https://npm.example/',
+      } },
+      desktop: { updateUrl: 'https://updates.example/' },
+    }))
+    const profile = join(root, 'profile')
+    await mkdir(profile, { recursive: true })
+    const profileManifestPath = join(profile, 'package.json')
+    await writeFile(profileManifestPath, '{\n  "name": "test-profile",\n  "dependencies": {}\n}\n')
+    const originalProfileManifest = await readFile(profileManifestPath, 'utf8')
+    const { overlay, directory, profileLink, restoreProfile } = preparePrivateMarketOverlay(
+      source, configRoot, 'hxfl', profile, join(root, 'runtime/@deepseek-ai'),
+    )
+    try {
+      const text = await readFile(overlay, 'utf8')
+      expect(text).toContain('https://market.example/catalog.json')
+      expect(text).toContain('https://npm.example/')
+      expect(text).not.toContain('updates.example')
+      expect(text).not.toContain('MARKET_TOKEN_VALUE')
+      expect(text).toContain('@deepseek-ai/dsh-private-market')
+      expect(JSON.parse(text)).toContainEqual(expect.objectContaining({
+        id: 'private-market',
+        name: '@deepseek-ai/dsh-private-market',
+        config: {
+          catalogUrl: 'https://market.example/catalog.json',
+          catalogCredentialRef: 'MARKET_TOKEN',
+        },
+      }))
+      expect(JSON.parse(text).filter((patch: { id?: string }) => patch.id === 'private-market')).toHaveLength(1)
+      expect(text).not.toContain(join(directory, 'lib', 'index.js'))
+      expect(await readlink(join(directory, 'node_modules'))).toBe(join(source, 'node_modules'))
+      expect(await readlink(profileLink)).toBe(directory)
+      expect(JSON.parse(await readFile(profileManifestPath, 'utf8'))).toMatchObject({
+        dependencies: { '@deepseek-ai/dsh-private-market': `link:${directory}` },
+      })
+    } finally {
+      restoreProfile()
+      expect(await readFile(profileManifestPath, 'utf8')).toBe(originalProfileManifest)
+      rmSync(profileLink, { force: true })
+      rmSync(directory, { recursive: true, force: true })
+    }
+  } finally { await rm(root, { recursive: true, force: true }) }
 })
 
 it('samples one local environment at startup without validating watcher outputs', async () => {

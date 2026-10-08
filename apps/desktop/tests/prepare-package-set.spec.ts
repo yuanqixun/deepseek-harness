@@ -46,6 +46,21 @@ describe('desktop package-set selection', () => {
     ])
   })
 
+  it('includes an explicitly packaged private-market dependency in the Desktop closure', () => {
+    const available = new Map<string, PackedDesktopPackage>([
+      ['@deepseek-ai/dsh', packed('@deepseek-ai/dsh', {
+        dependencies: { '@deepseek-ai/dsh-private-market': '0.1.0' },
+      })],
+      ['@deepseek-ai/dsh-desktop-host', packed('@deepseek-ai/dsh-desktop-host')],
+      ['@deepseek-ai/dsh-private-market', packed('@deepseek-ai/dsh-private-market', {
+        dependencies: { zod: '^4.6.5' },
+      })],
+    ])
+    expect(selectDesktopPackageClosure(available).map(entry => entry.manifest.name)).toEqual([
+      '@deepseek-ai/dsh', '@deepseek-ai/dsh-desktop-host', '@deepseek-ai/dsh-private-market',
+    ])
+  })
+
   it.each([
     '@deepseek-ai/dsh-base', '@deepseek-ai/cordis', '@deepseek-ai/node-addon-system',
   ])('rejects required prepared package %s absent from the packed release inputs', (dependency) => {

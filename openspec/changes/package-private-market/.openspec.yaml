@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-07
+goal: Load the standalone private market plugin from a selected generic DSH
+  deployment environment for local Web development and package it into Desktop artifacts

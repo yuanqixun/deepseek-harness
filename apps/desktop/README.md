@@ -251,6 +251,24 @@ To include the independent private market for a deployment, provide its named en
 
 The file must be at `$DSH_CONFIG_ENV_DIR/hxfl/config.json`; without `--config-env`, Desktop packaging does not read or include the private market.
 
+The same named environment can configure anonymous private Desktop updates for Windows x64 with `desktop.updates`. This can be selected without building or bundling the private-market plugin:
+
+```json
+{
+  "schemaVersion": 1,
+  "environment": "hxfl",
+  "desktop": {
+    "updates": {
+      "checkUrl": "https://updates.example/v1/desktop/updates/check",
+      "channel": "stable",
+      "feedOrigins": ["https://downloads.example"]
+    }
+  }
+}
+```
+
+Build it on Windows x64 with `DSH_CONFIG_ENV_DIR=/secure/dsh-config pnpm run package:desktop:win:x64 -- --config-env hxfl`. Packaging embeds only the selected environment name, check URL, channel, and HTTPS feed origins. Other targets reject this namespace. The client calls `POST /v1/desktop/updates/check` without credentials; it sends protocol version, distribution, channel, Desktop version, `win32`, `x64`, bundled dsh version, and an optional in-memory `userId` supplied by an authentication integration. Sign-out clears that ID. Missing IDs do not prevent checking.
+
 The macOS arm64 command requires Apple Silicon. The macOS x64 command runs on Intel macOS or Apple Silicon with Rosetta. The Windows x64 command requires Windows x64. Linux is not a supported Desktop release target.
 
 Each target owns its packed package inputs, prepared runtime, package set, dsh tree, pnpm preparation state, unpacked application, update metadata, and final artifacts under `apps/desktop/.desktop-build/targets/<target>/`. The Electron archive cache remains shared under `.desktop-build/downloads` because every archive name includes its version, platform, and architecture and is verified before extraction. A target build never consumes another target's mutable preparation state.
@@ -433,6 +451,23 @@ The lower-left account row displays localized availability, a spinner with downl
 If task teardown fails after confirmed Host exit, installation is refused and the shell restores the current-version Host before allowing another restart confirmation. Installer launch failure after a clean Host stop uses the same recovery. After the replacement Host authenticates, the shell reloads the existing application URL so the Web page obtains its current port, cookie, and boot injections; page-load failure opens native fatal recovery. An unconfirmed process exit never permits a replacement Host. The downloaded target remains available for retry. A known mandatory policy remains blocking throughout recovery; unsuccessful Host restoration opens the native fatal-recovery dialog.
 
 Confirmed Host exit without successful task teardown displays localized recovery guidance in both ordinary and mandatory update dialogs. A typed preparation cause selects that guidance in each locale; changing translated wording cannot reclassify the failure. “View technical details” is collapsed by default and exposes only exit status, signal, shutdown acknowledgement, and deadline facts, not plugin stderr. Expanding it neither retries nor authorizes installation.
+
+### Private Windows update interface
+
+The private configuration replaces the ordinary update-policy service only in the selected Windows x64 build. The response must include `protocolVersion: 1`, `release` (`null` or `{ "version": "1.2.4", "feedUrl": "https://downloads.example/hxfl/stable/win-x64/" }`), and `policy` with `minimumSupportedVersion` and `forceAfter`. Both policy fields are `null` to clear a known force decision; otherwise they are a semantic version and an RFC 3339 UTC deadline. An outdated client whose deadline has passed must receive a compatible release. Invalid responses and service failures retain any known force decision.
+
+`feedUrl` must use a configured HTTPS origin. Electron then reads `{feedUrl}/nightly.yml`; that YAML points to the signed NSIS installer and SHA-512 digest and may provide a `.blockmap`. The same origin allowlist applies to YAML, installer, blockmap, and redirects. Existing Electron download preparation retains differential downloads and its full-installer fallback. The client keeps the existing separate download and install confirmations.
+
+The backend implementation owns these public resources; it does not require a lifecycle telemetry endpoint:
+
+| Method and path | Purpose |
+|---|---|
+| `POST /v1/desktop/updates/check` | Receive distribution, channel, Desktop/platform/architecture/dsh versions, and optional `userId`; return release selection and force policy. |
+| `GET {feedUrl}/nightly.yml` | Return Electron generic channel metadata, installer URL, size, and SHA-512. |
+| `GET {artifactUrl}` | Serve the signed Windows NSIS installer anonymously over HTTPS. |
+| `GET {artifactUrl}.blockmap` | Optional differential-download metadata; Electron falls back to the full installer when differential preparation fails. |
+
+The server controls pauses, rollout percentage, minimum supported version, and force deadline. It should keep cohort assignment stable for a given `userId`; clients without one receive a release only after full rollout. The check request is the version-statistics record. DSH does not send separate download or installation events.
 
 ### Mandatory update policy
 

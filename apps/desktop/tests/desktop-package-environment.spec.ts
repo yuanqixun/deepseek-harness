@@ -54,6 +54,7 @@ describe('Desktop local packaging configuration', () => {
       const parent = {
         PATH: 'build-tools', DSH_DESKTOP_APP_ID: 'com.stale.desktop',
         DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: '{"origin":"https://stale.example.com"}',
+        DSH_DESKTOP_PRIVATE_UPDATE_CONFIG: '{"environment":"stale"}',
         dsh_desktop_mandatory_update_config: 'stale-policy',
         DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://stale.example.com',
         dsh_desktop_mandatory_update_prod_origin: 'https://stale.example.com',

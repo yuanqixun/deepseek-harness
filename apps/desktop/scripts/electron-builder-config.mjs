@@ -66,7 +66,12 @@ export function createElectronBuilderConfig(
   if (internalDmg && (resolvedPlatform !== 'darwin' || resolvedArch !== 'arm64' || unsigned)) {
     throw new Error('desktop package: internal disk images require unsigned mac-arm64 packaging')
   }
-  const policy = internalDmg ? undefined : resolveDesktopPolicyEnvironment(env)
+  const privateDesktopUpdates = env.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG === undefined
+    ? undefined : JSON.parse(env.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG)
+  if (privateDesktopUpdates !== undefined && (resolvedPlatform !== 'win32' || resolvedArch !== 'x64')) {
+    throw new Error('desktop package: private desktop updates require win32-x64')
+  }
+  const policy = internalDmg || privateDesktopUpdates !== undefined ? undefined : resolveDesktopPolicyEnvironment(env)
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = resolvedPlatform === 'win32'
   if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()
@@ -97,7 +102,8 @@ export function createElectronBuilderConfig(
   if (windowsSigner !== undefined) {
     installWindowsNsisBootstrapSigner({ sign: windowsSigner })
   }
-  const update = unsigned || internalDmg ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
+  const update = unsigned || internalDmg || privateDesktopUpdates !== undefined
+    ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
   if (preparedRuntime !== undefined) buildPaths.dsh = preparedRuntime
   // electron-builder merges extraMetadata into the packaged manifest, so a build version here reaches
   // the artifact names, the update feed, and the installed app.getVersion() the updater compares against.
@@ -110,6 +116,7 @@ export function createElectronBuilderConfig(
     extraMetadata: {
       dshDesktopAppId: appId,
       ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
+      ...(privateDesktopUpdates === undefined ? {} : { dshPrivateDesktopUpdates: privateDesktopUpdates }),
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },
     },

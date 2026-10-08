@@ -14,6 +14,15 @@ function fixture() {
 }
 
 describe('Electron updater inactivity deadline', () => {
+  it('rejects private feed and artifact requests outside configured HTTPS origins', () => {
+    const executor = new DesktopUpdateHttpExecutor(1000)
+    executor.setAllowedOrigins(['https://downloads.example'])
+    expect(() => executor.createRequest({ protocol: 'https:', hostname: 'evil.example', path: '/app.exe' }, () => {}))
+      .toThrow(/origin is outside/u)
+    expect(() => executor.createRequest({ protocol: 'http:', hostname: 'downloads.example', path: '/app.exe' }, () => {}))
+      .toThrow(/must use HTTPS/u)
+  })
+
   it('aborts a request that never receives headers without waiting for a Node socket event', async () => {
     const { request, reject } = fixture()
     await vi.advanceTimersByTimeAsync(1000)

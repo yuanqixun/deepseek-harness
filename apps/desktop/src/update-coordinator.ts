@@ -39,6 +39,8 @@ export class DesktopUpdateCoordinator {
     }
   }
 
+  private privateTarget: { readonly version: string; readonly feedUrl: string } | undefined
+
   /**
    * @param publish - Receives observable states for every Desktop window.
    * @param beforeRestart - Completes task authorization, admission locking, and owned-process shutdown.
@@ -46,6 +48,8 @@ export class DesktopUpdateCoordinator {
    * @param enabled - Whether this process has a packaged update source.
    * @param currentVersion - Actual installed application version.
    * @param downloadResult - Once per completed download attempt, including platform preparation failures.
+   * @param preparePrivateCheck - Optional distribution-owned check; `null` keeps the packaged generic feed.
+   * `undefined` means the private service selected no release.
    */
   constructor(
     private readonly publish: (state: DesktopUpdateState) => DesktopUpdateState,
@@ -54,6 +58,7 @@ export class DesktopUpdateCoordinator {
     private readonly enabled: () => boolean = () => app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml')),
     private readonly currentVersion: () => string = () => app.getVersion(),
     private readonly downloadResult?: (success: boolean, reason?: string) => void,
+    private readonly preparePrivateCheck?: () => Promise<{ readonly version: string; readonly feedUrl: string } | undefined | null>,
   ) {
     if (updater === autoUpdater) {
       // electron-updater omits this internal transport property from its public declarations.
@@ -183,10 +188,23 @@ export class DesktopUpdateCoordinator {
     try {
       this.assertLive()
       if (!this.enabled()) throw new Error('desktop update: this application has no packaged update source')
+      this.candidate = undefined
+      this.privateTarget = undefined
+      const privateCheck = await this.preparePrivateCheck?.()
+      if (this.preparePrivateCheck !== undefined && privateCheck !== null) {
+        this.privateTarget = privateCheck
+      }
+      if (this.preparePrivateCheck !== undefined && privateCheck === undefined) {
+        this.candidate = undefined
+        return this.setState({ phase: 'idle' })
+      }
       const result = await this.updater.checkForUpdates()
       if (result === null) throw new Error('desktop update: no check result was returned')
       const version = result.updateInfo.version
       if (valid(version) === null) throw new Error('desktop update: feed version is invalid')
+      if (this.privateTarget !== undefined && version !== this.privateTarget.version) {
+        throw new Error('desktop update: feed version does not match the selected private release')
+      }
       this.candidate = result.isUpdateAvailable && gt(version, this.currentVersion()) ? version : undefined
       return this.setState(this.candidate === undefined ? { phase: 'idle' } : { phase: 'available', version })
     } catch (error) {

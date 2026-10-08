@@ -3,6 +3,7 @@ import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
 
 import { readFile, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -59,6 +60,8 @@ import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
 import { DesktopTray } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
+import { PrivateDesktopUpdateClient, resolvePrivateDesktopUpdateConfig } from './private-desktop-updates.ts'
+import electronUpdater from 'electron-updater'
 
 let focusPrimaryWindow = (): void => {}
 let stopForRecovery = async (): Promise<void> => {}
@@ -352,7 +355,8 @@ async function main(): Promise<void> {
   const systemLanguages = app.getPreferredSystemLanguages()
   let locale = resolveDesktopStartupLocale(null, systemLanguages)
   windowsLanguage = locale.id
-  let mandatoryPolicy: DesktopMandatoryUpdatePolicy | undefined
+  let mandatoryPolicy: Pick<DesktopMandatoryUpdatePolicy, 'state' | 'check' | 'dispose'> | PrivateDesktopUpdateClient | undefined
+  let privateUpdates: PrivateDesktopUpdateClient | undefined
   let mandatoryUI: DesktopMandatoryUpdateWindow | undefined
   let policyAuth: DesktopPolicyTestAuth | undefined
   let tray: DesktopTray | undefined
@@ -607,7 +611,7 @@ async function main(): Promise<void> {
         if (result.response !== 0 || isMandatory()) return false
       }
       // The update lock rejects new HTTP requests, including analytics intake.
-      await track('desktop_upgrade_install_restart_click', {})
+      if (privateUpdates === undefined) await track('desktop_upgrade_install_restart_click', {})
       if (backend.host !== host) throw new DesktopUpdatePreparationError('tasks-unavailable', locale.messages.updateTasksUnavailable)
       try {
         const stillActive = await host.updateTasks('lock')
@@ -632,15 +636,19 @@ async function main(): Promise<void> {
       }
       return true
     },
-    undefined, undefined, undefined,
-    (success, reason) => { void track('desktop_upgrade_download_result', { is_success: success, ...reason === undefined ? {} : { error_reason: reason } }) },
-
+    undefined,
+    () => app.isPackaged && (privateUpdates !== undefined || existsSync(join(process.resourcesPath, 'app-update.yml'))),
+    undefined,
+    (success, reason) => {
+      if (privateUpdates === undefined) void track('desktop_upgrade_download_result', { is_success: success, ...reason === undefined ? {} : { error_reason: reason } })
+    },
+    async () => privateUpdates === undefined ? null : privateUpdates.prepare(electronUpdater.autoUpdater),
   )
 
   const updateSchedule = new DesktopUpdateSchedule(updates, resolveDesktopUpdateScheduleConfig(process.env))
 
   const downloadUpdate = async (version: string): Promise<DesktopUpdateState> => {
-    void track('desktop_upgrade_click', {})
+    if (privateUpdates === undefined) void track('desktop_upgrade_click', {})
     updateJournal?.action('download-requested')
     const state = await updates.download(version)
     if (state.phase !== 'ready' || quitting) return state
@@ -767,6 +775,10 @@ async function main(): Promise<void> {
   ipcMain.handle(DESKTOP_IPC.updatesStatus, (event) => {
     assertProductSender(event)
     return presentDesktopUpdate(updates.state)
+  })
+  ipcMain.handle(DESKTOP_IPC.updatesSetUserId, (event, userId: unknown) => {
+    assertProductSender(event)
+    privateUpdates?.setUserId(userId)
   })
   ipcMain.handle(DESKTOP_IPC.deviceInfo, (event) => {
     assertProductSender(event)
@@ -912,7 +924,7 @@ async function main(): Promise<void> {
   }
 
   const automaticCheck = (): void => {
-    if (!quitting) void mandatoryPolicy?.check('foreground-or-resume').catch((error: unknown) => { console.error(error) })
+    if (!quitting && privateUpdates === undefined) void mandatoryPolicy?.check('foreground-or-resume').catch((error: unknown) => { console.error(error) })
     if (!quitting) void updateSchedule.check().catch((error: unknown) => { console.error(error) })
   }
   powerMonitor.on('resume', automaticCheck)
@@ -1283,8 +1295,36 @@ async function main(): Promise<void> {
   mainWindow = createMainWindow()
   const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
   if (typeof manifest !== 'object' || manifest === null) throw new Error('desktop policy: invalid application manifest')
+  const privateUpdateInput = app.isPackaged && 'dshPrivateDesktopUpdates' in manifest ? manifest.dshPrivateDesktopUpdates : undefined
+  if (privateUpdateInput !== undefined) {
+    if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('desktop updates: private updates require win32-x64')
+    const config = resolvePrivateDesktopUpdateConfig(privateUpdateInput)
+    privateUpdates = new PrivateDesktopUpdateClient(config, app.getVersion(), readDesktopRuntime(resources.dsh).release.version,
+      (state) => {
+        if (state.blocking) {
+          for (const controller of ordinaryDialogs) controller.abort()
+          if (!wasPrivateBlocking) updateDialog.cancel()
+        }
+        mandatoryUI?.sync()
+        if (state.blocking && !wasPrivateBlocking) {
+          void updateSchedule.check(false, true).catch((error: unknown) => { console.error(error) })
+        }
+        wasPrivateBlocking = state.blocking
+      })
+    let wasPrivateBlocking = false
+    mandatoryPolicy = privateUpdates
+    mandatoryUI = new DesktopMandatoryUpdateWindow({
+      overlays: updateOverlays,
+      preload: fileURLToPath(new URL('./preload-mandatory.cjs', import.meta.url)), locale,
+      allowedPageOrigins: [], parent: () => mainWindow,
+      policy: () => privateUpdates?.state ?? { blocking: false, checking: false }, update: () => updates.state,
+      refresh: async () => { await Promise.all([privateUpdates?.check(), updateSchedule.check(true)]) },
+      download: downloadUpdate, install: version => updates.install(version),
+    })
+    void privateUpdates.check('launch')
+  }
   const developmentPolicy = app.isPackaged ? undefined : process.env.DSH_DESKTOP_MANDATORY_UPDATE_CONFIG
-  const policyInput: unknown = app.isPackaged
+  const policyInput: unknown = privateUpdateInput !== undefined ? undefined : app.isPackaged
     ? ('dshMandatoryUpdatePolicy' in manifest ? manifest.dshMandatoryUpdatePolicy : undefined)
     : developmentPolicy === undefined ? undefined : JSON.parse(developmentPolicy) as unknown
   const policyConfig = resolveDesktopPolicyConfig(policyInput, !app.isPackaged)
@@ -1306,7 +1346,9 @@ async function main(): Promise<void> {
         if (!wasBlocking) updateDialog.cancel()
       }
       mandatoryUI?.sync()
-      if (state.blocking && !wasBlocking) void updateSchedule.check(false, true).catch((error: unknown) => { console.error(error) })
+      if (state.blocking && !wasBlocking) {
+        void updateSchedule.check(false, true).catch((error: unknown) => { console.error(error) })
+      }
       wasBlocking = state.blocking
     }, policyAuth?.request, () => desktopClientMetadata(locale.id))
     const policy = mandatoryPolicy

@@ -253,6 +253,24 @@ pnpm run package:desktop:win:x64
 
 文件路径为 `$DSH_CONFIG_ENV_DIR/hxfl/config.json`；不传 `--config-env` 时，Desktop 打包不会读取或包含私有市场。
 
+同一个具名环境也可通过 `desktop.updates` 为 Windows x64 配置匿名私有更新，且无需构建或打包私有市场插件：
+
+```json
+{
+  "schemaVersion": 1,
+  "environment": "hxfl",
+  "desktop": {
+    "updates": {
+      "checkUrl": "https://updates.example/v1/desktop/updates/check",
+      "channel": "stable",
+      "feedOrigins": ["https://downloads.example"]
+    }
+  }
+}
+```
+
+在 Windows x64 上使用 `DSH_CONFIG_ENV_DIR=/secure/dsh-config pnpm run package:desktop:win:x64 -- --config-env hxfl` 打包。构件只嵌入所选环境名、检测 URL、通道和 HTTPS feed 源站；其他目标会拒绝此配置。客户端匿名调用 `POST /v1/desktop/updates/check`，不携带凭据；请求发送协议版本、部署、通道、Desktop 版本、`win32`、`x64`、随包 dsh 版本，以及认证集成可提供的内存态可选 `userId`。退出登录时应清除此 ID。缺少 ID 不影响检测。
+
 macOS arm64 命令要求 Apple Silicon。macOS x64 命令可以在 Intel macOS 或带 Rosetta 的 Apple Silicon 上运行。Windows x64 命令要求 Windows x64。Linux 不是受支持的 Desktop 发布目标。
 
 每个目标都在 `apps/desktop/.desktop-build/targets/<target>/` 下持有自己的打包输入、已准备运行时、包集合、dsh 依赖树、pnpm 准备状态、未打包应用、更新元数据和最终产物。Electron 归档缓存继续由 `.desktop-build/downloads` 共享，因为每个归档文件名都包含版本、平台和架构，并且在解包前经过验证。目标构建绝不读取其他目标的可变准备状态。
@@ -435,6 +453,23 @@ Windows 下载完成后的更新确认说明应用会在安装期间关闭、完
 若任务收尾失败但已确认 Host 退出，安装会被拒绝，壳会在允许再次确认重启前恢复当前版本的 Host。Host 正常停止后的安装器启动失败使用同一恢复路径。替代 Host 启动并完成认证后，壳重新加载原有应用地址，让 Web 页面获取当前端口、Cookie 和启动注入数据；页面加载失败时打开原生致命故障恢复弹窗。未确认进程退出时，绝不允许启动替代 Host。已下载目标保留以供重试。已知强更策略在恢复过程中继续阻塞；Host 恢复失败打开原生致命故障恢复弹窗。
 
 已确认 Host 退出但任务未成功收尾时，常规与强更弹窗均展示本地化恢复提示。两种语言都根据类型化的准备失败原因选择提示，翻译文案变化不会改变失败分类。“查看技术详情”默认折叠，仅展示退出状态、信号、关闭确认和截止时间事实，不展示插件 stderr。展开详情既不重试，也不授权安装。
+
+### Windows 私有升级接口
+
+仅所选 Windows x64 构件会使用此配置替代原有的更新策略服务。响应必须包含 `protocolVersion: 1`、`release`（`null` 或 `{ "version": "1.2.4", "feedUrl": "https://downloads.example/hxfl/stable/win-x64/" }`）以及含 `minimumSupportedVersion` 和 `forceAfter` 的 `policy`。两个策略字段都为 `null` 时清除已知强更；否则它们分别为语义版本和 RFC 3339 UTC 截止时间。低于最低版本且已到强更时间的客户端必须收到兼容版本。无效响应和服务故障会保留已知强更决定。
+
+`feedUrl` 必须属于配置允许的 HTTPS 源站。Electron 随后读取 `{feedUrl}/nightly.yml`；YAML 指向带 SHA-512 摘要的已签名 NSIS 安装包，并可提供 `.blockmap`。同一源站白名单适用于 YAML、安装包、blockmap 和重定向。现有 Electron 下载准备流程继续负责差分下载及完整安装包回退；下载和安装仍分别由用户确认。
+
+后管负责提供以下公开资源，不需要生命周期统计接口：
+
+| 方法与路径 | 用途 |
+|---|---|
+| `POST /v1/desktop/updates/check` | 接收部署、通道、Desktop/平台/架构/dsh 版本及可选 `userId`，返回版本选择和强更策略。 |
+| `GET {feedUrl}/nightly.yml` | 返回 Electron generic channel 元数据、安装包 URL、大小和 SHA-512。 |
+| `GET {artifactUrl}` | 通过 HTTPS 匿名提供 Windows NSIS 签名安装包。 |
+| `GET {artifactUrl}.blockmap` | 可选差分下载元数据；差分准备失败时 Electron 回退完整安装包。 |
+
+服务端管理暂停、灰度比例、最低支持版本和强更期限。相同 `userId` 的分组应保持稳定；未提供 ID 的客户端仅在全量发布后获得版本。检测请求本身用于统计客户端版本；DSH 不单独发送下载或安装事件。
 
 ### 强制更新策略
 

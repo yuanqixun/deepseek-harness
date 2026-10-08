@@ -144,6 +144,20 @@ describe('desktop macOS release signature', () => {
     expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
   })
 
+  it('embeds only selected public private-update settings for Windows x64', async () => {
+    const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
+    const selected = { environment: 'hxfl', checkUrl: 'https://updates.example/v1/desktop/updates/check',
+      channel: 'stable', feedOrigins: ['https://downloads.example'] }
+    const config = createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.desktop',
+      DSH_DESKTOP_TARGET_PLATFORM: 'win32', DSH_DESKTOP_TARGET_ARCH: 'x64', DSH_DESKTOP_UNSIGNED: '1',
+      DSH_DESKTOP_PRIVATE_UPDATE_CONFIG: JSON.stringify(selected) }, 'win32', 'x64')
+    expect(config.extraMetadata).toMatchObject({ dshPrivateDesktopUpdates: selected })
+    expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
+    expect(() => createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.desktop',
+      DSH_DESKTOP_TARGET_PLATFORM: 'darwin', DSH_DESKTOP_TARGET_ARCH: 'arm64',
+      DSH_DESKTOP_PRIVATE_UPDATE_CONFIG: JSON.stringify(selected) }, 'darwin', 'arm64')).toThrow(/win32-x64/u)
+  })
+
   it('rejects unsigned macOS builds and malformed signing modes', async () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     expect(() => createElectronBuilderConfig({ ...RELEASE_ENVIRONMENT, DSH_DESKTOP_UNSIGNED: '1' }))

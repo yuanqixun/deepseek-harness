@@ -69,7 +69,9 @@ Electron 进程生命周期锁是 Desktop 的权威所有者。profile 准备和
 
 ## 更新与恢复
 
-Electron 更新只使用一个 `electron-updater` 发布流和签名 `electron-builder` 产物。该版本就是 Desktop 发布版本；不存在独立 dsh manifest、兼容范围或仅更新 dsh 的操作。前台安装会等待正在进行的后台检查，而不会把检查结果复用成安装结果。更新弹窗下载并安装 Electron 产物，然后重启进入新发布。
+官方 Electron 更新只使用一个 `electron-updater` 发布流和签名 `electron-builder` 产物。该版本就是 Desktop 发布版本；不存在独立 dsh manifest、兼容范围或仅更新 dsh 的操作。前台安装会等待正在进行的后台检查，而不会把检查结果复用成安装结果。更新弹窗下载并安装 Electron 产物，然后重启进入新发布。
+
+显式选择的 Windows x64 环境也可提供 `desktop.updates`。匿名检测接口选择 generic feed 和强更策略；已有协调器仍负责版本接受、下载确认、安装确认、任务关闭与安装器交接。协议校验位于 `private-desktop-updates.ts`；协调器只增加可选的检查前回调，`DesktopUpdateHttpExecutor` 则为 YAML、安装包、blockmap 和重定向请求执行 feed 源站校验。打包只把所选公开设置写入 Windows 应用元数据，并在该构件中省略官方 feed 和强更策略元数据。未选择具名环境时不会读取私有更新配置。这些隔离的新增部分让未来官方 `electron-updater` 行为变化主要落在现有协调器和传输接缝中。
 
 [立即显示窗口参考](../../../../apps/desktop/README.zh.md)负责本地加载页、直接启动 Host 和主窗口恢复。profile 协调遵循[内置运行时决策](2026-09-08-desktop-bundled-runtime-and-external-plugins.zh.md)。
 
@@ -158,7 +160,7 @@ Windows 应用替换遵循[目录安装参考](../../../../apps/desktop/README.z
 | 插件管理 | 共享 Web“插件”页面与 Host 服务，使用启动器提供的内置 pnpm |
 | 激活 | 启用 HMR 时由共享管理器应用配置；否则变更需要重启 |
 | 初始平台 | macOS arm64/x64 与 Windows x64；Linux 尚无受支持的发布目标 |
-| 更新行为 | 后台检查，差分下载与重启前显式确认，启动时校准 dsh |
+| 更新行为 | 官方检查或显式配置的 Windows 私有检查；差分下载、重启前显式确认，启动时校准 dsh |
 
 ## 风险
 

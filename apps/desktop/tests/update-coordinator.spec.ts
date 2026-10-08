@@ -47,7 +47,7 @@ describe('desktop release metadata', () => {
 const coordinators: InstanceType<typeof DesktopUpdateCoordinator>[] = []
 afterEach(() => { for (const item of coordinators.splice(0)) item.dispose() })
 
-function fixture() {
+function fixture(preparePrivateCheck?: () => Promise<{ readonly version: string; readonly feedUrl: string } | undefined | null>) {
   const events = new EventEmitter()
   const checkForUpdates = vi.fn(async () => ({
     isUpdateAvailable: true,
@@ -66,13 +66,29 @@ function fixture() {
   const updater = Object.assign(events, { checkForUpdates, downloadUpdate, quitAndInstall }) as unknown as AppUpdater
   const coordinator = new DesktopUpdateCoordinator(
     (state) => { states.push(state); return state },
-    beforeRestart, updater, () => true, () => '1.1.0-alpha.1', downloadResult,
+    beforeRestart, updater, () => true, () => '1.1.0-alpha.1', downloadResult, preparePrivateCheck,
   )
   coordinators.push(coordinator)
   return { coordinator, updater, events, states, checkForUpdates, downloadUpdate, quitAndInstall, beforeRestart, downloadResult }
 }
 
 describe('desktop update coordinator', () => {
+  it('keeps the packaged generic feed when no private service is configured', async () => {
+    const preparePrivateCheck = vi.fn(async () => null)
+    const f = fixture(preparePrivateCheck)
+    await f.coordinator.check()
+    expect(preparePrivateCheck).toHaveBeenCalledOnce()
+    expect(f.checkForUpdates).toHaveBeenCalledOnce()
+  })
+
+  it('does not query Electron feed metadata when the private service selects no release', async () => {
+    const preparePrivateCheck = vi.fn(async () => undefined)
+    const f = fixture(preparePrivateCheck)
+    expect(await f.coordinator.check()).toEqual({ phase: 'idle' })
+    expect(preparePrivateCheck).toHaveBeenCalledOnce()
+    expect(f.checkForUpdates).not.toHaveBeenCalled()
+  })
+
   it('keeps safe preparation diagnostics separate and clears them on an explicit retry', async () => {
     const f = fixture()
     await f.coordinator.check()

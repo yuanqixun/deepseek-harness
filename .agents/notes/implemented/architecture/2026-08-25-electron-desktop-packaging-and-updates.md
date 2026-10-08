@@ -69,7 +69,9 @@ Core materialization, first launch, plugin installation, and shared-module resol
 
 ## Updates and recovery
 
-Electron update uses one `electron-updater` release stream and signed `electron-builder` artifacts. Its version is the Desktop release version; there is no independent dsh manifest, compatibility range, or dsh-only update operation. A foreground install waits for an in-flight background check rather than reusing its result as an install result. The update dialog downloads and installs the Electron artifact, then restarts into the new release.
+Official Electron updates use one `electron-updater` release stream and signed `electron-builder` artifacts. Its version is the Desktop release version; there is no independent dsh manifest, compatibility range, or dsh-only update operation. A foreground install waits for an in-flight background check rather than reusing its result as an install result. The update dialog downloads and installs the Electron artifact, then restarts into the new release.
+
+An explicitly selected Windows x64 environment can instead provide `desktop.updates`. Its anonymous check selects the generic feed and mandatory policy; the existing coordinator still owns version acceptance, download confirmation, installation confirmation, task shutdown, and installer handoff. Protocol validation lives in `private-desktop-updates.ts`; the coordinator exposes only an optional pre-check callback, and `DesktopUpdateHttpExecutor` enforces configured feed origins for YAML, installer, blockmap, and redirects. Packaging adds only the selected public settings to Windows app metadata and omits the official feed and mandatory-policy metadata for this build. No private update configuration is read when the named environment is absent. These isolated additions keep future changes to official `electron-updater` behavior concentrated in the existing coordinator and transport seams.
 
 The [immediate-window reference](../../../../apps/desktop/README.md) owns the local loading page, direct Host startup, and recovery in the main window. Profile reconciliation follows the [bundled-runtime decision](2026-09-08-desktop-bundled-runtime-and-external-plugins.md).
 
@@ -158,7 +160,7 @@ Architecture-specific builds report actual component-level compressed and instal
 | Plugin management | Shared Web Plugins page and Host service with launcher-supplied bundled pnpm |
 | Activation | Shared manager applies configuration through HMR when enabled; otherwise changes require restart |
 | Initial platforms | macOS arm64/x64 and Windows x64; Linux has no supported release target |
-| Update behavior | Background check, explicit confirmation before differential download and restart, startup dsh reconciliation |
+| Update behavior | Official checks or explicitly configured private Windows checks; differential download, explicit confirmation before restart, startup dsh reconciliation |
 
 ## Risks
 

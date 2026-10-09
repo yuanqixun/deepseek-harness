@@ -23,7 +23,11 @@ import { resolveDesktopAutoUpdateConfig } from './desktop-auto-update-environmen
 import { resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { resolveDesktopBuildVersion } from './desktop-build-version.mjs'
 import { resolveDesktopPolicyEnvironment } from './desktop-policy-environment.mjs'
-import { desktopTargetBuildPaths, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
+import {
+  desktopTargetBuildPaths,
+  desktopTargetReleaseArtifactsDirectory,
+  resolveDesktopBuildTarget,
+} from './desktop-build-paths.mjs'
 import { installWindowsDirectoryInstaller } from './windows-directory-installer.mjs'
 import { preserveWindowsRuntimeSignature, signWindowsCode } from './windows-runtime-signature.mjs'
 import { prepareWindowsAsarUnpack, verifyWindowsAsarUnpack } from './windows-asar-unpack.mjs'
@@ -77,7 +81,8 @@ export function createElectronBuilderConfig(
   if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()
   const macOSSigning = packagesMacOS && !internalDmg ? resolveMacOSSigningEnvironment(env) : undefined
   if (packagesMacOS && !internalDmg) resolveMacOSNotarizationEnvironment(env)
-  const buildPaths = desktopTargetBuildPaths(resolveDesktopBuildTarget(env, hostPlatform, hostArch))
+  const target = resolveDesktopBuildTarget(env, hostPlatform, hostArch)
+  const buildPaths = desktopTargetBuildPaths(target)
   let primaryRuntimeDestination
   let dshDestination
   let windowsCode = []
@@ -109,6 +114,7 @@ export function createElectronBuilderConfig(
   // the artifact names, the update feed, and the installed app.getVersion() the updater compares against.
   const productVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')).version
   const buildVersion = resolveDesktopBuildVersion(env, productVersion)
+  const artifactsDirectory = desktopTargetReleaseArtifactsDirectory(target, buildVersion)
   const packaged = resolveDesktopBuildCommit(env)
   return {
     appId,
@@ -121,9 +127,9 @@ export function createElectronBuilderConfig(
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },
     },
     productName: 'DeepSeek Harness',
-    // Local artifacts carry their own suffix and output directory so they cannot pass for release builds.
+    // Local artifacts carry their own suffix so they cannot pass for release builds.
     artifactName: `deepseek-harness-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : internalDmg ? '-internal' : ''}.\${ext}`,
-    directories: { output: unsigned ? buildPaths.unsignedArtifacts : internalDmg ? buildPaths.internalArtifacts : buildPaths.artifacts },
+    directories: { output: artifactsDirectory },
     asar: true,
     electronDist: buildPaths.electron,
     electronFuses: { runAsNode: true },

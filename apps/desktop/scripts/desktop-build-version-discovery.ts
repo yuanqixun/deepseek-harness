@@ -20,6 +20,7 @@
 import { readdir } from 'node:fs/promises'
 import { parse } from 'semver'
 import { desktopBuildVersionPrefix, validateDesktopBuildVersion } from './desktop-build-version.mjs'
+import { desktopTargetReleaseArtifactsDirectory } from './desktop-build-paths.mjs'
 import { DESKTOP_AUTO_UPDATE_ENV, resolveDesktopUploadConfig } from './desktop-auto-update-environment.mjs'
 import { createDesktopCos, DESKTOP_COS_REGION } from './desktop-cos.ts'
 import type { DesktopPackageTargetName } from './package-target.ts'
@@ -40,8 +41,8 @@ export interface DesktopBuildVersionSuggestionOptions {
   readonly environment: NodeJS.ProcessEnv
   /** Date segment to number within; defaults to today where the build runs. */
   readonly date?: string
-  /** Directory electron-builder writes installers into for this build. */
-  readonly artifactsRoot: string
+  /** Repository releases directory containing version/platform/architecture folders. */
+  readonly releasesRoot: string
 }
 
 /**
@@ -71,14 +72,21 @@ function sequenceNumbers(versions: Iterable<string>, prefix: string): number[] {
 }
 
 /**
- * Read the versions one output directory already holds.
- * @param artifactsRoot - Directory electron-builder wrote installers into.
+ * Read versions with matching artifacts from the retained release tree.
+ * @param releasesRoot - Repository releases directory.
+ * @param target - Platform and architecture whose artifacts are being numbered.
  * @returns Versions parsed from artifact names.
  */
-async function localVersions(artifactsRoot: string): Promise<string[]> {
-  const entries = await readdir(artifactsRoot).catch(() => [])
-  return entries.map(entry => ARTIFACT.exec(entry)?.groups?.version)
-    .filter((version): version is string => version !== undefined && parse(version) !== null)
+async function localVersions(releasesRoot: string, target: DesktopPackageTargetName): Promise<string[]> {
+  const versions = await readdir(releasesRoot, { withFileTypes: true }).catch(() => [])
+  const found: string[] = []
+  for (const version of versions) {
+    if (!version.isDirectory() || parse(version.name) === null) continue
+    const artifactsRoot = desktopTargetReleaseArtifactsDirectory(target, version.name, releasesRoot)
+    const entries = await readdir(artifactsRoot).catch(() => [])
+    if (entries.some(entry => ARTIFACT.test(entry))) found.push(version.name)
+  }
+  return found
 }
 
 /**
@@ -146,7 +154,7 @@ async function remoteVersions(options: DesktopBuildVersionSuggestionOptions): Pr
 export async function suggestDesktopBuildVersion(options: DesktopBuildVersionSuggestionOptions): Promise<string> {
   const prefix = `${desktopBuildVersionPrefix(options.productVersion)}${options.date ?? desktopBuildDateSegment()}.`
   const published = await remoteVersions(options)
-  const taken = published ?? await localVersions(options.artifactsRoot)
+  const taken = published ?? await localVersions(options.releasesRoot, options.target)
   const used = sequenceNumbers(taken, prefix)
   const next = used.length === 0 ? 1 : Math.max(...used) + 1
   const suggestion = validateDesktopBuildVersion(`${prefix}${String(next)}`, options.productVersion)

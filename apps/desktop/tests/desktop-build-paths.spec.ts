@@ -2,6 +2,7 @@ import { join, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   desktopTargetBuildPaths,
+  desktopTargetReleaseArtifactsDirectory,
   desktopTargetPlatform,
   developmentRuntimeDirectory,
   resolveDesktopBuildTarget,
@@ -14,9 +15,6 @@ describe('desktop build paths', () => {
     const windows = desktopTargetBuildPaths('win-x64')
     const mutableKeys = [
       'root',
-      'artifacts',
-      'unsignedArtifacts',
-      'internalArtifacts',
       'runtime',
       'packageSet',
       'dsh',
@@ -30,9 +28,14 @@ describe('desktop build paths', () => {
     for (const key of mutableKeys) {
       expect(new Set([arm64[key], x64[key], windows[key]]).size).toBe(3)
     }
-    expect(arm64.artifacts).toContain(join('targets', 'mac-arm64', 'artifacts'))
     expect(x64.dsh).toContain(join('targets', 'mac-x64', 'dsh'))
     expect(windows.runtime).toContain(join('targets', 'win-x64', 'runtime'))
+    expect(desktopTargetReleaseArtifactsDirectory('mac-arm64', '1.2.3'))
+      .toContain(join('releases', '1.2.3', 'macos', 'arm64'))
+    expect(desktopTargetReleaseArtifactsDirectory('mac-x64', '1.2.3'))
+      .toContain(join('releases', '1.2.3', 'macos', 'x64'))
+    expect(desktopTargetReleaseArtifactsDirectory('win-x64', '1.2.3'))
+      .toContain(join('releases', '1.2.3', 'windows', 'x64'))
   })
 
   it('shares only the immutable upstream download cache', () => {

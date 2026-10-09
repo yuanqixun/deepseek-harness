@@ -1,7 +1,13 @@
 /** Validate the assembled application, including native Office conversion outside ASAR. */
 import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import {
+  resolveDesktopBuildTarget,
+  resolveDesktopTargetBuildPaths,
+  desktopTargetReleaseArtifactsDirectory,
+} from './desktop-build-paths.mjs'
+import { resolveDesktopBuildVersion } from './desktop-build-version.mjs'
 import { readDesktopRuntime, verifyDesktopRuntime } from '../src/runtime-tree.ts'
 import { verifyWindowsCode } from './windows-runtime-signature.mjs'
 import { smokePreparedRuntime } from './smoke-prepared-runtime.ts'
@@ -13,7 +19,9 @@ const target = resolveDesktopBuildTarget()
 const windows = target === 'win-x64'
 if (values.unsigned && !windows) throw new Error('desktop smoke: unsigned artifacts require Windows')
 if (values['internal-dmg'] && (windows || values.unsigned)) throw new Error('desktop smoke: internal disk images require macOS')
-const artifacts = values.unsigned ? paths.unsignedArtifacts : values['internal-dmg'] ? paths.internalArtifacts : paths.artifacts
+const productVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
+const buildVersion = resolveDesktopBuildVersion(process.env, productVersion)
+const artifacts = desktopTargetReleaseArtifactsDirectory(target, buildVersion)
 const application = windows ? join(artifacts, 'win-unpacked')
   : join(artifacts, target === 'mac-arm64' ? 'mac-arm64' : 'mac', 'DeepSeek Harness.app', 'Contents')
 const resources = join(application, windows ? 'resources' : 'Resources')

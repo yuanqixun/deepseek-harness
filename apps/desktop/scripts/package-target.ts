@@ -8,7 +8,11 @@ import {
   desktopBuildRecordFilename,
   resolveDesktopAutoUpdateConfig,
 } from './desktop-auto-update-environment.mjs'
-import { desktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import {
+  desktopReleasesRoot,
+  desktopTargetBuildPaths,
+  desktopTargetReleaseArtifactsDirectory,
+} from './desktop-build-paths.mjs'
 import { packageMacOSArtifacts, type DesktopPrepackagedArtifact } from './package-macos.ts'
 import { loadDesktopPackageEnvironment, validateDesktopPackageEnvironment } from './desktop-package-environment.mjs'
 import { createPackagingRun, recordPackagingEvent } from './packaging-run.mjs'
@@ -354,11 +358,9 @@ async function resolveRequestedBuildVersion(
   const requested = invocation.requestedBuildVersion
   if (requested === undefined) return productVersion
   if (requested !== AUTOMATIC_BUILD_VERSION) return validateDesktopBuildVersion(requested, productVersion)
-  const paths = desktopTargetBuildPaths(invocation.target.name)
   return suggestDesktopBuildVersion({
     productVersion, target: invocation.target.name, environment,
-    // Local builds land beside the release output, so numbering reads the directory this run writes.
-    artifactsRoot: invocation.unsigned ? paths.unsignedArtifacts : invocation.internalDmg ? paths.internalArtifacts : paths.artifacts,
+    releasesRoot: desktopReleasesRoot(),
   })
 }
 
@@ -477,10 +479,10 @@ export async function packageTarget(
   const mac = target.platform === 'darwin' ? resolveMacOSPackageSettings(environment) : undefined
   const packArguments = mac === undefined ? [] : ['--concurrency', String(mac.packConcurrency)]
   const buildPaths = desktopTargetBuildPaths(target.name)
-  const artifactsRoot = invocation.unsigned
-    ? buildPaths.unsignedArtifacts
-    : invocation.internalDmg ? buildPaths.internalArtifacts : buildPaths.artifacts
-  const releaseRecordPath = join(buildPaths.artifacts, desktopBuildRecordFilename(target.name))
+  const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
+  const buildVersion = resolveDesktopBuildVersion(environment, productVersion)
+  const artifactsRoot = desktopTargetReleaseArtifactsDirectory(target.name, buildVersion)
+  const releaseRecordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
   if (!invocation.prepareOnly && !invocation.unsigned && !invocation.internalDmg) {
     rmSync(releaseRecordPath, { force: true })
     rmSync(`${releaseRecordPath}.tmp`, { force: true })
@@ -578,13 +580,13 @@ export async function packageTarget(
       arch: target.arch,
       // electron-builder named these artifacts after the published version, so locating them uses the same identifier.
       version: resolveDesktopBuildVersion(environment, packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')),
-      artifactsRoot: buildPaths.artifacts,
+      artifactsRoot,
       environment: electronBuilderEnv,
     }, artifact => execute(desktopElectronBuilderArguments(target, false, artifact), electronBuilderEnv)), undefined, undefined, proxyEvent)
   } else if (target.platform === 'darwin') {
     await execute([...desktopElectronBuilderArguments(target, true), '--config.mac.notarize=false'], electronBuilderEnv)
     await execute(['exec', 'tsx', 'scripts/smoke-packaged-runtime.ts'], targetEnv)
-    const appPath = join(buildPaths.artifacts, target.arch === 'arm64' ? 'mac-arm64' : 'mac', 'DeepSeek Harness.app')
+    const appPath = join(artifactsRoot, target.arch === 'arm64' ? 'mac-arm64' : 'mac', 'DeepSeek Harness.app')
     await withMacOSNotarizationProxy(mac?.notarizationProxy,
       () => notarizeMacOS({ appPath, ...resolveMacOSNotarizationEnvironment(environment) }), undefined, undefined, proxyEvent)
   } else {
@@ -592,7 +594,7 @@ export async function packageTarget(
     await execute(['exec', 'tsx', 'scripts/smoke-packaged-runtime.ts', ...(invocation.unsigned ? ['--unsigned'] : [])], targetEnv)
   }
   if (!invocation.directory && !invocation.unsigned && !invocation.internalDmg) {
-    writeReleaseRecord(target, electronBuilderEnv, buildPaths.artifacts)
+    writeReleaseRecord(target, electronBuilderEnv, artifactsRoot)
   }
   if (journal) recordPackagingEvent(journal, { type: 'artifacts', directory: artifactsRoot })
 }

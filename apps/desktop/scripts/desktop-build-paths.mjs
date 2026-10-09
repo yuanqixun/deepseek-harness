@@ -3,7 +3,9 @@
 import { join, resolve } from 'node:path'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
+const REPOSITORY_ROOT = resolve(APP_ROOT, '..', '..')
 const BUILD_ROOT = join(APP_ROOT, '.desktop-build')
+const RELEASES_ROOT = join(REPOSITORY_ROOT, 'releases')
 const SUPPORTED_TARGETS = new Set(['mac-arm64', 'mac-x64', 'win-x64'])
 
 /**
@@ -36,9 +38,9 @@ function assertSupportedTarget(target) {
 }
 
 /**
- * Return the mutable preparation and artifact directories owned by one release target.
+ * Return the mutable preparation directories owned by one release target.
  * @param {'mac-arm64' | 'mac-x64' | 'win-x64'} target - Supported Desktop target name.
- * @returns {{ root: string, artifacts: string, unsignedArtifacts: string, internalArtifacts: string, runtime: string, packageSet: string, dsh: string, dshPnpm: string, electron: string, packedDsh: string, packedVendor: string, packedLandlock: string, downloads: string }} Target paths plus the shared immutable download cache.
+ * @returns {{ root: string, runtime: string, packageSet: string, dsh: string, dshPnpm: string, electron: string, packedDsh: string, packedVendor: string, packedLandlock: string, downloads: string }} Preparation paths plus the shared immutable download cache.
  */
 export function desktopTargetBuildPaths(target) {
   assertSupportedTarget(target)
@@ -46,9 +48,6 @@ export function desktopTargetBuildPaths(target) {
   const packed = join(root, 'packed')
   return {
     root,
-    artifacts: join(root, 'artifacts'),
-    unsignedArtifacts: join(root, 'unsigned-artifacts'),
-    internalArtifacts: join(root, 'internal-artifacts'),
     runtime: join(root, 'runtime'),
     packageSet: join(root, 'package-set'),
     dsh: join(root, 'dsh'),
@@ -59,6 +58,31 @@ export function desktopTargetBuildPaths(target) {
     packedLandlock: join(packed, 'landlock'),
     downloads: join(BUILD_ROOT, 'downloads'),
   }
+}
+
+/**
+ * Return the repository directory that retains versioned Desktop artifacts.
+ * @returns The releases directory.
+ */
+export function desktopReleasesRoot() {
+  return RELEASES_ROOT
+}
+
+/**
+ * Return the versioned artifact directory for one platform and architecture.
+ * @param {'mac-arm64' | 'mac-x64' | 'win-x64'} target - Supported release target.
+ * @param {string} version - Validated Desktop build version.
+ * @returns The directory where electron-builder writes this target's artifacts.
+ */
+export function desktopTargetReleaseArtifactsDirectory(target, version, releasesRoot = RELEASES_ROOT) {
+  assertSupportedTarget(target)
+  if (typeof version !== 'string' || version === '' || version === '.' || version === '..'
+    || version.includes('/') || version.includes('\\')) {
+    throw new Error('desktop build paths: invalid Desktop build version')
+  }
+  const platform = target === 'win-x64' ? 'windows' : 'macos'
+  const arch = target === 'mac-arm64' ? 'arm64' : 'x64'
+  return join(releasesRoot, version, platform, arch)
 }
 
 /**

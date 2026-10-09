@@ -43,7 +43,7 @@ describe('desktop macOS release signature', () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     const config = createElectronBuilderConfig(RELEASE_ENVIRONMENT, 'darwin', 'arm64')
     expect(config.protocols).toEqual([{ name: 'DeepSeek Harness', schemes: ['dsh'] }])
-    expect(portablePath(config.directories.output)).toContain('/.desktop-build/targets/mac-arm64/artifacts')
+    expect(portablePath(config.directories.output)).toContain('/releases/0.2.1-alpha.1/macos/arm64')
     expect(config.mac.extendInfo.NSMicrophoneUsageDescription).toContain('microphone')
     expect(config.mac.entitlementsInherit).toBe(config.mac.entitlements)
     const entitlements = readFileSync(config.mac.entitlements, 'utf8')

@@ -1,19 +1,27 @@
 #!/usr/bin/env bash
-# Build an unsigned internal macOS arm64 Desktop disk image from this checkout.
+# Build the signed macOS arm64 Desktop release artifacts from this checkout.
 set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: ./build-macos.sh <build-version>
+Usage: ./build-macos.sh [--internal-dmg] <build-version>
 
-Builds an unsigned macOS arm64 DMG for internal distribution. The version must
-be confirmed before packaging. Configure apps/desktop/.env.macos from its example first.
+By default, builds the signed macOS arm64 release artifacts: DMG, ZIP, ZIP blockmap,
+and update feed YAML. Use --internal-dmg to build only an unsigned internal DMG.
+The version must be confirmed before packaging. Configure apps/desktop/.env.macos
+from its example first; release builds also require the signing and notarization
+credentials documented for Desktop packaging.
 EOF
 }
 
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then
   usage
   exit 0
+fi
+internal_dmg=0
+if [[ $# -eq 2 && $1 == --internal-dmg ]]; then
+  internal_dmg=1
+  shift
 fi
 if [[ $# -ne 1 ]]; then
   usage >&2
@@ -43,4 +51,7 @@ if [[ ! -f apps/desktop/.env.macos ]]; then
   exit 1
 fi
 
-exec pnpm run package:desktop:mac:arm64:internal-dmg -- --build-version "$1"
+if [[ $internal_dmg -eq 1 ]]; then
+  exec pnpm run package:desktop:mac:arm64:internal-dmg -- --build-version "$1"
+fi
+exec pnpm run package:desktop:mac:arm64 -- --build-version "$1"

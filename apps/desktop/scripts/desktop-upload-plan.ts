@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, readdir, stat } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 import { dump, load } from 'js-yaml'
 import { prerelease } from 'semver'
@@ -12,7 +12,10 @@ import {
   desktopUpdateMetadataFilename,
   resolveDesktopUploadConfig,
 } from './desktop-auto-update-environment.mjs'
-import { desktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import {
+  desktopReleasesRoot,
+  desktopTargetReleaseArtifactsDirectory,
+} from './desktop-build-paths.mjs'
 import { validateDesktopBuildVersion } from './desktop-build-version.mjs'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
@@ -154,6 +157,33 @@ async function requireArtifact(artifactsRoot: string, filename: string): Promise
   return path
 }
 
+/**
+ * Find the most recently completed release directory for one target.
+ * @param targetName - Fixed platform and architecture selected by the upload command.
+ * @returns The versioned artifact directory holding the latest completion record.
+ */
+async function latestReleaseArtifactsRoot(targetName: DesktopPackageTargetName): Promise<string> {
+  const versions = await readdir(desktopReleasesRoot(), { withFileTypes: true }).catch(() => [])
+  const candidates: { artifactsRoot: string; completedAt: number }[] = []
+  for (const version of versions) {
+    if (!version.isDirectory()) continue
+    const artifactsRoot = desktopTargetReleaseArtifactsDirectory(targetName, version.name)
+    try {
+      const info = await stat(join(artifactsRoot, desktopBuildRecordFilename(targetName)))
+      if (info.isFile()) candidates.push({ artifactsRoot, completedAt: info.mtimeMs })
+    }
+    catch (error) {
+      if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error
+    }
+  }
+  candidates.sort((left, right) => right.completedAt - left.completedAt)
+  const latest = candidates[0]
+  if (latest === undefined) {
+    throw new Error(`desktop upload: no completed ${targetName} package found under ${desktopReleasesRoot()}`)
+  }
+  return latest.artifactsRoot
+}
+
 function uploadArtifact(
   path: string,
   keyPrefix: string,
@@ -187,7 +217,7 @@ export async function createDesktopUploadPlan(
   const environment = options.environment ?? process.env
   const repositoryRoot = options.repositoryRoot ?? REPOSITORY_ROOT
   const appRoot = options.appRoot ?? APP_ROOT
-  const artifactsRoot = options.artifactsRoot ?? desktopTargetBuildPaths(targetName).artifacts
+  const artifactsRoot = options.artifactsRoot ?? await latestReleaseArtifactsRoot(targetName)
   const dshVersion = await manifestVersion(join(repositoryRoot, 'package.json'), 'dsh package')
   const desktopVersion = await manifestVersion(join(appRoot, 'package.json'), 'desktop package')
   if (dshVersion !== desktopVersion) {

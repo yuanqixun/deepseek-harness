@@ -133,6 +133,7 @@ export const TRANSLATION_SCOPE_GLOB_EXCLUDES = [
   '**/.pnpm-store/**',
   '**/.cache/**',
   '**/coverage/**',
+  'releases/**',
   '**/.doc-typecheck-*/**',
   '**/.node-next-types-*/**',
   '**/.sessions/**',

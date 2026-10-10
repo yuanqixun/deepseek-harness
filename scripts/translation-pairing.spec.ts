@@ -17,6 +17,7 @@ import {
 import {
   isTranslationPairingManifestExcluded,
   isTranslationScopeFile,
+  TRANSLATION_SCOPE_GLOB_EXCLUDES,
   languageSwitcherTargets,
   pairAnchorOfArgument,
   parseTranslationMarkdown,
@@ -99,6 +100,10 @@ describe('translation pairing index reads', () => {
 })
 
 describe('translation pairing manifest', () => {
+  it('excludes generated Desktop release trees from the documentation corpus', () => {
+    expect(TRANSLATION_SCOPE_GLOB_EXCLUDES).toContain('releases/**')
+  })
+
   it('accepts an exclusions-only manifest', () => {
     const manifest = parseTranslationPairingManifest(JSON.stringify({
       excluded: ['docs/generated/'],

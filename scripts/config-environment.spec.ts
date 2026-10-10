@@ -24,7 +24,7 @@ describe('private market deployment configuration', () => {
       schemaVersion: 1,
       environment: 'acme',
       plugins: { privateMarket: {
-        catalogUrl: 'https://market.example/catalog.json',
+        catalogUrl: 'http://market.example/catalog.json',
         catalogCredentialRef: 'MARKET_TOKEN',
         registryUrl: 'https://npm.example/',
       } },
@@ -34,7 +34,7 @@ describe('private market deployment configuration', () => {
     const first = readPrivateMarketEnvironment(root, 'acme')
     expect(first).toMatchObject({
       environment: 'acme',
-      catalogUrl: 'https://market.example/catalog.json',
+      catalogUrl: 'http://market.example/catalog.json',
       catalogCredentialRef: 'MARKET_TOKEN',
       registryUrl: 'https://npm.example/',
     })
@@ -44,7 +44,7 @@ describe('private market deployment configuration', () => {
     expect(JSON.stringify(first)).not.toContain('secret')
   })
 
-  it('rejects path selectors, mismatched environment, unknown market fields, and non-HTTPS URLs', () => {
+  it('rejects path selectors, mismatched environment, unknown market fields, and unsupported URL protocols', () => {
     const valid = { schemaVersion: 1, environment: 'acme', plugins: { privateMarket: {
       catalogUrl: 'https://market.example/catalog.json', registryUrl: 'https://npm.example/',
     } } }
@@ -57,20 +57,20 @@ describe('private market deployment configuration', () => {
     const invalid = (market: Record<string, unknown>): string => config({ ...valid, plugins: { privateMarket: market } })
     expect(() => readPrivateMarketEnvironment(invalid({ ...valid.plugins.privateMarket, token: 'secret' }), 'acme'))
       .toThrow(/unsupported plugins.privateMarket field/u)
-    expect(() => readPrivateMarketEnvironment(invalid({ catalogUrl: 'http://market.example', registryUrl: 'https://npm.example/' }), 'acme'))
-      .toThrow(/HTTPS URL/u)
+    expect(() => readPrivateMarketEnvironment(invalid({ catalogUrl: 'ftp://market.example', registryUrl: 'https://npm.example/' }), 'acme'))
+      .toThrow(/HTTP or HTTPS/u)
   })
 
   it('requires the external config root and a credential reference name', () => {
     expect(() => readPrivateMarketEnvironment(undefined, 'acme')).toThrow(/DSH_CONFIG_ENV_DIR/u)
     const root = config({ schemaVersion: 1, environment: 'acme', plugins: { privateMarket: {
-      catalogUrl: 'https://market.example/catalog.json', catalogCredentialRef: 'bad-token', registryUrl: 'https://npm.example/',
+      catalogUrl: 'http://market.example/catalog.json', catalogCredentialRef: 'bad-token', registryUrl: 'https://npm.example/',
     } } })
     expect(() => readPrivateMarketEnvironment(root, 'acme')).toThrow(/CredentialRef/u)
   })
 
   it('requires opaque product and plugin namespaces to be JSON objects', () => {
-    const validMarket = { catalogUrl: 'https://market.example/catalog.json', registryUrl: 'https://npm.example/' }
+    const validMarket = { catalogUrl: 'http://market.example/catalog.json', registryUrl: 'https://npm.example/' }
     const invalidProduct = config({ schemaVersion: 1, environment: 'acme', plugins: { privateMarket: validMarket }, desktop: [] })
     expect(() => readPrivateMarketEnvironment(invalidProduct, 'acme')).toThrow(/product namespace desktop/u)
     const invalidPlugin = config({ schemaVersion: 1, environment: 'acme', plugins: { privateMarket: validMarket, other: null } })

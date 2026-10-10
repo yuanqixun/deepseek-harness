@@ -235,14 +235,14 @@ describe('current version', () => {
       for (const [name, value] of Object.entries(params ?? {})) text = text.replace(`{${name}}`, String(value))
       return text
     }
-    render(<CurrentVersionRow {...kit} t={translate} />)
+    render(<CurrentVersionRow {...kit} t={translate} aboutAvailable={false} openAbout={() => {}} />)
     expect(screen.getByText(expected)).toBeTruthy()
     expect(screen.queryByRole('button')).toBeNull()
   })
 
   it('omits the row when a partial build has no version metadata', () => {
     vi.stubEnv('DSH_CLIENT_VERSION', undefined)
-    const view = render(<CurrentVersionRow {...kit} t={t} />)
+    const view = render(<CurrentVersionRow {...kit} t={t} aboutAvailable={false} openAbout={() => {}} />)
     expect(view.container.textContent).toBe('')
   })
 })

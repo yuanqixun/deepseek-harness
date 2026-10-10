@@ -8,7 +8,7 @@
 
 ### Requirement: 部署环境配置通过显式选择器加载
 
-本地 Web 开发和 Desktop 打包 SHALL 接受通用的 `--config-env <name>` 选择器，并从 `DSH_CONFIG_ENV_DIR/<name>/config.json` 读取外部部署环境文件。选择器存在时，配置目录变量必须设置且文件必须可读，否则该次显式开发启动或 Desktop 打包失败。文件 SHALL 为 JSON，包含必填 `schemaVersion`、`environment` 和产品命名空间；当前变更只要求并解析 `plugins.privateMarket`，其内包含必填 `catalogUrl`、`registryUrl` 和可选 `catalogCredentialRef`。`schemaVersion` 当前为 `1`，`environment` 必须匹配选择器。环境名 SHALL 是单一路径段，拒绝绝对路径、斜杠和 `..`。当前消费的 `plugins.privateMarket` 对象内未知字段和未支持 schema version SHALL 导致失败。两个 URL SHALL 使用 HTTPS，且不得包含 userinfo、query 或 fragment。根级其他产品命名空间和 `plugins` 下的其他命名空间 SHALL 可以作为不透明 JSON 对象存在，但本变更 SHALL NOT 消费、复制或写入构建记录。fallback registry 与插件来源 integrity 不属于环境配置，分别沿用现有 fallback 配置和打包输入。未提供选择器时，DSH SHALL NOT 要求插件来源或市场配置，也 SHALL 保持现有启动及打包行为。
+本地 Web 开发和 Desktop 打包 SHALL 接受通用的 `--config-env <name>` 选择器，并从 `DSH_CONFIG_ENV_DIR/<name>/config.json` 读取外部部署环境文件。选择器存在时，配置目录变量必须设置且文件必须可读，否则该次显式开发启动或 Desktop 打包失败。文件 SHALL 为 JSON，包含必填 `schemaVersion`、`environment` 和产品命名空间；当前变更只要求并解析 `plugins.privateMarket`，其内包含必填 `catalogUrl`、`registryUrl` 和可选 `catalogCredentialRef`。`schemaVersion` 当前为 `1`，`environment` 必须匹配选择器。环境名 SHALL 是单一路径段，拒绝绝对路径、斜杠和 `..`。当前消费的 `plugins.privateMarket` 对象内未知字段和未支持 schema version SHALL 导致失败。两个 URL SHALL 使用 HTTP 或 HTTPS，且不得包含 userinfo、query 或 fragment。根级其他产品命名空间和 `plugins` 下的其他命名空间 SHALL 可以作为不透明 JSON 对象存在，但本变更 SHALL NOT 消费、复制或写入构建记录。fallback registry 与插件来源 integrity 不属于环境配置，分别沿用现有 fallback 配置和打包输入。未提供选择器时，DSH SHALL NOT 要求插件来源或市场配置，也 SHALL 保持现有启动及打包行为。
 
 #### Scenario: 本地 Web 显式加载市场环境
 

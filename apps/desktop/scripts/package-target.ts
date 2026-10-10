@@ -178,7 +178,12 @@ async function writeReleaseRecord(
   }
   const packaged = resolveDesktopBuildCommit(environment)
   const privateUpdates = environment.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG === undefined
-    ? undefined : JSON.parse(environment.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG) as { environment: string; checkUrl: string }
+    ? undefined
+    : JSON.parse(environment.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG) as {
+      environment: string
+      distribution: string
+      checkUrl: string
+    }
   const update = privateUpdates === undefined ? resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch) : undefined
   const buildVersion = resolveDesktopBuildVersion(environment, dshVersion)
   const updateArtifacts = privateDesktopUpdates
@@ -193,7 +198,11 @@ async function writeReleaseRecord(
     environment: update?.environment ?? privateUpdates?.environment,
     ...(update === undefined ? {} : { publicUrl: update.publicUrl }),
     ...(privateUpdates === undefined ? {} : {
-      privateDesktopUpdates: { environment: privateUpdates.environment, checkUrl: privateUpdates.checkUrl },
+      privateDesktopUpdates: {
+        environment: privateUpdates.environment,
+        distribution: privateUpdates.distribution,
+        checkUrl: privateUpdates.checkUrl,
+      },
     }),
     ...(updateArtifacts === undefined ? {} : updateArtifacts),
     ...(existsSync(marketRecord) ? { privateMarket: JSON.parse(readFileSync(marketRecord, 'utf8')) } : {}),

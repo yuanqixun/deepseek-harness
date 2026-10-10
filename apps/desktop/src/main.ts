@@ -819,6 +819,10 @@ async function main(): Promise<void> {
     assertProductSender(event)
     await openUpdatePrompt(true)
   })
+  ipcMain.handle(DESKTOP_IPC.updatesAbout, async (event) => {
+    assertProductSender(event)
+    await showAbout()
+  })
 
   let promptOperation: Promise<void> | undefined
   let policyAuthenticationQueued = false

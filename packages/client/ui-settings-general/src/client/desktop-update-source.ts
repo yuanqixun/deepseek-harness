@@ -8,6 +8,7 @@ export class DesktopUpdateSource {
   readonly store = createSnapshotStore<DesktopUpdateView>({ failed: false, opening: false })
   private live = true
   private received = false
+  private aboutOpening = false
   private readonly unsubscribe: (() => void) | undefined
 
   /** @param bridge - Optional isolated Electron API, absent in ordinary browsers. */
@@ -37,6 +38,20 @@ export class DesktopUpdateSource {
       if (this.live) this.store.set({ ...this.store.getSnapshot(), opening: false })
     })
   }
+
+  /** Open the shell-owned version and release-history dialog. */
+  openAbout(): void {
+    if (!this.live || this.bridge === undefined || this.aboutOpening) return
+    this.aboutOpening = true
+    void this.bridge.about().catch(() => {
+      if (this.live) this.store.set({ ...this.store.getSnapshot(), failed: true })
+    }).finally(() => {
+      this.aboutOpening = false
+    })
+  }
+
+  /** Whether the Desktop preload can open the version dialog. */
+  get canOpenAbout(): boolean { return this.live && this.bridge !== undefined }
 
   /** Detach the carrier and ignore any pending status or action completion. */
   dispose(): void { this.live = false; this.unsubscribe?.() }

@@ -28,8 +28,10 @@ export class DesktopUpdateHttpExecutor extends ElectronHttpExecutor {
     if (this.allowedOrigins !== undefined) {
       const host = options.hostname ?? options.host
       const protocol = options.protocol
-      if (typeof host !== 'string' || protocol !== 'https:') throw new Error('desktop update: private feed request must use HTTPS')
-      const origin = new URL(`${protocol}//${host}`).origin
+      if (typeof host !== 'string') throw new Error('desktop update: private feed request must use HTTP or HTTPS')
+      const url = new URL(`${protocol}//${host}`)
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('desktop update: private feed request must use HTTP or HTTPS')
+      const origin = url.origin
       if (!this.allowedOrigins.includes(origin)) throw new Error('desktop update: request origin is outside the configured private feed allowlist')
     }
     return super.createRequest(options, callback)

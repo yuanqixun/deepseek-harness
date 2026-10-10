@@ -5,7 +5,7 @@ vi.mock('electron-updater', () => ({ default: { autoUpdater: { setFeedURL: vi.fn
 
 const { PrivateDesktopUpdateClient, resolvePrivateDesktopUpdateConfig } = await import('../src/private-desktop-updates.ts')
 
-const config = resolvePrivateDesktopUpdateConfig({ environment: 'hxfl', channel: 'stable',
+const config = resolvePrivateDesktopUpdateConfig({ environment: 'hxfl', distribution: 'dshwork', channel: 'stable',
   checkUrl: 'https://updates.example/v1/desktop/updates/check', feedOrigins: ['https://downloads.example'] })
 const updater = electronUpdater.autoUpdater
 afterEach(() => { vi.clearAllMocks() })
@@ -26,7 +26,7 @@ describe('private desktop update protocol', () => {
     await client.check('launch')
     expect(request).toHaveBeenCalledWith(config.checkUrl, expect.objectContaining({
       method: 'POST', credentials: 'omit', cache: 'no-store', redirect: 'error',
-      body: JSON.stringify({ protocolVersion: 1, distribution: 'hxfl', channel: 'stable',
+      body: JSON.stringify({ protocolVersion: 1, distribution: 'dshwork', channel: 'stable',
         client: { version: '1.2.3', platform: 'win32', arch: 'x64', dshVersion: '0.8.0', userId: 'user-42' } }),
     }))
     client.setUserId(null)

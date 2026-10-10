@@ -8,7 +8,7 @@
 
 Desktop 绑定 `127.0.0.1`，即 Electron 为就绪 URL 与 WebSocket 凭据过滤器拨号的地址。WebSocket 流按 Host 监听器使用 `ws:` 或 `wss:`；附加凭据要求 authority 与 scheme 均匹配。
 
-应用菜单第一项“**关于 DeepSeek Harness**”打开 Desktop 自有对话框，展示产品名称、当前安装版本和可用的版本记录。记录只显示当前平台与架构适用的版本；历史记录正在加载或暂时不可用时会显示对应状态，同时保留当前安装版本。对话框跟随 Desktop 壳语言，并提供手动检查更新入口。macOS 的隐藏、隐藏其他、显示全部和退出条目使用本地化文案，隐藏和退出条目包含 DeepSeek Harness 产品名称。这些条目保留原生动作和快捷键。
+应用菜单第一项“**关于 DeepSeek Harness**”打开 Desktop 自有对话框，展示产品名称、当前安装版本和可用的版本记录。通用设置当前版本旁的“**版本与更新…**”入口也会打开此对话框。记录只显示当前平台与架构适用的版本；历史记录正在加载或暂时不可用时会显示对应状态，同时保留当前安装版本。对话框跟随 Desktop 壳语言，并提供手动检查更新入口。macOS 的隐藏、隐藏其他、显示全部和退出条目使用本地化文案，隐藏和退出条目包含 DeepSeek Harness 产品名称。这些条目保留原生动作和快捷键。
 
 Desktop 的本地原生目录流程打开绑定应用窗口的 Electron 文件夹对话框，并先恢复、显示和聚焦该窗口。并发请求共用一个对话框；取消不返回路径，失败后可以重试。普通 Web 使用 Host 选择器。浏览模式列出 Host 目录。Linux 缺少 zenity 或 kdialog 时，自动选择使用浏览模式，不使用 Electron 对话框。
 
@@ -243,7 +243,7 @@ pnpm run package:desktop:mac:x64
 pnpm run package:desktop:win:x64
 ```
 
-`build-macos.sh` 和 `build-win64.ps1` 默认预置本地 `dsh-pro-auth` 与 `dsh-private-market` bundle。底层打包命令接受 `--preinstall-private-plugins`；可用 `build-macos.sh --no-preinstall-private-plugins` 或 `build-win64.ps1 -NoPreinstallPrivatePlugins` 关闭预置。打包会构建相邻目录中的两个插件仓库（可分别用 `DSH_PRO_AUTH_SOURCE` 和 `DSH_PRIVATE_MARKET_SOURCE` 覆盖），把两个 package tarball 加入内置运行时，并写入新建 Desktop profile。已有 Desktop profile 会各迁移一次，用户之后仍可关闭。把 `DSH_CONFIG_ENV_DIR` 和 `DSH_CONFIG_ENV` 放在目标对应的忽略文件 `apps/desktop/.env.macos` 或 `.env.windows` 中；相对目录路径以 `apps/desktop` 为基准。所选配置文件为 `$DSH_CONFIG_ENV_DIR/<环境名>/config.json`。命令行参数 `--config-env NAME` 可以覆盖 `DSH_CONFIG_ENV`；`build-win64.ps1` 使用等价参数 `-ConfigEnvironment NAME`。没有选择环境时，两个插件仍会启用，但私有市场没有目录 URL。打包记录保存环境名、配置摘要、包版本和 tarball 完整性。`config.json` 不包含凭据值：
+`build-macos.sh` 和 `build-win64.ps1` 默认预置本地 `dsh-pro-auth` 与 `dsh-private-market` bundle。底层打包命令接受 `--preinstall-private-plugins`；可用 `build-macos.sh --no-preinstall-private-plugins` 或 `build-win64.ps1 -NoPreinstallPrivatePlugins` 关闭预置。打包会构建相邻目录中的两个插件仓库（可分别用 `DSH_PRO_AUTH_SOURCE` 和 `DSH_PRIVATE_MARKET_SOURCE` 覆盖），把两个 package tarball 加入内置运行时，并写入新建 Desktop profile。已有 Desktop profile 会各迁移一次，用户之后仍可关闭。把 `DSH_CONFIG_ENV_DIR` 和 `DSH_CONFIG_ENV` 放在目标对应的忽略文件 `apps/desktop/.env.macos` 或 `.env.windows` 中；相对目录路径以 `apps/desktop` 为基准。仓库统一在根目录 `envs/` 管理具名环境；在上述文件中设置 `DSH_CONFIG_ENV_DIR=../../envs`。所选配置文件为 `$DSH_CONFIG_ENV_DIR/<环境名>/config.json`。命令行参数 `--config-env NAME` 可以覆盖 `DSH_CONFIG_ENV`；`build-win64.ps1` 使用等价参数 `-ConfigEnvironment NAME`。没有选择环境时，两个插件仍会启用，但私有市场没有目录 URL。打包记录保存环境名、配置摘要、包版本和 tarball 完整性。`config.json` 不包含凭据值：
 
 ```json
 {
@@ -259,7 +259,7 @@ pnpm run package:desktop:win:x64
 }
 ```
 
-`hxfl` 环境的文件路径为 `$DSH_CONFIG_ENV_DIR/hxfl/config.json`。所选环境必须包含 `plugins.privateMarket`，才能配置市场目录和 registry。没有选择配置时，已预置的市场仍不可用，直到提供配置。
+`hxfl` 环境的文件路径为 `$DSH_CONFIG_ENV_DIR/hxfl/config.json`。所选环境必须包含 `plugins.privateMarket`，才能配置市场目录和 registry；两个 URL 均支持 HTTP 与 HTTPS，且不能包含凭据、查询参数或片段。没有选择配置时，已预置的市场仍不可用，直到提供配置。
 
 同一个具名环境也可通过 `desktop.updates` 为 Windows x64 配置匿名私有更新，且无需构建或打包私有市场插件：
 
@@ -269,15 +269,16 @@ pnpm run package:desktop:win:x64
   "environment": "hxfl",
   "desktop": {
     "updates": {
-      "checkUrl": "https://updates.example/v1/desktop/updates/check",
+      "distribution": "dshwork",
+      "checkUrl": "https://hxai.superbpm.com/app-api/v1/desktop/updates/check",
       "channel": "stable",
-      "feedOrigins": ["https://downloads.example"]
+      "feedOrigins": ["https://hxai.superbpm.com"]
     }
   }
 }
 ```
 
-在 `apps/desktop/.env.windows` 中设置 `DSH_CONFIG_ENV_DIR` 和 `DSH_CONFIG_ENV=hxfl`，然后在 Windows x64 上向 `build-win64.ps1` 传入构建版本。构件只嵌入所选环境名、检测 URL、通道和 HTTPS feed 源站；其他目标会拒绝此配置。客户端匿名调用 `POST /v1/desktop/updates/check`，不携带凭据；请求发送协议版本、部署、通道、Desktop 版本、`win32`、`x64`、随包 dsh 版本，以及认证集成可提供的内存态可选 `userId`。退出登录时应清除此 ID。缺少 ID 不影响检测。
+此部署使用 `dshwork` 标识，并由 `hxai.superbpm.com` 提供更新服务。私有更新配置支持 Windows x64 和 macOS arm64；其他目标会拒绝此命名空间。在 `apps/desktop/.env.windows` 或 `.env.macos` 中设置 `DSH_CONFIG_ENV_DIR=../../envs` 和 `DSH_CONFIG_ENV=superbpm`，然后打包受支持的目标。打包时会读取所选配置文件，并嵌入环境名、部署标识、检测 URL、通道和 feed 源站。部署使用带 `/app-api` 前缀的检测 URL；后端业务路由为 `POST /v1/desktop/updates/check`。检测和 feed URL 均支持 HTTP 与 HTTPS。客户端请求不携带凭据，并发送协议版本、部署、通道、Desktop 版本、平台、架构、随包 dsh 版本，以及认证集成可提供的内存态可选 `userId`。退出登录时应清除此 ID。缺少 ID 不影响检测。
 
 macOS arm64 命令要求 Apple Silicon。macOS x64 命令可以在 Intel macOS 或带 Rosetta 的 Apple Silicon 上运行。Windows x64 命令要求 Windows x64。Linux 不是受支持的 Desktop 发布目标。
 
@@ -537,7 +538,7 @@ Windows 下载完成后的更新确认说明应用会在安装期间关闭、完
 }
 ```
 
-`feedUrl` 必须属于配置允许的 HTTPS 源站。Windows 读取 `{feedUrl}/nightly.yml`，其中指向已签名 NSIS EXE；macOS 读取 `{feedUrl}/nightly-mac.yml`，其中指向已签名并公证的 arm64 ZIP。DMG 用于直接安装，不是更新载荷。元数据包含载荷大小和 SHA-512。Windows 提供 `.exe.blockmap`；macOS 提供 `.zip.blockmap`。Electron 可以使用 blockmap 对比本地缓存载荷并按变化范围下载；差分准备失败时回退下载完整 EXE 或 ZIP。macOS 首次更新没有缓存 ZIP 时会下载完整 ZIP。服务端必须支持 HTTPS `Range` 请求，并对有效范围请求返回带 `Content-Range` 的 `206 Partial Content`；完整下载返回 `200`。元数据、载荷、blockmap 和重定向都受同一源站白名单约束。下载和安装仍分别由用户确认。
+`feedUrl` 必须属于配置允许的源站；HTTP 与 HTTPS 均可使用。Windows 读取 `{feedUrl}/nightly.yml`，其中指向已签名 NSIS EXE；macOS 读取 `{feedUrl}/nightly-mac.yml`，其中指向已签名并公证的 arm64 ZIP。DMG 用于直接安装，不是更新载荷。元数据包含载荷大小和 SHA-512。Windows 提供 `.exe.blockmap`；macOS 提供 `.zip.blockmap`。Electron 可以使用 blockmap 对比本地缓存载荷并按变化范围下载；差分准备失败时回退下载完整 EXE 或 ZIP。macOS 首次更新没有缓存 ZIP 时会下载完整 ZIP。服务端必须支持 `Range` 请求，并对有效范围请求返回带 `Content-Range` 的 `206 Partial Content`；完整下载返回 `200`。元数据、载荷、blockmap 和重定向都受同一源站白名单约束。下载和安装仍分别由用户确认。
 
 后管负责提供以下公开资源，不需要生命周期统计接口：
 

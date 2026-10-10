@@ -24,9 +24,11 @@ function fixture() {
   const status = Promise.withResolvers<DesktopUpdatePresentation>()
   const unsubscribe = vi.fn()
   const open = vi.fn(async () => {})
+  const about = vi.fn(async () => {})
   const bridge: DesktopUpdateBridge = {
     status: () => status.promise,
     open,
+    about,
     subscribe: (next) => { listener = next; return unsubscribe },
   }
   const source = new DesktopUpdateSource(bridge)

@@ -24,6 +24,11 @@ export interface DesktopUpdatePresentation {
 export interface DesktopUpdateBridge {
   status(): Promise<DesktopUpdatePresentation>
   open(): Promise<void>
+  /**
+   * Open the shell-owned version and release-history dialog.
+   * @returns when the dialog closes.
+   */
+  about(): Promise<void>
   subscribe(listener: (state: DesktopUpdatePresentation) => void): () => void
 }
 

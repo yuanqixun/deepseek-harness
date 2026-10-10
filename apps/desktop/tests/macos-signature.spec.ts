@@ -25,6 +25,7 @@ const RELEASE_ENVIRONMENT = {
   APPLE_API_ISSUER: '11111111-2222-3333-4444-555555555555',
   DOWNLOAD_TEST_ORIGIN: 'https://desktop-updates.example.com', DOWNLOAD_TEST_RELEASE_ID: '0123456789abcdef0123456789abcdef',
 }
+const DESKTOP_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string
 
 function portablePath(value: string): string {
   return value.replaceAll('\\', '/')
@@ -43,7 +44,7 @@ describe('desktop macOS release signature', () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     const config = createElectronBuilderConfig(RELEASE_ENVIRONMENT, 'darwin', 'arm64')
     expect(config.protocols).toEqual([{ name: 'DeepSeek Harness', schemes: ['dsh'] }])
-    expect(portablePath(config.directories.output)).toContain('/releases/0.2.1-alpha.1/macos/arm64')
+    expect(portablePath(config.directories.output)).toContain(`/releases/${DESKTOP_VERSION}/macos/arm64`)
     expect(config.mac.extendInfo.NSMicrophoneUsageDescription).toContain('microphone')
     expect(config.mac.entitlementsInherit).toBe(config.mac.entitlements)
     const entitlements = readFileSync(config.mac.entitlements, 'utf8')
@@ -145,18 +146,23 @@ describe('desktop macOS release signature', () => {
     expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
   })
 
-  it('embeds only selected public private-update settings for Windows x64', async () => {
+  it('embeds selected public private-update settings for Windows x64 and macOS arm64', async () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
-    const selected = { environment: 'hxfl', checkUrl: 'https://updates.example/v1/desktop/updates/check',
+    const selected = { environment: 'superbpm', distribution: 'dshwork', checkUrl: 'https://dsh.superbpm.com/v1/desktop/updates/check',
       channel: 'stable', feedOrigins: ['https://downloads.example'] }
     const config = createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.desktop',
       DSH_DESKTOP_TARGET_PLATFORM: 'win32', DSH_DESKTOP_TARGET_ARCH: 'x64', DSH_DESKTOP_UNSIGNED: '1',
       DSH_DESKTOP_PRIVATE_UPDATE_CONFIG: JSON.stringify(selected) }, 'win32', 'x64')
     expect(config.extraMetadata).toMatchObject({ dshPrivateDesktopUpdates: selected })
     expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
-    expect(() => createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.desktop',
+    const macConfig = createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.desktop',
       DSH_DESKTOP_TARGET_PLATFORM: 'darwin', DSH_DESKTOP_TARGET_ARCH: 'arm64',
-      DSH_DESKTOP_PRIVATE_UPDATE_CONFIG: JSON.stringify(selected) }, 'darwin', 'arm64')).toThrow(/win32-x64/u)
+      DSH_DESKTOP_UNSIGNED: '1',
+      DSH_DESKTOP_PRIVATE_UPDATE_CONFIG: JSON.stringify(selected) }, 'darwin', 'arm64')
+    expect(macConfig.extraMetadata).toMatchObject({ dshPrivateDesktopUpdates: selected })
+    expect(() => createElectronBuilderConfig({ DSH_DESKTOP_APP_ID: 'com.example.desktop',
+      DSH_DESKTOP_TARGET_PLATFORM: 'darwin', DSH_DESKTOP_TARGET_ARCH: 'x64',
+      DSH_DESKTOP_PRIVATE_UPDATE_CONFIG: JSON.stringify(selected) }, 'darwin', 'x64')).toThrow(/win32-x64 or darwin-arm64/u)
   })
 
   it.each(['arm64', 'x64'])('builds local macOS %s DMGs without release credentials or update metadata', async (arch) => {

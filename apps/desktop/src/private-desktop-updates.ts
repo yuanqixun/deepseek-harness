@@ -6,7 +6,10 @@ import type { DesktopPolicyState } from './mandatory-update-policy.ts'
 import type { DesktopUpdateHttpExecutor } from './update-http-executor.ts'
 
 export interface PrivateDesktopUpdateConfig {
+  /** Selected named environment, retained for build metadata. */
   readonly environment: string
+  /** Backend distribution ID; older packaged settings default it to `environment`. */
+  readonly distribution: string
   readonly checkUrl: string
   readonly channel: string
   readonly feedOrigins: readonly string[]
@@ -30,25 +33,36 @@ function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined
 }
 
-/** Resolve and validate public packaged update settings. */
+function isAllowedUpdateProtocol(url: URL): boolean {
+  return url.protocol === 'https:' || url.protocol === 'http:'
+}
+
+/** Resolve and validate public packaged update settings.
+ * @param value - Embedded settings selected during Desktop packaging.
+ * @returns Validated configuration for anonymous update checks.
+ * @throws Error when the endpoint, distribution, channel, or feed origins are invalid.
+ */
 export function resolvePrivateDesktopUpdateConfig(value: unknown): PrivateDesktopUpdateConfig {
   const config = record(value)
   if (config === undefined || typeof config.environment !== 'string' || typeof config.channel !== 'string'
     || typeof config.checkUrl !== 'string' || !Array.isArray(config.feedOrigins) || config.feedOrigins.length === 0
     || !config.feedOrigins.every(item => typeof item === 'string')) throw new Error('desktop updates: invalid packaged configuration')
+  const distribution = config.distribution ?? config.environment
+  if (typeof distribution !== 'string' || !/^[a-z0-9][a-z0-9-]*$/u.test(distribution)) throw new Error('desktop updates: invalid distribution')
   const checkUrl = new URL(config.checkUrl)
-  if (checkUrl.protocol !== 'https:' || checkUrl.username !== '' || checkUrl.password !== ''
-    || checkUrl.pathname !== '/v1/desktop/updates/check' || checkUrl.search !== '' || checkUrl.hash !== '') {
+  if (!isAllowedUpdateProtocol(checkUrl) || checkUrl.username !== '' || checkUrl.password !== ''
+    || !['/v1/desktop/updates/check', '/app-api/v1/desktop/updates/check'].includes(checkUrl.pathname)
+    || checkUrl.search !== '' || checkUrl.hash !== '') {
     throw new Error('desktop updates: invalid check endpoint')
   }
   const feedOrigins = config.feedOrigins.map((item) => {
     const url = new URL(item)
-    if (url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.pathname !== '/' || url.search !== '' || url.hash !== '') {
+    if (!isAllowedUpdateProtocol(url) || url.username !== '' || url.password !== '' || url.pathname !== '/' || url.search !== '' || url.hash !== '') {
       throw new Error('desktop updates: invalid feed origin')
     }
     return url.origin
   })
-  return { environment: config.environment, channel: config.channel, checkUrl: checkUrl.href, feedOrigins }
+  return { environment: config.environment, distribution, channel: config.channel, checkUrl: checkUrl.href, feedOrigins }
 }
 
 function parseDecision(input: unknown, config: PrivateDesktopUpdateConfig, currentVersion: string,
@@ -68,9 +82,9 @@ function parseDecision(input: unknown, config: PrivateDesktopUpdateConfig, curre
       throw new Error('desktop updates: invalid release')
     }
     const feedUrl = new URL(rawFeedUrl)
-    if (feedUrl.protocol !== 'https:' || feedUrl.username !== '' || feedUrl.password !== ''
+    if (!isAllowedUpdateProtocol(feedUrl) || feedUrl.username !== '' || feedUrl.password !== ''
       || !config.feedOrigins.includes(feedUrl.origin) || feedUrl.search !== '' || feedUrl.hash !== '') {
-      throw new Error('desktop updates: feed URL is outside configured HTTPS origins')
+      throw new Error('desktop updates: feed URL is outside configured origins')
     }
     if (!feedUrl.pathname.endsWith('/')) feedUrl.pathname += '/'
     release = { version, feedUrl: feedUrl.href }
@@ -198,7 +212,7 @@ export class PrivateDesktopUpdateClient {
           ...(this.userId === undefined ? {} : { userId: this.userId }) }
         const response = await this.request(this.config.checkUrl, { method: 'POST',
           headers: { 'content-type': 'application/json', accept: 'application/json' },
-          body: JSON.stringify({ protocolVersion: 1, distribution: this.config.environment, channel: this.config.channel, client }),
+          body: JSON.stringify({ protocolVersion: 1, distribution: this.config.distribution, channel: this.config.channel, client }),
           credentials: 'omit', cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(15_000) })
         if (!response.ok) throw new Error(`desktop updates: check returned HTTP ${response.status}`)
         return parseDecision(await response.json(), this.config, this.currentVersion, this.platform, this.arch)

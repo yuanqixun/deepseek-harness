@@ -8,7 +8,7 @@ The desktop application is an Electron shell around the complete dsh Web applica
 
 Desktop binds `127.0.0.1`, the address Electron dials for the ready URL and the WebSocket credential filter. WebSocket streams use `ws:` or `wss:` according to the Host listener; credentials require matching authority and scheme.
 
-The first application-menu command, **About DeepSeek Harness**, opens a Desktop-owned dialog with the product name, installed release version, and available release history. The history shows only releases for the current platform and architecture; when history is loading or unavailable, the dialog identifies that state and still shows the installed version. The dialog follows the Desktop shell locale and includes a manual update check. On macOS, Hide, Hide Others, Show All, and Quit use localized labels; Hide and Quit include the DeepSeek Harness product name. These commands retain their native actions and shortcuts.
+The first application-menu command, **About DeepSeek Harness**, opens a Desktop-owned dialog with the product name, installed release version, and available release history. The same dialog opens from **Version & updates…** beside the current version in General Settings. The history shows only releases for the current platform and architecture; when history is loading or unavailable, the dialog identifies that state and still shows the installed version. The dialog follows the Desktop shell locale and includes a manual update check. On macOS, Hide, Hide Others, Show All, and Quit use localized labels; Hide and Quit include the DeepSeek Harness product name. These commands retain their native actions and shortcuts.
 
 Desktop’s local native directory flow opens an Electron folder dialog attached to the application window, restoring, showing, and focusing that window first. Concurrent requests share one dialog; cancellation returns no path and failures remain retryable. Ordinary Web uses the Host chooser. Browse mode lists Host directories. On Linux without zenity or kdialog, automatic selection uses browse instead of the Electron dialog.
 
@@ -241,7 +241,7 @@ pnpm run package:desktop:mac:x64
 pnpm run package:desktop:win:x64
 ```
 
-`build-macos.sh` and `build-win64.ps1` preinstall the local `dsh-pro-auth` and `dsh-private-market` bundles by default. The package commands accept `--preinstall-private-plugins`; `build-macos.sh --no-preinstall-private-plugins` and `build-win64.ps1 -NoPreinstallPrivatePlugins` opt out. Packaging builds the sibling plugin checkouts (overridable with `DSH_PRO_AUTH_SOURCE` and `DSH_PRIVATE_MARKET_SOURCE`), adds both package tarballs to the bundled runtime, and seeds them into new Desktop profiles. Existing Desktop profiles receive each bundle once and can disable it afterward. Put `DSH_CONFIG_ENV_DIR` and `DSH_CONFIG_ENV` in the target's ignored `apps/desktop/.env.macos` or `.env.windows`; relative directory paths resolve from `apps/desktop`. The selected file is `$DSH_CONFIG_ENV_DIR/<environment>/config.json`. A `--config-env NAME` command-line option overrides `DSH_CONFIG_ENV`; `build-win64.ps1` accepts the equivalent `-ConfigEnvironment NAME`. Without a selected environment, both plugins are enabled, but the private market has no catalog URL. Packaging records the selected environment, configuration digest, package versions, and tarball integrity. The `config.json` contains no credential value:
+`build-macos.sh` and `build-win64.ps1` preinstall the local `dsh-pro-auth` and `dsh-private-market` bundles by default. The package commands accept `--preinstall-private-plugins`; `build-macos.sh --no-preinstall-private-plugins` and `build-win64.ps1 -NoPreinstallPrivatePlugins` opt out. Packaging builds the sibling plugin checkouts (overridable with `DSH_PRO_AUTH_SOURCE` and `DSH_PRIVATE_MARKET_SOURCE`), adds both package tarballs to the bundled runtime, and seeds them into new Desktop profiles. Existing Desktop profiles receive each bundle once and can disable it afterward. Put `DSH_CONFIG_ENV_DIR` and `DSH_CONFIG_ENV` in the target's ignored `apps/desktop/.env.macos` or `.env.windows`; relative directory paths resolve from `apps/desktop`. The repository keeps shared named environments under root `envs/`; set `DSH_CONFIG_ENV_DIR=../../envs` in those files. The selected file is `$DSH_CONFIG_ENV_DIR/<environment>/config.json`. A `--config-env NAME` command-line option overrides `DSH_CONFIG_ENV`; `build-win64.ps1` accepts the equivalent `-ConfigEnvironment NAME`. Without a selected environment, both plugins are enabled, but the private market has no catalog URL. Packaging records the selected environment, configuration digest, package versions, and tarball integrity. The `config.json` contains no credential value:
 
 ```json
 {
@@ -257,7 +257,7 @@ pnpm run package:desktop:win:x64
 }
 ```
 
-For the `hxfl` environment, the file must be at `$DSH_CONFIG_ENV_DIR/hxfl/config.json`. A selected environment must include `plugins.privateMarket` to configure the catalog and registry. Without a selected configuration, the preinstalled market remains unavailable until configured.
+For the `hxfl` environment, the file must be at `$DSH_CONFIG_ENV_DIR/hxfl/config.json`. A selected environment must include `plugins.privateMarket` to configure the catalog and registry; both URLs support HTTP and HTTPS and cannot contain credentials, queries, or fragments. Without a selected configuration, the preinstalled market remains unavailable until configured.
 
 The same named environment can configure anonymous private Desktop updates for Windows x64 with `desktop.updates`. This can be selected without building or bundling the private-market plugin:
 
@@ -267,15 +267,16 @@ The same named environment can configure anonymous private Desktop updates for W
   "environment": "hxfl",
   "desktop": {
     "updates": {
-      "checkUrl": "https://updates.example/v1/desktop/updates/check",
+      "distribution": "dshwork",
+      "checkUrl": "https://hxai.superbpm.com/app-api/v1/desktop/updates/check",
       "channel": "stable",
-      "feedOrigins": ["https://downloads.example"]
+      "feedOrigins": ["https://hxai.superbpm.com"]
     }
   }
 }
 ```
 
-Set `DSH_CONFIG_ENV_DIR` and `DSH_CONFIG_ENV=hxfl` in `apps/desktop/.env.windows`, then pass the build version to `build-win64.ps1` on Windows x64. Packaging embeds only the selected environment name, check URL, channel, and HTTPS feed origins. Other targets reject this namespace. The client calls `POST /v1/desktop/updates/check` without credentials; it sends protocol version, distribution, channel, Desktop version, `win32`, `x64`, bundled dsh version, and an optional in-memory `userId` supplied by an authentication integration. Sign-out clears that ID. Missing IDs do not prevent checking.
+This deployment uses the `dshwork` distribution at `hxai.superbpm.com`. Private update settings are supported for Windows x64 and macOS arm64; other targets reject this namespace. Set `DSH_CONFIG_ENV_DIR=../../envs` and `DSH_CONFIG_ENV=superbpm` in `apps/desktop/.env.windows` or `.env.macos`, then build the supported target. Packaging reads the selected file and embeds its environment, distribution, check URL, channel, and feed origins. The deployed check URL includes the `/app-api` prefix; the API route is `POST /v1/desktop/updates/check`. Update check and feed URLs may use HTTP or HTTPS. The client sends protocol version, distribution, channel, Desktop version, platform, architecture, bundled dsh version, and an optional in-memory `userId` supplied by an authentication integration. Sign-out clears that ID. Missing IDs do not prevent checking.
 
 The macOS arm64 command requires Apple Silicon. The macOS x64 command runs on Intel macOS or Apple Silicon with Rosetta. The Windows x64 command requires Windows x64. Linux is not a supported Desktop release target.
 
@@ -535,7 +536,7 @@ Example check response:
 }
 ```
 
-`feedUrl` must use a configured HTTPS origin. Windows reads `{feedUrl}/nightly.yml`, which points to the signed NSIS EXE. macOS reads `{feedUrl}/nightly-mac.yml`, which points to the signed and notarized arm64 ZIP; the DMG is for direct installation and is not an updater payload. The metadata includes the payload size and SHA-512. Windows serves an `.exe.blockmap`; macOS serves a `.zip.blockmap`. Electron may use these blockmaps to download changed ranges from the previous cached payload and falls back to the full EXE or ZIP when differential preparation fails. A first macOS update without a cached ZIP downloads the full ZIP. The server must support HTTPS `Range` requests and return valid `206 Partial Content` responses with `Content-Range`; ordinary complete downloads return `200`. The same origin allowlist applies to metadata, payloads, blockmaps, and redirects. The client keeps the existing separate download and install confirmations.
+`feedUrl` must use a configured origin; HTTP and HTTPS are both supported. Windows reads `{feedUrl}/nightly.yml`, which points to the signed NSIS EXE. macOS reads `{feedUrl}/nightly-mac.yml`, which points to the signed and notarized arm64 ZIP; the DMG is for direct installation and is not an updater payload. The metadata includes the payload size and SHA-512. Windows serves an `.exe.blockmap`; macOS serves a `.zip.blockmap`. Electron may use these blockmaps to download changed ranges from the previous cached payload and falls back to the full EXE or ZIP when differential preparation fails. A first macOS update without a cached ZIP downloads the full ZIP. The server must support `Range` requests and return valid `206 Partial Content` responses with `Content-Range`; ordinary complete downloads return `200`. The same origin allowlist applies to metadata, payloads, blockmaps, and redirects. The client keeps the existing separate download and install confirmations.
 
 The backend implementation owns these public resources; it does not require a lifecycle telemetry endpoint:
 

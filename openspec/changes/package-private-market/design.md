@@ -43,7 +43,7 @@
 }
 ```
 
-`schemaVersion`、`environment` 和当前功能需要的 `plugins.privateMarket` 必填；该对象内的 `catalogUrl`、`registryUrl` 必须是无 userinfo/query/fragment 的 HTTPS URL，`catalogCredentialRef` 可省略，非空时必须符合 DSH credential reference 命名规则。当前消费的 `plugins.privateMarket` 内未知字段和不支持的 schema version 均拒绝。根对象按产品命名空间扩展：已知命名空间 `plugins` 当前只消费并严格校验 `privateMarket`；后续 Desktop 更新配置放入根级 `desktop` 命名空间，由后续变更定义字段和消费者。当前加载器允许其他产品/插件命名空间作为不透明 JSON 对象存在，但不校验其内部字段、不使用、不复制到构件或写入构建记录。这样部署配置可以先共享一个文件，而每个构建只提取自己认识的配置。解析器只提取 `plugins.privateMarket`，不得把完整 JSON 当作 runtime config 转发。`fallbackRegistries` 不放入该文件，沿用被运行/打包 DSH 的现有值与顺序。插件仓库地址也不放入环境文件：本地开发使用 sibling 路径，Desktop 构件以插件 tarball SHA-512 integrity 记录其确切制品，与部署环境配置分离。
+`schemaVersion`、`environment` 和当前功能需要的 `plugins.privateMarket` 必填；该对象内的 `catalogUrl`、`registryUrl` 必须是无 userinfo/query/fragment 的 HTTP 或 HTTPS URL，`catalogCredentialRef` 可省略，非空时必须符合 DSH credential reference 命名规则。当前消费的 `plugins.privateMarket` 内未知字段和不支持的 schema version 均拒绝。根对象按产品命名空间扩展：已知命名空间 `plugins` 当前只消费并严格校验 `privateMarket`；后续 Desktop 更新配置放入根级 `desktop` 命名空间，由后续变更定义字段和消费者。当前加载器允许其他产品/插件命名空间作为不透明 JSON 对象存在，但不校验其内部字段、不使用、不复制到构件或写入构建记录。这样部署配置可以先共享一个文件，而每个构建只提取自己认识的配置。解析器只提取 `plugins.privateMarket`，不得把完整 JSON 当作 runtime config 转发。`fallbackRegistries` 不放入该文件，沿用被运行/打包 DSH 的现有值与顺序。插件仓库地址也不放入环境文件：本地开发使用 sibling 路径，Desktop 构件以插件 tarball SHA-512 integrity 记录其确切制品，与部署环境配置分离。
 
 外部配置目录示例：
 

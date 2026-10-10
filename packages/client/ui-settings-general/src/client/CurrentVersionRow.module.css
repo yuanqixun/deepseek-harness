@@ -1,7 +1,20 @@
 .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 16px 0;
   color: var(--dsw-alias-label-primary);
   font-size: 14px;
   line-height: 22px;
   overflow-wrap: anywhere;
+}
+
+.version {
+  min-width: 0;
+}
+
+.action {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }

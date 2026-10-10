@@ -1,5 +1,6 @@
 export interface PrivateDesktopUpdateEnvironment {
   environment: string
+  distribution: string
   checkUrl: string
   channel: string
   feedOrigins: string[]

@@ -8,12 +8,12 @@
 
 ### Requirement: 私有更新仅由受支持构件显式启用
 
-Desktop 打包 SHALL 仅在选择命名环境时读取该环境的 `desktop.updates` 配置，并且只允许将该配置绑定到 Windows x64 或 macOS arm64 构件。配置 SHALL 包含 HTTPS 检测接口 URL、发布通道和一个或多个允许的 HTTPS feed 来源；不得包含用户名、密码或 API 密钥。未选择环境 SHALL 保持现有更新配置和策略来源不变。
+Desktop 打包 SHALL 仅在选择命名环境时读取该环境的 `desktop.updates` 配置，并且只允许将该配置绑定到 Windows x64 或 macOS arm64 构件。配置 SHALL 包含 HTTPS 检测接口 URL、发布通道和一个或多个允许的 HTTPS feed 来源；可选 `distribution` 指定客户端请求中的部署标识，未设置时使用所选环境名。配置不得包含用户名、密码或 API 密钥。未选择环境 SHALL 保持现有更新配置和策略来源不变。
 
 #### Scenario: 显式打包私有 Windows 或 macOS 环境
 
 - **WHEN** Windows x64 或 macOS arm64 打包命令选择有效的 `--config-env <name>`
-- **THEN** 构件仅包含所选环境的检测接口、通道和允许的 feed 来源
+- **THEN** 构件仅包含所选环境的部署标识、检测接口、通道和允许的 feed 来源
 - **AND** 构件不包含认证凭据或其他环境配置
 
 #### Scenario: 未选择私有环境

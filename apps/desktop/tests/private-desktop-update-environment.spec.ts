@@ -13,9 +13,9 @@ describe('private desktop update packaging configuration', () => {
     roots.push(root)
     mkdirSync(join(root, 'hxfl'))
     writeFileSync(join(root, 'hxfl', 'config.json'), JSON.stringify({ schemaVersion: 1, environment: 'hxfl',
-      desktop: { updates: { checkUrl: 'https://updates.example/v1/desktop/updates/check', channel: 'stable',
+      desktop: { updates: { distribution: 'dshwork', checkUrl: 'https://updates.example/v1/desktop/updates/check', channel: 'stable',
         feedOrigins: ['https://downloads.example'] } }, other: { token: 'not-copied' } }))
-    expect(readPrivateDesktopUpdates(root, 'hxfl')).toEqual({ environment: 'hxfl',
+    expect(readPrivateDesktopUpdates(root, 'hxfl')).toEqual({ environment: 'hxfl', distribution: 'dshwork',
       checkUrl: 'https://updates.example/v1/desktop/updates/check', channel: 'stable', feedOrigins: ['https://downloads.example'] })
   })
 
@@ -23,6 +23,7 @@ describe('private desktop update packaging configuration', () => {
     [{ checkUrl: 'http://updates.example/v1/desktop/updates/check', channel: 'stable', feedOrigins: ['https://downloads.example'] }, /HTTPS/u],
     [{ checkUrl: 'https://updates.example/check', channel: 'stable', feedOrigins: ['https://downloads.example'] }, /checkUrl/u],
     [{ checkUrl: 'https://updates.example/v1/desktop/updates/check', channel: 'Stable', feedOrigins: ['https://downloads.example'] }, /channel/u],
+    [{ distribution: 'DshWork', checkUrl: 'https://updates.example/v1/desktop/updates/check', channel: 'stable', feedOrigins: ['https://downloads.example'] }, /distribution/u],
     [{ checkUrl: 'https://updates.example/v1/desktop/updates/check', channel: 'stable', feedOrigins: ['https://downloads.example/path'] }, /origins/u],
   ])('rejects invalid deployment settings', (value, message) => {
     expect(() => resolvePrivateDesktopUpdates(value, 'hxfl')).toThrow(message)

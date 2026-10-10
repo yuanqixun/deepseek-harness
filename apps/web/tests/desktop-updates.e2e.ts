@@ -36,6 +36,7 @@ describe('web e2e: Desktop update workspace chrome', () => {
             dshDesktop: { protocolVersion: 1, updates: {
               status: async () => current,
               open: async () => { fixture.opens += 1 },
+              about: async () => {},
               subscribe(listener: (state: Presentation) => void) { listeners.add(listener); return () => listeners.delete(listener) },
             } },
           })

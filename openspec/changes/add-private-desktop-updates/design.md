@@ -26,7 +26,7 @@ Desktop 当前支持 Windows x64 和 macOS arm64/x64 发布构件。此私有更
 
 ### 用命名环境显式绑定私有服务
 
-复用 `--config-env <name>` 和 `$DSH_CONFIG_ENV_DIR/<name>/config.json`。在 `desktop.updates` 命名空间内读取检测接口 HTTPS URL、发布通道和允许的 feed HTTPS 来源。私有更新配置只适用于 `win32-x64` 和 `darwin-arm64`；显式配置却用于其他目标（包括 macOS x64）时，构建失败。URL 不包含用户名、密码、查询参数或片段，配置不保存秘密。未选择环境时不读取私有更新设置，现有官方/测试更新配置保持不变。
+复用 `--config-env <name>` 和 `$DSH_CONFIG_ENV_DIR/<name>/config.json`。在 `desktop.updates` 命名空间内读取 API 部署标识、检测接口 HTTPS URL、发布通道和允许的 feed HTTPS 来源；未设置 `distribution` 时使用所选环境名。私有更新配置只适用于 `win32-x64` 和 `darwin-arm64`；显式配置却用于其他目标（包括 macOS x64）时，构建失败。URL 不包含用户名、密码、查询参数或片段，配置不保存秘密。未选择环境时不读取私有更新设置，现有官方/测试更新配置保持不变。
 
 配置示例：
 
@@ -36,6 +36,7 @@ Desktop 当前支持 Windows x64 和 macOS arm64/x64 发布构件。此私有更
   "environment": "hxfl",
   "desktop": {
     "updates": {
+      "distribution": "dshwork",
       "checkUrl": "https://updates.example/v1/desktop/updates/check",
       "channel": "stable",
       "feedOrigins": ["https://downloads.example"]

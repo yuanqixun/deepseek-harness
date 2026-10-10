@@ -574,7 +574,7 @@ describe('desktop main startup', () => {
   })
 
   it('shows current-target release history in About and update notes before offering download', async () => {
-    harness.privateDesktopUpdates = { environment: 'hxfl', channel: 'stable',
+    harness.privateDesktopUpdates = { environment: 'hxfl', distribution: 'hxfl', channel: 'stable',
       checkUrl: 'https://updates.example/v1/desktop/updates/check', feedOrigins: ['https://downloads.example'] }
     vi.stubGlobal('fetch', vi.fn(async () => Response.json({ protocolVersion: 1, release: null,
       policy: { minimumSupportedVersion: null, forceAfter: null }, releaseHistory: [
@@ -602,7 +602,7 @@ describe('desktop main startup', () => {
   })
 
   it('keeps startup available when the private update service is offline and marks About history unavailable', async () => {
-    harness.privateDesktopUpdates = { environment: 'hxfl', channel: 'stable',
+    harness.privateDesktopUpdates = { environment: 'hxfl', distribution: 'hxfl', channel: 'stable',
       checkUrl: 'https://updates.example/v1/desktop/updates/check', feedOrigins: ['https://downloads.example'] }
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new Error('offline')))
     await readyForUpdate()

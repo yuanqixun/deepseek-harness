@@ -17,13 +17,13 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-function httpsUrl(value: unknown, field: string): string {
-  if (typeof value !== 'string') throw new Error(`config-env: ${field} must be an HTTPS URL`)
+function httpUrl(value: unknown, field: string): string {
+  if (typeof value !== 'string') throw new Error(`config-env: ${field} must be an HTTP or HTTPS URL`)
   let url: URL
   try { url = new URL(value) }
-  catch { throw new Error(`config-env: ${field} must be an HTTPS URL`) }
-  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.search !== '' || url.hash !== '') {
-    throw new Error(`config-env: ${field} must be an HTTPS URL without credentials, query, or fragment`)
+  catch { throw new Error(`config-env: ${field} must be an HTTP or HTTPS URL`) }
+  if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username !== '' || url.password !== '' || url.search !== '' || url.hash !== '') {
+    throw new Error(`config-env: ${field} must use HTTP or HTTPS without credentials, query, or fragment`)
   }
   return url.href
 }
@@ -71,8 +71,8 @@ export function readPrivateMarketEnvironment(
   const allowed = new Set(['catalogUrl', 'catalogCredentialRef', 'registryUrl'])
   const unknown = Object.keys(market).find(key => !allowed.has(key))
   if (unknown !== undefined) throw new Error(`config-env: unsupported plugins.privateMarket field ${unknown}`)
-  const catalogUrl = httpsUrl(market.catalogUrl, 'plugins.privateMarket.catalogUrl')
-  const registryUrl = httpsUrl(market.registryUrl, 'plugins.privateMarket.registryUrl')
+  const catalogUrl = httpUrl(market.catalogUrl, 'plugins.privateMarket.catalogUrl')
+  const registryUrl = httpUrl(market.registryUrl, 'plugins.privateMarket.registryUrl')
   const credential = market.catalogCredentialRef
   if (credential !== undefined && (typeof credential !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(credential))) {
     throw new Error('config-env: plugins.privateMarket.catalogCredentialRef must be a POSIX shell identifier')

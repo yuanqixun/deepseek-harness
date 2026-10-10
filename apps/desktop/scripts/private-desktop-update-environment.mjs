@@ -1,19 +1,23 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
+function isAllowedProtocol(url) {
+  return url.protocol === 'https:' || url.protocol === 'http:'
+}
+
 function origin(value, field) {
   let url
-  try { url = new URL(value) } catch { throw new Error(`desktop updates: ${field} must be an HTTPS URL`) }
-  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
-    throw new Error(`desktop updates: ${field} must use HTTPS without credentials, query, or fragment`)
+  try { url = new URL(value) } catch { throw new Error(`desktop updates: ${field} must be an HTTP or HTTPS URL`) }
+  if (!isAllowedProtocol(url) || url.username || url.password || url.search || url.hash) {
+    throw new Error(`desktop updates: ${field} must use HTTP or HTTPS without credentials, query, or fragment`)
   }
   return url
 }
 
 /** Validate selected public settings without exposing other environment data.
  * @param {unknown} value Parsed `desktop.updates` object.
- * @param {string} environment Selected distribution name.
- * @returns {{ environment: string, checkUrl: string, channel: string, feedOrigins: string[] }} Normalized public settings.
+ * @param {string} environment Selected named configuration directory.
+ * @returns {{ environment: string, distribution: string, checkUrl: string, channel: string, feedOrigins: string[] }} Normalized public settings.
  */
 export function resolvePrivateDesktopUpdates(value, environment) {
   if (!/^[a-z0-9][a-z0-9-]*$/u.test(environment)) throw new Error('desktop updates: invalid environment name')
@@ -21,26 +25,30 @@ export function resolvePrivateDesktopUpdates(value, environment) {
     throw new Error('desktop updates: configure checkUrl, channel, and nonempty feedOrigins')
   }
   const checkUrl = origin(value.checkUrl, 'checkUrl')
-  if (checkUrl.pathname !== '/v1/desktop/updates/check' || checkUrl.search || checkUrl.hash) {
-    throw new Error('desktop updates: checkUrl must use /v1/desktop/updates/check without query or fragment')
+  if (!['/v1/desktop/updates/check', '/app-api/v1/desktop/updates/check'].includes(checkUrl.pathname) || checkUrl.search || checkUrl.hash) {
+    throw new Error('desktop updates: checkUrl must use /v1/desktop/updates/check or /app-api/v1/desktop/updates/check without query or fragment')
   }
   if (typeof value.channel !== 'string' || !/^[a-z0-9][a-z0-9-]{0,31}$/u.test(value.channel)) {
     throw new Error('desktop updates: channel must be a lowercase identifier')
   }
-  const unknown = Object.keys(value).find(key => !['checkUrl', 'channel', 'feedOrigins'].includes(key))
+  const distribution = value.distribution ?? environment
+  if (typeof distribution !== 'string' || !/^[a-z0-9][a-z0-9-]*$/u.test(distribution)) {
+    throw new Error('desktop updates: distribution must be a lowercase identifier')
+  }
+  const unknown = Object.keys(value).find(key => !['distribution', 'checkUrl', 'channel', 'feedOrigins'].includes(key))
   if (unknown !== undefined) throw new Error(`desktop updates: unsupported field ${unknown}`)
   const feedOrigins = value.feedOrigins.map(item => {
     const url = origin(item, 'feedOrigins')
-    if (url.pathname !== '/' || url.search || url.hash) throw new Error('desktop updates: feedOrigins entries must be HTTPS origins')
+    if (url.pathname !== '/' || url.search || url.hash) throw new Error('desktop updates: feedOrigins entries must be origins without a path, query, or fragment')
     return url.origin
   })
-  return { environment, checkUrl: checkUrl.href, channel: value.channel, feedOrigins: [...new Set(feedOrigins)] }
+  return { environment, distribution, checkUrl: checkUrl.href, channel: value.channel, feedOrigins: [...new Set(feedOrigins)] }
 }
 
 /** Read only `desktop.updates` from the chosen named environment.
  * @param {string | undefined} configRoot Directory containing named environments.
- * @param {string} environment Selected distribution name.
- * @returns {{ environment: string, checkUrl: string, channel: string, feedOrigins: string[] }} Normalized public settings.
+ * @param {string} environment Selected named configuration directory.
+ * @returns {{ environment: string, distribution: string, checkUrl: string, channel: string, feedOrigins: string[] }} Normalized public settings.
  */
 export function readPrivateDesktopUpdates(configRoot, environment) {
   if (!/^[a-z0-9][a-z0-9-]*$/u.test(environment)) throw new Error('desktop updates: invalid environment name')

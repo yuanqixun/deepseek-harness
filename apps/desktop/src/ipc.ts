@@ -27,6 +27,7 @@ export const DESKTOP_IPC = {
   localeChanged: 'dsh-desktop:locale-changed',
   updatesStatus: 'dsh-desktop:updates-status',
   updatesOpen: 'dsh-desktop:updates-open',
+  updatesAbout: 'dsh-desktop:updates-about',
   updatesSetUserId: 'dsh-desktop:updates-set-user-id',
   updatesPresentation: 'dsh-desktop:updates-presentation',
   nativeThemeSet: 'dsh-desktop:native-theme-set',
@@ -86,6 +87,11 @@ export interface DshDesktopProductApi {
   readonly updates: {
     status(): Promise<DesktopUpdatePresentation>
     open(): Promise<void>
+    /**
+     * Open the shell-owned version and release-history dialog.
+     * @returns when the dialog closes.
+     */
+    about(): Promise<void>
     /** Set the optional current user ID for anonymous private update checks. */
     setUserId(userId: string | null): Promise<void>
     subscribe(listener: (state: DesktopUpdatePresentation) => void): () => void

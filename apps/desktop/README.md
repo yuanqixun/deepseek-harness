@@ -279,7 +279,9 @@ Set `DSH_CONFIG_ENV_DIR` and `DSH_CONFIG_ENV=hxfl` in `apps/desktop/.env.windows
 
 The macOS arm64 command requires Apple Silicon. The macOS x64 command runs on Intel macOS or Apple Silicon with Rosetta. The Windows x64 command requires Windows x64. Linux is not a supported Desktop release target.
 
-Each target owns its packed package inputs, prepared runtime, package set, dsh tree, and pnpm preparation state under `apps/desktop/.desktop-build/targets/<target>/`. Electron archives remain shared under `.desktop-build/downloads` because every archive name includes its version, platform, and architecture and is verified before extraction. Final artifacts and their release metadata are retained under `releases/<desktop-version>/<windows|macos>/<architecture>/`; Windows uses `x64`, while macOS uses `arm64` or `x64`. A target build never consumes another target's mutable preparation state.
+`build-macos.sh --internal-dmg <version>` builds an unsigned internal DMG without Apple signing or notarization credentials. It writes `deepseek-harness-<version>-mac-arm64-internal.dmg` under `releases/<version>/macos/arm64/internal/`; this local artifact does not include release metadata or qualify for upload.
+
+Each target owns its packed package inputs, prepared runtime, package set, dsh tree, and pnpm preparation state under `apps/desktop/.desktop-build/targets/<target>/`. Electron archives remain shared under `.desktop-build/downloads` because every archive name includes its version, platform, and architecture and is verified before extraction. Artifacts are retained under `releases/<desktop-version>/<windows|macos>/<architecture>/`; signed release artifacts also include release metadata. Windows uses `x64`, while macOS uses `arm64` or `x64`. A target build never consumes another target's mutable preparation state.
 
 ### Local macOS DMG without release signing
 

@@ -24,6 +24,7 @@ import { resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { resolveDesktopBuildVersion } from './desktop-build-version.mjs'
 import { resolveDesktopPolicyEnvironment } from './desktop-policy-environment.mjs'
 import {
+  desktopTargetInternalArtifactsDirectory,
   desktopTargetBuildPaths,
   desktopTargetReleaseArtifactsDirectory,
   resolveDesktopBuildTarget,
@@ -133,7 +134,7 @@ export function createElectronBuilderConfig(
     // Local artifacts carry their own suffix so they cannot pass for release builds.
     artifactName: `deepseek-harness-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : internalDmg ? '-internal' : ''}.\${ext}`,
     directories: { output: unsigned ? buildPaths.unsignedArtifacts
-      : internalDmg ? buildPaths.internalArtifacts : artifactsDirectory },
+      : internalDmg ? desktopTargetInternalArtifactsDirectory(target, buildVersion) : artifactsDirectory },
     asar: true,
     electronDist: buildPaths.electron,
     electronFuses: { runAsNode: true },

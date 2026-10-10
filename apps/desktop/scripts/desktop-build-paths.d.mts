@@ -5,7 +5,6 @@ export interface DesktopTargetBuildPaths {
   readonly root: string
   readonly artifacts: string
   readonly unsignedArtifacts: string
-  readonly internalArtifacts: string
   readonly runtime: string
   readonly packageSet: string
   readonly dsh: string
@@ -51,6 +50,7 @@ export function desktopReleasesRoot(): string
  * @returns The target's versioned artifact directory.
  */
 export function desktopTargetReleaseArtifactsDirectory(target: DesktopAutoUpdateTarget, version: string, releasesRoot?: string): string
+export function desktopTargetInternalArtifactsDirectory(target: DesktopAutoUpdateTarget, version: string): string
 
 /**
  * Return the platform and architecture of the payload one release target prepares.

@@ -1,7 +1,9 @@
 /** Validate the assembled application, including native Office conversion outside ASAR. */
 import { join } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
-import { resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { desktopTargetInternalArtifactsDirectory, resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
+import { resolveDesktopBuildVersion } from './desktop-build-version.mjs'
 import { readDesktopRuntime, verifyDesktopRuntime } from '../src/runtime-tree.ts'
 import { verifyWindowsCode } from './windows-runtime-signature.mjs'
 import { smokePreparedRuntime } from './smoke-prepared-runtime.ts'
@@ -16,7 +18,8 @@ if (values.unsigned && !['win-x64', 'mac-arm64', 'mac-x64'].includes(target)) {
 }
 if (values['internal-dmg'] && (windows || values.unsigned)) throw new Error('desktop smoke: internal disk images require macOS')
 const artifacts = values.unsigned ? paths.unsignedArtifacts
-  : values['internal-dmg'] ? paths.internalArtifacts
+  : values['internal-dmg'] ? desktopTargetInternalArtifactsDirectory(target, resolveDesktopBuildVersion(process.env,
+    JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version))
     : paths.artifacts
 const application = windows ? join(artifacts, 'win-unpacked')
   : join(artifacts, target === 'mac-arm64' ? 'mac-arm64' : 'mac', 'DeepSeek Harness.app', 'Contents')

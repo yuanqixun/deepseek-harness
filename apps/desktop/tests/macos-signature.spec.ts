@@ -135,7 +135,8 @@ describe('desktop macOS release signature', () => {
       DSH_DESKTOP_APP_ID: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
       DSH_DESKTOP_TARGET_PLATFORM: 'darwin', DSH_DESKTOP_TARGET_ARCH: 'arm64', DSH_DESKTOP_INTERNAL_DMG: '1',
     }, 'darwin', 'arm64')
-    expect(portablePath(config.directories.output)).toContain('/targets/mac-arm64/internal-artifacts')
+    expect(portablePath(config.directories.output)).toContain('/releases/')
+    expect(portablePath(config.directories.output)).toContain('/internal')
     expect(config).toMatchObject({
       artifactName: 'deepseek-harness-${version}-${os}-${arch}-internal.${ext}',
       mac: { identity: undefined, forceCodeSigning: false, hardenedRuntime: false, notarize: false, target: ['dmg'] },

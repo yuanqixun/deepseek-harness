@@ -281,7 +281,9 @@ pnpm run package:desktop:win:x64
 
 macOS arm64 命令要求 Apple Silicon。macOS x64 命令可以在 Intel macOS 或带 Rosetta 的 Apple Silicon 上运行。Windows x64 命令要求 Windows x64。Linux 不是受支持的 Desktop 发布目标。
 
-每个目标都在 `apps/desktop/.desktop-build/targets/<target>/` 下持有自己的打包输入、已准备运行时、包集合、dsh 依赖树和 pnpm 准备状态。Electron 归档缓存继续由 `.desktop-build/downloads` 共享，因为每个归档文件名都包含版本、平台和架构，并且在解包前经过验证。最终构件及其发布元数据保存在 `releases/<desktop-version>/<windows|macos>/<architecture>/`；Windows 使用 `x64`，macOS 使用 `arm64` 或 `x64`。目标构建绝不读取其他目标的可变准备状态。
+`build-macos.sh --internal-dmg <version>` 无需 Apple 签名或公证凭据即可构建未签名的内部 DMG。文件名为 `deepseek-harness-<version>-mac-arm64-internal.dmg`，保存在 `releases/<version>/macos/arm64/internal/` 下；此本地产物不包含发布元数据，也不能用于上传。
+
+每个目标都在 `apps/desktop/.desktop-build/targets/<target>/` 下持有自己的打包输入、已准备运行时、包集合、dsh 依赖树和 pnpm 准备状态。Electron 归档缓存继续由 `.desktop-build/downloads` 共享，因为每个归档文件名都包含版本、平台和架构，并且在解包前经过验证。构件保存在 `releases/<desktop-version>/<windows|macos>/<architecture>/` 下；签名发布构件还包含发布元数据。Windows 使用 `x64`，macOS 使用 `arm64` 或 `x64`。目标构建绝不读取其他目标的可变准备状态。
 
 ### 无发布签名的本地 macOS DMG
 

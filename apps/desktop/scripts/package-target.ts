@@ -11,6 +11,7 @@ import {
 import {
   desktopReleasesRoot,
   desktopTargetBuildPaths,
+  desktopTargetInternalArtifactsDirectory,
   desktopTargetReleaseArtifactsDirectory,
 } from './desktop-build-paths.mjs'
 import { packageMacOSArtifacts, type DesktopPrepackagedArtifact } from './package-macos.ts'
@@ -478,7 +479,8 @@ async function main(): Promise<void> {
     const paths = desktopTargetBuildPaths(target.name)
     const filename = `deepseek-harness-${buildVersion}-mac-${target.arch}${invocation.unsigned ? '-unsigned' : invocation.internalDmg ? '-internal' : ''}.dmg`
     console.log(`DMG: ${join(invocation.unsigned ? paths.unsignedArtifacts
-      : invocation.internalDmg ? paths.internalArtifacts : desktopTargetReleaseArtifactsDirectory(target.name, buildVersion), filename)}`)
+      : invocation.internalDmg ? desktopTargetInternalArtifactsDirectory(target.name, buildVersion)
+        : desktopTargetReleaseArtifactsDirectory(target.name, buildVersion), filename)}`)
   }
 }
 
@@ -506,7 +508,7 @@ export async function packageTarget(
   const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   const buildVersion = resolveDesktopBuildVersion(environment, productVersion)
   const artifactsRoot = invocation.unsigned ? buildPaths.unsignedArtifacts
-    : invocation.internalDmg ? buildPaths.internalArtifacts
+    : invocation.internalDmg ? desktopTargetInternalArtifactsDirectory(target.name, buildVersion)
       : desktopTargetReleaseArtifactsDirectory(target.name, buildVersion)
   const releaseRecordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
   if (!invocation.prepareOnly && !invocation.unsigned && !invocation.internalDmg) {

@@ -40,7 +40,7 @@ function assertSupportedTarget(target) {
 /**
  * Return the build and local artifact directories owned by one release target.
  * @param {'mac-arm64' | 'mac-x64' | 'win-x64'} target - Supported Desktop target name.
- * @returns {{ root: string, artifacts: string, unsignedArtifacts: string, internalArtifacts: string, runtime: string, packageSet: string, dsh: string, dshPnpm: string, electron: string, packedDsh: string, packedVendor: string, packedLandlock: string, downloads: string }} Preparation and local artifact paths plus the shared immutable download cache.
+ * @returns {{ root: string, artifacts: string, unsignedArtifacts: string, runtime: string, packageSet: string, dsh: string, dshPnpm: string, electron: string, packedDsh: string, packedVendor: string, packedLandlock: string, downloads: string }} Preparation and local artifact paths plus the shared immutable download cache.
  */
 export function desktopTargetBuildPaths(target) {
   assertSupportedTarget(target)
@@ -50,7 +50,6 @@ export function desktopTargetBuildPaths(target) {
     root,
     artifacts: join(root, 'artifacts'),
     unsignedArtifacts: join(root, 'unsigned-artifacts'),
-    internalArtifacts: join(root, 'internal-artifacts'),
     runtime: join(root, 'runtime'),
     packageSet: join(root, 'package-set'),
     dsh: join(root, 'dsh'),
@@ -86,6 +85,16 @@ export function desktopTargetReleaseArtifactsDirectory(target, version, releases
   const platform = target === 'win-x64' ? 'windows' : 'macos'
   const arch = target === 'mac-arm64' ? 'arm64' : 'x64'
   return join(releasesRoot, version, platform, arch)
+}
+
+/**
+ * Return the isolated directory for an unsigned internal build under the target's release version.
+ * @param {'mac-arm64' | 'mac-x64' | 'win-x64'} target - Supported release target.
+ * @param {string} version - Validated Desktop build version.
+ * @returns The directory for local internal artifacts.
+ */
+export function desktopTargetInternalArtifactsDirectory(target, version) {
+  return join(desktopTargetReleaseArtifactsDirectory(target, version), 'internal')
 }
 
 /**

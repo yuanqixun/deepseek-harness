@@ -38,9 +38,9 @@ function assertSupportedTarget(target) {
 }
 
 /**
- * Return the mutable preparation directories owned by one release target.
+ * Return the build and local artifact directories owned by one release target.
  * @param {'mac-arm64' | 'mac-x64' | 'win-x64'} target - Supported Desktop target name.
- * @returns {{ root: string, runtime: string, packageSet: string, dsh: string, dshPnpm: string, electron: string, packedDsh: string, packedVendor: string, packedLandlock: string, downloads: string }} Preparation paths plus the shared immutable download cache.
+ * @returns {{ root: string, artifacts: string, unsignedArtifacts: string, internalArtifacts: string, runtime: string, packageSet: string, dsh: string, dshPnpm: string, electron: string, packedDsh: string, packedVendor: string, packedLandlock: string, downloads: string }} Preparation and local artifact paths plus the shared immutable download cache.
  */
 export function desktopTargetBuildPaths(target) {
   assertSupportedTarget(target)
@@ -48,6 +48,9 @@ export function desktopTargetBuildPaths(target) {
   const packed = join(root, 'packed')
   return {
     root,
+    artifacts: join(root, 'artifacts'),
+    unsignedArtifacts: join(root, 'unsigned-artifacts'),
+    internalArtifacts: join(root, 'internal-artifacts'),
     runtime: join(root, 'runtime'),
     packageSet: join(root, 'package-set'),
     dsh: join(root, 'dsh'),

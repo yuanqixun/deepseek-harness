@@ -66,7 +66,9 @@ export function createElectronBuilderConfig(
     throw new Error('desktop package: DSH_DESKTOP_INTERNAL_DMG must be 0 or 1')
   }
   const internalDmg = env.DSH_DESKTOP_INTERNAL_DMG === '1'
-  if (unsigned && resolvedPlatform !== 'win32') throw new Error('desktop package: unsigned builds require Windows')
+  if (unsigned && !['win32', 'darwin'].includes(resolvedPlatform)) {
+    throw new Error('desktop package: unsigned builds require macOS or Windows')
+  }
   if (internalDmg && (resolvedPlatform !== 'darwin' || resolvedArch !== 'arm64' || unsigned)) {
     throw new Error('desktop package: internal disk images require unsigned mac-arm64 packaging')
   }
@@ -75,12 +77,13 @@ export function createElectronBuilderConfig(
   if (privateDesktopUpdates !== undefined && (resolvedPlatform !== 'win32' || resolvedArch !== 'x64')) {
     throw new Error('desktop package: private desktop updates require win32-x64')
   }
-  const policy = internalDmg || privateDesktopUpdates !== undefined ? undefined : resolveDesktopPolicyEnvironment(env)
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = resolvedPlatform === 'win32'
+  const policy = (packagesMacOS && unsigned) || internalDmg || privateDesktopUpdates !== undefined
+    ? undefined : resolveDesktopPolicyEnvironment(env)
   if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()
-  const macOSSigning = packagesMacOS && !internalDmg ? resolveMacOSSigningEnvironment(env) : undefined
-  if (packagesMacOS && !internalDmg) resolveMacOSNotarizationEnvironment(env)
+  const macOSSigning = packagesMacOS && !unsigned && !internalDmg ? resolveMacOSSigningEnvironment(env) : undefined
+  if (packagesMacOS && !unsigned && !internalDmg) resolveMacOSNotarizationEnvironment(env)
   const target = resolveDesktopBuildTarget(env, hostPlatform, hostArch)
   const buildPaths = desktopTargetBuildPaths(target)
   let primaryRuntimeDestination
@@ -129,7 +132,8 @@ export function createElectronBuilderConfig(
     productName: 'DeepSeek Harness',
     // Local artifacts carry their own suffix so they cannot pass for release builds.
     artifactName: `deepseek-harness-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : internalDmg ? '-internal' : ''}.\${ext}`,
-    directories: { output: artifactsDirectory },
+    directories: { output: unsigned ? buildPaths.unsignedArtifacts
+      : internalDmg ? buildPaths.internalArtifacts : artifactsDirectory },
     asar: true,
     electronDist: buildPaths.electron,
     electronFuses: { runAsNode: true },
@@ -170,21 +174,24 @@ export function createElectronBuilderConfig(
     mac: {
       icon: fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
       category: 'public.app-category.developer-tools',
-      // macOS matches the application locale against this bundle, not Electron Framework resources.
-      extendInfo: { CFBundleLocalizations: ['en', 'zh_CN'] },
-      identity: macOSSigning?.signingIdentity,
-      forceCodeSigning: !internalDmg,
+      // macOS matches localization and microphone descriptions against the application bundle.
+      // Ad-hoc signing keeps a local modified Electron executable runnable without a Developer ID.
+      identity: unsigned ? '-' : macOSSigning?.signingIdentity,
+      forceCodeSigning: !unsigned && !internalDmg,
       hardenedRuntime: !internalDmg,
-      extendInfo: { NSMicrophoneUsageDescription: 'DeepSeek Harness uses your microphone to transcribe speech into message drafts.' },
+      extendInfo: {
+        CFBundleLocalizations: ['en', 'zh_CN'],
+        NSMicrophoneUsageDescription: 'DeepSeek Harness uses your microphone to transcribe speech into message drafts.',
+      },
       entitlements: fileURLToPath(new URL('./macos-entitlements.plist', import.meta.url)),
       entitlementsInherit: fileURLToPath(new URL('./macos-entitlements.plist', import.meta.url)),
-      // ASAR-unpacked native runtime files are pre-signed; PAK resources are sealed by their enclosing bundle.
+      // Prepared runtime files retain their signatures; PAK resources are sealed by their enclosing bundle.
       signIgnore: ['/Contents/Resources/app\\.asar\\.unpacked/dsh(?:/|$)', '/Contents/Resources/runtime/primary-runtime(?:/|$)', '\\.pak$'],
-      notarize: !internalDmg,
-      target: internalDmg ? ['dmg'] : ['dmg', 'zip'],
+      notarize: !unsigned && !internalDmg,
+      target: unsigned || internalDmg ? ['dmg'] : ['dmg', 'zip'],
     },
     dmg: {
-      sign: !internalDmg,
+      sign: !unsigned && !internalDmg,
       writeUpdateInfo: false,
     },
     beforePack: async context => {
@@ -224,8 +231,7 @@ export function createElectronBuilderConfig(
         })
         await verifyWindowsAsarUnpack(buildPaths.dsh, context.packager.getResourcesDir(context.appOutDir), windowsCode)
       }
-      if (context.electronPlatformName !== 'darwin') return
-      if (internalDmg) return
+      if (context.electronPlatformName !== 'darwin' || unsigned || internalDmg) return
       const appPath = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
       if (update !== undefined) {
         await verifyMacOSAppUpdateConfig(appPath, resolveMacOSAppUpdateFeed(context.packager.config.publish),
@@ -234,8 +240,7 @@ export function createElectronBuilderConfig(
       verifyMacOSSignatureAfterSign(context, macOSSigning ?? resolveMacOSSigningEnvironment(env))
     },
     artifactBuildCompleted: artifact => {
-      if (internalDmg) return
-      if (!artifact.file.endsWith('.dmg')) return
+      if (unsigned || internalDmg || !artifact.file.endsWith('.dmg')) return
       return notarizeMacOSDiskImageArtifact(
         artifact,
         env,

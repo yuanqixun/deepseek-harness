@@ -118,8 +118,35 @@ it('creates an internal macOS disk image without notarization or a release recor
   await packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--internal-dmg'], 'darwin', 'arm64'), environment, run)
   expect(stages).toContain('exec electron-builder --config electron-builder.config.mjs --mac --arm64 --publish never')
   expect(stages.at(-1)).toBe('exec tsx scripts/smoke-packaged-runtime.ts --internal-dmg')
+})
+
+it.each([
+  ['mac-arm64', false], ['mac-arm64', true], ['mac-x64', false], ['mac-x64', true],
+] as const)('builds unsigned %s with directory=%s without Apple credentials, notarization, or a release record', async (target, directory) => {
+  const { run, stages } = supervisor()
+  await packageTarget(parseDesktopPackageInvocation([target, '--unsigned', ...(directory ? ['--dir'] : [])], 'darwin', 'arm64'), {
+    ...environment, CSC_LINK: 'unused.p12', CSC_KEY_PASSWORD: 'unused-secret', APPLE_API_KEY: 'unused.p8',
+    DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Unused identity', DSH_DESKTOP_MACOS_TEAM_ID: 'TEAMID1234',
+  }, run)
+  expect(stages.at(-2)).toBe(`exec electron-builder --config electron-builder.config.mjs --mac --${target === 'mac-arm64' ? 'arm64' : 'x64'} --publish never${directory ? ' --dir' : ''}`)
+  expect(stages.at(-1)).toBe('exec tsx scripts/smoke-packaged-runtime.ts --unsigned')
+  for (const call of run.run.mock.calls) {
+    expect(call[3].env).toMatchObject({ DSH_DESKTOP_UNSIGNED: '1', CSC_IDENTITY_AUTO_DISCOVERY: 'false' })
+    for (const key of ['CSC_LINK', 'CSC_KEY_PASSWORD', 'APPLE_API_KEY', 'DSH_DESKTOP_MACOS_SIGNING_IDENTITY', 'DSH_DESKTOP_MACOS_TEAM_ID']) {
+      expect(call[3].env).not.toHaveProperty(key)
+    }
+  }
   expect(withMacOSNotarizationProxy).not.toHaveBeenCalled()
   expect(packageMacOSArtifacts).not.toHaveBeenCalled()
+  expect(writeFileSync).not.toHaveBeenCalled()
+})
+
+
+it('fails unsigned macOS packaging when the assembled runtime cannot run', async () => {
+  const { run, stages } = supervisor('exec tsx scripts/smoke-packaged-runtime.ts --unsigned')
+  await expect(packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--unsigned'], 'darwin', 'arm64'), environment, run))
+    .rejects.toThrow('stage refused')
+  expect(stages.at(-1)).toBe('exec tsx scripts/smoke-packaged-runtime.ts --unsigned')
   expect(writeFileSync).not.toHaveBeenCalled()
 })
 

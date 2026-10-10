@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  assertPrivateDesktopUpdateTarget,
   desktopElectronBuilderArguments,
   desktopElectronBuilderEnvironment,
   parseDesktopPackageInvocation,
@@ -66,6 +67,12 @@ describe('desktop package target', () => {
     expect(parseDesktopPackageInvocation(['mac-arm64'], 'darwin', 'arm64').configEnvironment).toBeUndefined()
     expect(() => parseDesktopPackageInvocation(['mac-arm64', '--config-env'], 'darwin', 'arm64'))
       .toThrow(/config-env.*argument missing/u)
+  })
+
+  it('limits private updates to Windows x64 and macOS arm64', () => {
+    expect(() => assertPrivateDesktopUpdateTarget(resolveDesktopPackageTarget('mac-arm64', 'darwin', 'arm64'))).not.toThrow()
+    expect(() => assertPrivateDesktopUpdateTarget(resolveDesktopPackageTarget('win-x64', 'win32', 'x64'))).not.toThrow()
+    expect(() => assertPrivateDesktopUpdateTarget(resolveDesktopPackageTarget('mac-x64', 'darwin', 'arm64'))).toThrow(/win-x64 or mac-arm64/u)
   })
 
   it('keeps electron-builder publishing disabled for the separate validated upload', () => {

@@ -8,7 +8,7 @@ The desktop application is an Electron shell around the complete dsh Web applica
 
 Desktop binds `127.0.0.1`, the address Electron dials for the ready URL and the WebSocket credential filter. WebSocket streams use `ws:` or `wss:` according to the Host listener; credentials require matching authority and scheme.
 
-The first application-menu command, **About DeepSeek Harness**, opens Electron's native About panel with the application icon, product name, and installed release version. The menu follows the Desktop shell locale. On macOS, Hide, Hide Others, Show All, and Quit use localized labels; Hide and Quit include the DeepSeek Harness product name. These commands retain their native actions and shortcuts. macOS reads the icon from its application bundle, so an unpackaged development launch displays Electron's icon; Windows receives the packaged PNG.
+The first application-menu command, **About DeepSeek Harness**, opens a Desktop-owned dialog with the product name, installed release version, and available release history. The history shows only releases for the current platform and architecture; when history is loading or unavailable, the dialog identifies that state and still shows the installed version. The dialog follows the Desktop shell locale and includes a manual update check. On macOS, Hide, Hide Others, Show All, and Quit use localized labels; Hide and Quit include the DeepSeek Harness product name. These commands retain their native actions and shortcuts.
 
 Desktop’s local native directory flow opens an Electron folder dialog attached to the application window, restoring, showing, and focusing that window first. Concurrent requests share one dialog; cancellation returns no path and failures remain retryable. Ordinary Web uses the Host chooser. Browse mode lists Host directories. On Linux without zenity or kdialog, automatic selection uses browse instead of the Electron dialog.
 
@@ -501,26 +501,51 @@ Packaged applications check fixed Nightly asynchronously at startup. Ordinary po
 
 `DSH_DESKTOP_UPDATE_CHECK_INTERVAL_MS` configures the ordinary base interval, and `DSH_DESKTOP_UPDATE_CHECK_MAX_BACKOFF_MS` configures the cap; both accept integer milliseconds from 1000 through 2147483647, with the cap at least the interval. An omitted cap defaults to the larger of one hour and the interval. `DSH_DESKTOP_UPDATE_CHECK_JITTER` sets the fractional jitter from 0 through 1, defaulting to `0.2`; the final delay is at least one second and never exceeds the cap. These settings do not change mandatory-policy polling or authorize download retries.
 
-The lower-left account row displays localized availability, a spinner with download percentage, verification, readiness, or a persistent red retry action with an accessible tooltip. This Web-embedded copy follows the active in-application language; native dialogs use the Desktop shell locale. The collapsed sidebar shows a dot on its top expand button. Connection status takes priority. Selecting an available release starts downloading immediately. Successful preparation automatically opens a shell-owned restart confirmation; closing it retains readiness without reopening the dialog. Selecting the ready entry opens confirmation again. Running agents, queued input, and running or stopping jobs trigger an interruption warning in that confirmation. API requests alone do not trigger the warning. After approval, the Host locks new requests, drains admitted requests, and rechecks tasks, including work created by an admitted write. A drain that exceeds the control-request deadline refuses installation and unlocks admission. Unknown task status, newly started work without interruption approval, or unsuccessful graceful teardown prevents installation. Ordinary quit asks about interruptible work as described under Closing the window and quitting, then hides the product window before stopping the Host, ignores new focus requests during teardown, and never installs an update. The next launch reconciles the version-bound runtime through the existing startup and recovery path.
+The lower-left account row displays localized availability, a spinner with download percentage, verification, readiness, or a persistent red retry action with an accessible tooltip. This Web-embedded copy follows the active in-application language; native dialogs use the Desktop shell locale. The collapsed sidebar shows a dot on its top expand button. Connection status takes priority. Selecting an available release opens a confirmation with its release notes and a separate download action; no package downloads until the user chooses it. Successful preparation automatically opens a shell-owned restart confirmation; closing it retains readiness without reopening the dialog. Selecting the ready entry opens confirmation again. Running agents, queued input, and running or stopping jobs trigger an interruption warning in that confirmation. API requests alone do not trigger the warning. After approval, the Host locks new requests, drains admitted requests, and rechecks tasks, including work created by an admitted write. A drain that exceeds the control-request deadline refuses installation and unlocks admission. Unknown task status, newly started work without interruption approval, or unsuccessful graceful teardown prevents installation. Ordinary quit asks about interruptible work as described under Closing the window and quitting, then hides the product window before stopping the Host, ignores new focus requests during teardown, and never installs an update. The next launch reconciles the version-bound runtime through the existing startup and recovery path.
 
 If task teardown fails after confirmed Host exit, installation is refused and the shell restores the current-version Host before allowing another restart confirmation. Installer launch failure after a clean Host stop uses the same recovery. After the replacement Host authenticates, the shell reloads the existing application URL so the Web page obtains its current port, cookie, and boot injections; page-load failure opens native fatal recovery. An unconfirmed process exit never permits a replacement Host. The downloaded target remains available for retry. A known mandatory policy remains blocking throughout recovery; unsuccessful Host restoration opens the native fatal-recovery dialog.
 
 Confirmed Host exit without successful task teardown displays localized recovery guidance in both ordinary and mandatory update dialogs. A typed preparation cause selects that guidance in each locale; changing translated wording cannot reclassify the failure. “View technical details” is collapsed by default and exposes only exit status, signal, shutdown acknowledgement, and deadline facts, not plugin stderr. Expanding it neither retries nor authorizes installation.
 
-### Private Windows update interface
+### Private Windows and macOS update interface
 
-The private configuration replaces the ordinary update-policy service only in the selected Windows x64 build. The response must include `protocolVersion: 1`, `release` (`null` or `{ "version": "1.2.4", "feedUrl": "https://downloads.example/hxfl/stable/win-x64/" }`), and `policy` with `minimumSupportedVersion` and `forceAfter`. Both policy fields are `null` to clear a known force decision; otherwise they are a semantic version and an RFC 3339 UTC deadline. An outdated client whose deadline has passed must receive a compatible release. Invalid responses and service failures retain any known force decision.
+The private configuration replaces the ordinary update-policy service only in the selected Windows x64 or macOS arm64 build. Both platforms use the same `POST /v1/desktop/updates/check` protocol. The request reports the packaged platform and architecture so the service can select the correct release and record version distribution. The response must include `protocolVersion: 1`, `release` (`null` or a version and `feedUrl`), and `policy` with `minimumSupportedVersion` and `forceAfter`. Both policy fields are `null` to clear a known force decision; otherwise they are a semantic version and an RFC 3339 UTC deadline. An outdated client whose deadline has passed must receive a compatible release. The optional `releaseHistory` array contains platform- and architecture-specific entries with `version`, `platform`, `arch`, and `releaseNotes.zh_CN`/`releaseNotes.en_US`. Older responses may omit it; an omitted or empty list does not invalidate an update decision. Invalid responses and service failures retain any known force decision.
 
-`feedUrl` must use a configured HTTPS origin. Electron then reads `{feedUrl}/nightly.yml`; that YAML points to the signed NSIS installer and SHA-512 digest and may provide a `.blockmap`. The same origin allowlist applies to YAML, installer, blockmap, and redirects. Existing Electron download preparation retains differential downloads and its full-installer fallback. The client keeps the existing separate download and install confirmations.
+Example check response:
+
+```json
+{
+  "protocolVersion": 1,
+  "release": {
+    "version": "1.2.4",
+    "feedUrl": "https://downloads.example/hxfl/stable/win-x64/"
+  },
+  "policy": { "minimumSupportedVersion": null, "forceAfter": null },
+  "releaseHistory": [
+    {
+      "version": "1.2.4",
+      "platform": "win32",
+      "arch": "x64",
+      "releaseNotes": {
+        "zh_CN": "修复稳定性问题。",
+        "en_US": "Fixes stability issues."
+      }
+    }
+  ]
+}
+```
+
+`feedUrl` must use a configured HTTPS origin. Windows reads `{feedUrl}/nightly.yml`, which points to the signed NSIS EXE. macOS reads `{feedUrl}/nightly-mac.yml`, which points to the signed and notarized arm64 ZIP; the DMG is for direct installation and is not an updater payload. The metadata includes the payload size and SHA-512. Windows serves an `.exe.blockmap`; macOS serves a `.zip.blockmap`. Electron may use these blockmaps to download changed ranges from the previous cached payload and falls back to the full EXE or ZIP when differential preparation fails. A first macOS update without a cached ZIP downloads the full ZIP. The server must support HTTPS `Range` requests and return valid `206 Partial Content` responses with `Content-Range`; ordinary complete downloads return `200`. The same origin allowlist applies to metadata, payloads, blockmaps, and redirects. The client keeps the existing separate download and install confirmations.
 
 The backend implementation owns these public resources; it does not require a lifecycle telemetry endpoint:
 
 | Method and path | Purpose |
 |---|---|
-| `POST /v1/desktop/updates/check` | Receive distribution, channel, Desktop/platform/architecture/dsh versions, and optional `userId`; return release selection and force policy. |
-| `GET {feedUrl}/nightly.yml` | Return Electron generic channel metadata, installer URL, size, and SHA-512. |
-| `GET {artifactUrl}` | Serve the signed Windows NSIS installer anonymously over HTTPS. |
-| `GET {artifactUrl}.blockmap` | Optional differential-download metadata; Electron falls back to the full installer when differential preparation fails. |
+| `POST /v1/desktop/updates/check` | Receive distribution, channel, Desktop/platform/architecture/dsh versions, and optional `userId`; return release selection, force policy, and optional release history for the requested target. |
+| `GET {feedUrl}/nightly.yml` | Return Windows Electron generic channel metadata for the EXE, size, and SHA-512. |
+| `GET {feedUrl}/nightly-mac.yml` | Return macOS Electron generic channel metadata for the arm64 ZIP, size, and SHA-512. |
+| `GET {artifactUrl}` | Serve the signed Windows EXE or signed and notarized macOS ZIP anonymously over HTTPS; support byte ranges for differential requests. |
+| `GET {artifactUrl}.blockmap` | Serve the matching platform blockmap; differential failure falls back to the complete updater payload. |
 
 The server controls pauses, rollout percentage, minimum supported version, and force deadline. It should keep cohort assignment stable for a given `userId`; clients without one receive a release only after full rollout. The check request is the version-statistics record. DSH does not send separate download or installation events.
 

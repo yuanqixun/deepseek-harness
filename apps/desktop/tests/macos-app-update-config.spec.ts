@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { createElectronBuilderConfig } from '../scripts/electron-builder-config.mjs'
 import {
   createMacOSAppUpdateConfig,
   resolveMacOSAppUpdateFeed,
@@ -26,6 +27,27 @@ afterEach(async () => {
 })
 
 describe('macOS packaged updater configuration', () => {
+  it('keeps electron-builder publishing disabled while configuring a local private update feed', () => {
+    const config = createElectronBuilderConfig({
+      DSH_DESKTOP_APP_ID: 'com.example.desktop',
+      DSH_DESKTOP_TARGET_PLATFORM: 'darwin',
+      DSH_DESKTOP_TARGET_ARCH: 'arm64',
+      DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example Developer ID',
+      DSH_DESKTOP_MACOS_TEAM_ID: 'ABCDEFGHIJ',
+      APPLE_KEYCHAIN_PROFILE: 'notary-profile',
+      DSH_DESKTOP_PRIVATE_UPDATE_CONFIG: JSON.stringify({ feedOrigins: ['https://downloads.example'] }),
+    }, 'darwin', 'arm64')
+    expect(config.publish).toEqual([{ provider: 'generic', url: 'https://downloads.example', channel: 'nightly' }])
+    expect(config.extraMetadata).toMatchObject({ dshPrivateDesktopUpdates: { feedOrigins: ['https://downloads.example'] } })
+  })
+
+  it('rejects private update configuration for macOS x64', () => {
+    expect(() => createElectronBuilderConfig({
+      DSH_DESKTOP_APP_ID: 'com.example.desktop', DSH_DESKTOP_TARGET_PLATFORM: 'darwin', DSH_DESKTOP_TARGET_ARCH: 'x64',
+      DSH_DESKTOP_PRIVATE_UPDATE_CONFIG: JSON.stringify({ feedOrigins: ['https://downloads.example'] }),
+    }, 'darwin', 'arm64')).toThrow(/darwin-arm64/u)
+  })
+
   it('uses the final generic Nightly provider configured for the build', () => {
     expect(resolveMacOSAppUpdateFeed([{ provider: 'generic', url: update.publicUrl, channel: 'nightly' }]))
       .toEqual(update)

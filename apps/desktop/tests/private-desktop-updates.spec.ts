@@ -42,12 +42,50 @@ describe('private desktop update protocol', () => {
     expect(setFeedURL).toHaveBeenCalledWith({ provider: 'generic', url: release.feedUrl, channel: 'nightly' })
   })
 
+  it('reports the packaged macOS arm64 platform to the version service', async () => {
+    const request = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response(decision()))
+    const client = new PrivateDesktopUpdateClient(config, '1.2.3', '0.8.0', vi.fn(), request, 'darwin', 'arm64')
+    await client.check()
+    expect(JSON.parse(String(request.mock.calls[0]?.[1]?.body))).toMatchObject({
+      client: { platform: 'darwin', arch: 'arm64' },
+    })
+  })
+
   it('coalesces policy and updater callers into one service request', async () => {
     const release = { version: '1.2.4', feedUrl: 'https://downloads.example/hxfl/stable/win-x64/' }
     const request = vi.fn(async () => response(decision(release)))
     const client = new PrivateDesktopUpdateClient(config, '1.2.3', '0.8.0', vi.fn(), request)
     await Promise.all([client.check('launch'), client.prepare(updater)])
     expect(request).toHaveBeenCalledOnce()
+  })
+
+  it('accepts older responses without history and returns sorted notes for the packaged target', async () => {
+    const oldClient = new PrivateDesktopUpdateClient(config, '1.2.3', '0.8.0', vi.fn(),
+      async () => response(decision()))
+    await oldClient.check()
+    expect(oldClient.releaseHistory).toEqual([])
+
+    const releaseHistory = [
+      { version: '1.2.1', platform: 'win32', arch: 'x64', releaseNotes: { zh_CN: '旧版本', en_US: 'Older release' } },
+      { version: '1.2.4', platform: 'darwin', arch: 'arm64', releaseNotes: { zh_CN: 'Mac 版本', en_US: 'Mac release' } },
+      { version: '1.2.3', platform: 'win32', arch: 'x64', releaseNotes: { zh_CN: '当前版本', en_US: 'Current release' } },
+      { version: '1.2.2', platform: 'win32', arch: 'arm64', releaseNotes: { zh_CN: '其他架构', en_US: 'Other architecture' } },
+    ]
+    const client = new PrivateDesktopUpdateClient(config, '1.2.3', '0.8.0', vi.fn(),
+      async () => response({ ...decision(), releaseHistory }))
+    await client.check()
+    expect(client.releaseHistory).toEqual([releaseHistory[2], releaseHistory[0]])
+  })
+
+  it('rejects malformed history without changing the last valid release notes', async () => {
+    const validHistory = [{ version: '1.2.3', platform: 'win32', arch: 'x64',
+      releaseNotes: { zh_CN: '稳定性改进', en_US: 'Stability improvements' } }]
+    const request = vi.fn(async () => response({ ...decision(), releaseHistory: validHistory }))
+    const client = new PrivateDesktopUpdateClient(config, '1.2.3', '0.8.0', vi.fn(), request)
+    await client.check()
+    request.mockImplementationOnce(async () => response({ ...decision(), releaseHistory: [{ version: 'invalid' }] }))
+    await expect(client.prepare(updater)).rejects.toThrow(/release history entry/u)
+    expect(client.releaseHistory).toEqual(validHistory)
   })
 
   it('rejects foreign feeds and malformed force policies without clearing a known block', async () => {

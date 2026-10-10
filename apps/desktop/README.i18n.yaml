@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write apps/desktop/README.md
 /deepseek-harness-desktop:
-  en: 5b8518fd5e0030ef
-  zh: 02efee59c39647dc
+  en: b197a2ea3211eb88
+  zh: 82c51a3658c5ba7f
 /deepseek-harness-desktop/terminal-command:
   en: bef92953c237363f
   zh: d21d6effd21b8c00
@@ -69,11 +69,11 @@
   en: 9a71990bee9867a7
   zh: 76c5c1fdff6e6908
 /deepseek-harness-desktop/updates:
-  en: d0df867b69cbffa4
-  zh: eeb47b79b86fe5ee
-/deepseek-harness-desktop/updates/private-windows-update-interface:
-  en: cbe076228d40c9b5
-  zh: c3f0a0f274746b3d
+  en: fd606916df74c9a4
+  zh: 7829ccc26c5348b0
+/deepseek-harness-desktop/updates/private-windows-and-macos-update-interface:
+  en: b6cea2fda9072e7c
+  zh: c8860128670b9798
 /deepseek-harness-desktop/updates/local-desktop-settings:
   en: 2e57457c44c85b5f
   zh: 5b8510a3dc4c6c9d

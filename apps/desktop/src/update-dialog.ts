@@ -6,6 +6,19 @@ import type { DesktopUpdateOverlays } from './update-overlay.ts'
 /** Channels available only to the isolated update-dialog document. */
 export const UPDATE_DIALOG_IPC = { status: 'dsh-update-dialog:status', changed: 'dsh-update-dialog:changed', respond: 'dsh-update-dialog:respond' } as const
 
+/** One localized release record displayed in the shell-owned About dialog. */
+export interface UpdateDialogRelease {
+  readonly version: string
+  readonly releaseNotes: string
+}
+
+/** Localized history heading, empty state, and validated current-target releases. */
+export interface UpdateDialogReleaseHistory {
+  readonly title: string
+  readonly empty: string
+  readonly entries: readonly UpdateDialogRelease[]
+}
+
 /** Text and choices supplied by the main process, never by product documents. */
 export interface UpdateDialogView {
   /** Identifies the displayed choices; a response from an older prompt is rejected. */
@@ -19,11 +32,13 @@ export interface UpdateDialogView {
   readonly closeLabel: string
   readonly technicalDetails: string
   readonly technicalDetailsLabel: string
+  readonly releaseHistory?: UpdateDialogReleaseHistory
 }
 
 /** Electron message options with separately expandable, main-owned diagnostics. */
 export interface UpdateDialogOptions extends MessageBoxOptions {
   readonly technicalDetails?: string
+  readonly releaseHistory?: UpdateDialogReleaseHistory
 }
 
 /** The document can select only a displayed response index. */
@@ -93,7 +108,8 @@ export class DesktopUpdateDialog {
     this.parent = parent
     const view: UpdateDialogView = { revision: ++this.revision, locale: locale.id, title: options.title ?? '', message: options.message,
       detail: options.detail ?? '', buttons, cancelId, closeLabel: locale.messages.updateClose,
-      technicalDetails: options.technicalDetails ?? '', technicalDetailsLabel: locale.messages.updateTechnicalDetails }
+      technicalDetails: options.technicalDetails ?? '', technicalDetailsLabel: locale.messages.updateTechnicalDetails,
+      ...(options.releaseHistory === undefined ? {} : { releaseHistory: options.releaseHistory }) }
     return new Promise((resolve) => {
       const abort = (): void => { finish(cancelId) }
       const finish = (response: number, retain = false): void => {

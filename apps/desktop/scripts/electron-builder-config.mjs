@@ -75,8 +75,9 @@ export function createElectronBuilderConfig(
   }
   const privateDesktopUpdates = env.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG === undefined
     ? undefined : JSON.parse(env.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG)
-  if (privateDesktopUpdates !== undefined && (resolvedPlatform !== 'win32' || resolvedArch !== 'x64')) {
-    throw new Error('desktop package: private desktop updates require win32-x64')
+  if (privateDesktopUpdates !== undefined && !((resolvedPlatform === 'win32' && resolvedArch === 'x64')
+    || (resolvedPlatform === 'darwin' && resolvedArch === 'arm64'))) {
+    throw new Error('desktop package: private desktop updates require win32-x64 or darwin-arm64')
   }
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = resolvedPlatform === 'win32'
@@ -113,6 +114,8 @@ export function createElectronBuilderConfig(
   }
   const update = unsigned || internalDmg || privateDesktopUpdates !== undefined
     ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
+  const publishUrl = update?.publicUrl ?? (privateDesktopUpdates === undefined ? undefined : privateDesktopUpdates.feedOrigins[0])
+  const publish = publishUrl === undefined ? null : [{ provider: 'generic', url: publishUrl, channel: 'nightly' }]
   if (preparedRuntime !== undefined) buildPaths.dsh = preparedRuntime
   // electron-builder merges extraMetadata into the packaged manifest, so a build version here reaches
   // the artifact names, the update feed, and the installed app.getVersion() the updater compares against.
@@ -212,7 +215,7 @@ export function createElectronBuilderConfig(
     afterPack: async context => {
       const { verifyDesktopRuntime } = await import('../lib/types/runtime-tree.js')
       const resourcesDir = context.packager.getResourcesDir(context.appOutDir)
-      if (resolvedPlatform === 'darwin' && update !== undefined) {
+      if (resolvedPlatform === 'darwin' && publish !== null) {
         await writeMacOSAppUpdateConfig(resourcesDir, resolveMacOSAppUpdateFeed(context.packager.config.publish),
           context.packager.appInfo.updaterCacheDirName)
       }
@@ -234,7 +237,7 @@ export function createElectronBuilderConfig(
       }
       if (context.electronPlatformName !== 'darwin' || unsigned || internalDmg) return
       const appPath = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
-      if (update !== undefined) {
+      if (publish !== null) {
         await verifyMacOSAppUpdateConfig(appPath, resolveMacOSAppUpdateFeed(context.packager.config.publish),
           context.packager.appInfo.updaterCacheDirName)
       }
@@ -274,6 +277,6 @@ export function createElectronBuilderConfig(
       differentialPackage: true,
     },
     detectUpdateChannel: false,
-    publish: update === undefined ? null : [{ provider: 'generic', url: update.publicUrl, channel: 'nightly' }],
+    publish,
   }
 }

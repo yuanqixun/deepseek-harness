@@ -32,6 +32,27 @@ function render(state) {
   document.getElementById('title').textContent = state.message
   document.getElementById('detail').textContent = state.detail
   document.getElementById('detail').hidden = state.detail === ''
+  const history = state.releaseHistory
+  const historySection = document.getElementById('release-history')
+  historySection.hidden = history === undefined
+  if (history !== undefined) {
+    document.getElementById('release-history-title').textContent = history.title
+    const empty = history.entries.length === 0
+    document.getElementById('release-history-empty').textContent = history.empty
+    document.getElementById('release-history-empty').hidden = !empty
+    const entries = document.getElementById('release-history-entries')
+    entries.replaceChildren()
+    for (const entry of history.entries) {
+      const item = document.createElement('li')
+      const version = document.createElement('h3')
+      const notes = document.createElement('p')
+      version.textContent = entry.version
+      notes.textContent = entry.releaseNotes
+      item.append(version, notes)
+      entries.append(item)
+    }
+    entries.hidden = empty
+  }
   document.getElementById('close').setAttribute('aria-label', state.closeLabel)
   document.getElementById('technical-details').hidden = state.technicalDetails === ''
   document.getElementById('technical-details-label').textContent = state.technicalDetailsLabel

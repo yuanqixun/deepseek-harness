@@ -144,6 +144,22 @@ it('supplies localized disclosure copy without putting diagnostics in the ordina
   await pending
 })
 
+it('passes release history to its owned renderer and preserves an empty-history message', async () => {
+  const f = setup()
+  const pending = dialogs!.show(f.parent as unknown as BrowserWindow, {
+    message: 'DeepSeek Harness', detail: 'Version 1.0.0', buttons: ['Check updates', 'Close'], cancelId: 1,
+    releaseHistory: { title: 'Version history', empty: 'No version history is available.', entries: [
+      { version: '1.2.3', releaseNotes: 'Stability improvements.' },
+    ] },
+  })
+  expect(f.invoke(UPDATE_DIALOG_IPC.status)).toMatchObject({ releaseHistory: {
+    title: 'Version history', empty: 'No version history is available.',
+    entries: [{ version: '1.2.3', releaseNotes: 'Stability improvements.' }],
+  } })
+  dialogs!.cancel()
+  await pending
+})
+
 it('replaces content without releasing the backdrop and rejects a response from the previous prompt', async () => {
   const f = setup()
   const abort = new AbortController()

@@ -32,6 +32,7 @@ import { withMacOSNotarizationProxy } from './macos-notarization-proxy.ts'
 import { packagePrivateMarket, resolvePrivateMarketSource, resolveProAuthSource } from './private-market-package.ts'
 import { readPrivateMarketEnvironment } from '../../../scripts/config-environment.ts'
 import { readPrivateDesktopUpdates } from './private-desktop-update-environment.mjs'
+import { verifyPrivateDesktopUpdateArtifacts } from './private-desktop-update-artifacts.mjs'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const REPOSITORY_ROOT = resolve(APP_ROOT, '..', '..')
@@ -120,7 +121,8 @@ export function desktopElectronBuilderEnvironment(
   if (!unsigned && !internalDmg) return selected
   return {
     ...Object.fromEntries(Object.entries(withoutWindowsSigningEnvironment(selected))
-      .filter(([name]) => !/^(?:DSH_DESKTOP_MACOS_|APPLE_|(?:WIN_)?CSC_)/iu.test(name))),
+      .filter(([name]) => !/^(?:APPLE_|(?:WIN_)?CSC_)/iu.test(name)
+        && (!name.startsWith('DSH_DESKTOP_MACOS_') || name === 'DSH_DESKTOP_MACOS_PACK_CONCURRENCY'))),
     CSC_IDENTITY_AUTO_DISCOVERY: 'false',
     DSH_DESKTOP_UNSIGNED: unsigned ? '1' : '0',
     ...(internalDmg ? { DSH_DESKTOP_INTERNAL_DMG: '1' } : {}),
@@ -141,6 +143,16 @@ function isTargetName(value: string): value is DesktopPackageTargetName {
   return Object.hasOwn(TARGETS, value)
 }
 
+/** Reject private update builds outside Windows x64 and macOS arm64.
+ * @param target - Validated packaging target.
+ * @returns `undefined` when the target can use the private update protocol.
+ */
+export function assertPrivateDesktopUpdateTarget(target: DesktopPackageTarget): void {
+  if (target.name !== 'win-x64' && target.name !== 'mac-arm64') {
+    throw new Error('desktop package: private desktop updates require win-x64 or mac-arm64')
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -153,21 +165,24 @@ function packageVersion(path: string, label: string): string {
   return manifest.version
 }
 
-function writeReleaseRecord(
+async function writeReleaseRecord(
   target: DesktopPackageTarget,
   environment: NodeJS.ProcessEnv,
   artifactsRoot: string,
-): void {
+  privateDesktopUpdates: boolean,
+): Promise<void> {
   const desktopVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   const dshVersion = packageVersion(join(REPOSITORY_ROOT, 'package.json'), 'dsh package')
   if (desktopVersion !== dshVersion) {
     throw new Error(`desktop package: desktop version ${desktopVersion} does not match dsh version ${dshVersion}`)
   }
-  const buildVersion = resolveDesktopBuildVersion(environment, dshVersion)
   const packaged = resolveDesktopBuildCommit(environment)
   const privateUpdates = environment.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG === undefined
     ? undefined : JSON.parse(environment.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG) as { environment: string; checkUrl: string }
   const update = privateUpdates === undefined ? resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch) : undefined
+  const buildVersion = resolveDesktopBuildVersion(environment, dshVersion)
+  const updateArtifacts = privateDesktopUpdates
+    ? await verifyPrivateDesktopUpdateArtifacts(artifactsRoot, target, buildVersion) : undefined
   const marketRecord = join(desktopTargetBuildPaths(target.name).packedDsh, 'private-market-build.json')
   const recordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
   const temporaryPath = `${recordPath}.tmp`
@@ -180,6 +195,7 @@ function writeReleaseRecord(
     ...(privateUpdates === undefined ? {} : {
       privateDesktopUpdates: { environment: privateUpdates.environment, checkUrl: privateUpdates.checkUrl },
     }),
+    ...(updateArtifacts === undefined ? {} : updateArtifacts),
     ...(existsSync(marketRecord) ? { privateMarket: JSON.parse(readFileSync(marketRecord, 'utf8')) } : {}),
     // Upload reads this to tag the commit a production release was packaged from.
     ...packaged === undefined ? {} : { commit: packaged.commit, dirty: packaged.dirty },
@@ -394,7 +410,7 @@ async function main(): Promise<void> {
     }
     configuredPrivateMarket = isRecord(document.plugins) && 'privateMarket' in document.plugins
     if (isRecord(document.desktop) && 'updates' in document.desktop) {
-      if (target.name !== 'win-x64') throw new Error('desktop package: private desktop updates require win-x64')
+      assertPrivateDesktopUpdateTarget(target)
       selectedPrivateDesktopUpdates = readPrivateDesktopUpdates(configRoot, configEnvironment)
       environment.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG = JSON.stringify(selectedPrivateDesktopUpdates)
     }
@@ -628,7 +644,8 @@ export async function packageTarget(
     await execute(['exec', 'tsx', 'scripts/smoke-packaged-runtime.ts', ...(invocation.unsigned ? ['--unsigned'] : [])], targetEnv)
   }
   if (!invocation.directory && !invocation.unsigned && !invocation.internalDmg) {
-    writeReleaseRecord(target, electronBuilderEnv, artifactsRoot)
+    await writeReleaseRecord(target, electronBuilderEnv, artifactsRoot,
+      electronBuilderEnv.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG !== undefined)
   }
   if (journal) recordPackagingEvent(journal, { type: 'artifacts',
     directory: artifactsRoot })

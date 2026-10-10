@@ -8,7 +8,7 @@
 
 Desktop 绑定 `127.0.0.1`，即 Electron 为就绪 URL 与 WebSocket 凭据过滤器拨号的地址。WebSocket 流按 Host 监听器使用 `ws:` 或 `wss:`；附加凭据要求 authority 与 scheme 均匹配。
 
-应用菜单第一项“**关于 DeepSeek Harness**”打开 Electron 原生关于面板，展示应用图标、产品名称和当前安装的发布版本。菜单文案跟随桌面壳的语言。macOS 的隐藏、隐藏其他、显示全部和退出条目使用本地化文案，隐藏和退出条目包含 DeepSeek Harness 产品名称。这些条目保留原生动作和快捷键。macOS 从应用包读取图标，因此未打包的开发启动会显示 Electron 图标；Windows 使用随包分发的 PNG。
+应用菜单第一项“**关于 DeepSeek Harness**”打开 Desktop 自有对话框，展示产品名称、当前安装版本和可用的版本记录。记录只显示当前平台与架构适用的版本；历史记录正在加载或暂时不可用时会显示对应状态，同时保留当前安装版本。对话框跟随 Desktop 壳语言，并提供手动检查更新入口。macOS 的隐藏、隐藏其他、显示全部和退出条目使用本地化文案，隐藏和退出条目包含 DeepSeek Harness 产品名称。这些条目保留原生动作和快捷键。
 
 Desktop 的本地原生目录流程打开绑定应用窗口的 Electron 文件夹对话框，并先恢复、显示和聚焦该窗口。并发请求共用一个对话框；取消不返回路径，失败后可以重试。普通 Web 使用 Host 选择器。浏览模式列出 Host 目录。Linux 缺少 zenity 或 kdialog 时，自动选择使用浏览模式，不使用 Electron 对话框。
 
@@ -503,26 +503,51 @@ Windows 下载完成后的更新确认说明应用会在安装期间关闭、完
 
 `DSH_DESKTOP_UPDATE_CHECK_INTERVAL_MS` 配置常规基础间隔，`DSH_DESKTOP_UPDATE_CHECK_MAX_BACKOFF_MS` 配置上限；两者均接受 1000 至 2147483647 的整数毫秒数，且上限不能小于间隔。省略上限时取一小时与间隔中的较大值。`DSH_DESKTOP_UPDATE_CHECK_JITTER` 配置 0 至 1 的抖动比例，默认 `0.2`；最终延迟至少一秒，且不超过上限。这些配置不改变强更策略轮询，也不授权下载重试。
 
-左下角账户行显示本地化的更新可用状态、加载图标与下载百分比、验证、就绪状态，或带可访问提示的持久红色重试操作。嵌入 Web 界面的文案跟随应用内当前语言；原生弹窗使用 Desktop 壳语言。侧栏收起时，顶部展开按钮显示圆点。连接状态优先展示。选择可用版本即开始下载。准备成功后自动打开壳拥有的重启确认；关闭后保留就绪状态，不重复弹窗。选择就绪入口可再次打开确认。运行中的 agent、排队输入，以及运行中或停止中的后台任务都会在该确认中触发中断警告。仅有 API 请求不会触发警告。用户批准后，Host 锁定新请求，等待已接收的请求结束，再检查任务，包括已接收写操作创建的工作。等待超过控制请求截止时间时，拒绝安装并解除准入锁。任务状态未知、未获中断授权的新任务，或未成功完成正常收尾，都会阻止安装。常规退出先按"关闭窗口与退出"一节所述询问可中断的工作，再在停止 Host 前隐藏产品窗口，在收尾期间忽略新的聚焦请求，且从不安装更新。下次启动通过已有的启动与恢复流程校准版本绑定的运行时。
+左下角账户行显示本地化的更新可用状态、加载图标与下载百分比、验证、就绪状态，或带可访问提示的持久红色重试操作。嵌入 Web 界面的文案跟随应用内当前语言；原生弹窗使用 Desktop 壳语言。侧栏收起时，顶部展开按钮显示圆点。连接状态优先展示。选择可用版本会打开确认框，显示对应更新说明和独立的下载操作；用户选择下载后才开始下载。准备成功后自动打开壳拥有的重启确认；关闭后保留就绪状态，不重复弹窗。选择就绪入口可再次打开确认。运行中的 agent、排队输入，以及运行中或停止中的后台任务都会在该确认中触发中断警告。仅有 API 请求不会触发警告。用户批准后，Host 锁定新请求，等待已接收的请求结束，再检查任务，包括已接收写操作创建的工作。等待超过控制请求截止时间时，拒绝安装并解除准入锁。任务状态未知、未获中断授权的新任务，或未成功完成正常收尾，都会阻止安装。常规退出先按"关闭窗口与退出"一节所述询问可中断的工作，再在停止 Host 前隐藏产品窗口，在收尾期间忽略新的聚焦请求，且从不安装更新。下次启动通过已有的启动与恢复流程校准版本绑定的运行时。
 
 若任务收尾失败但已确认 Host 退出，安装会被拒绝，壳会在允许再次确认重启前恢复当前版本的 Host。Host 正常停止后的安装器启动失败使用同一恢复路径。替代 Host 启动并完成认证后，壳重新加载原有应用地址，让 Web 页面获取当前端口、Cookie 和启动注入数据；页面加载失败时打开原生致命故障恢复弹窗。未确认进程退出时，绝不允许启动替代 Host。已下载目标保留以供重试。已知强更策略在恢复过程中继续阻塞；Host 恢复失败打开原生致命故障恢复弹窗。
 
 已确认 Host 退出但任务未成功收尾时，常规与强更弹窗均展示本地化恢复提示。两种语言都根据类型化的准备失败原因选择提示，翻译文案变化不会改变失败分类。“查看技术详情”默认折叠，仅展示退出状态、信号、关闭确认和截止时间事实，不展示插件 stderr。展开详情既不重试，也不授权安装。
 
-### Windows 私有升级接口
+### Windows 与 macOS 私有升级接口
 
-仅所选 Windows x64 构件会使用此配置替代原有的更新策略服务。响应必须包含 `protocolVersion: 1`、`release`（`null` 或 `{ "version": "1.2.4", "feedUrl": "https://downloads.example/hxfl/stable/win-x64/" }`）以及含 `minimumSupportedVersion` 和 `forceAfter` 的 `policy`。两个策略字段都为 `null` 时清除已知强更；否则它们分别为语义版本和 RFC 3339 UTC 截止时间。低于最低版本且已到强更时间的客户端必须收到兼容版本。无效响应和服务故障会保留已知强更决定。
+仅所选 Windows x64 或 macOS arm64 构件会使用此配置替代原有的更新策略服务。两个平台都使用相同的 `POST /v1/desktop/updates/check` 协议。请求会上报构件的平台和架构，供服务端选择版本并记录版本分布。响应必须包含 `protocolVersion: 1`、`release`（`null` 或含版本和 `feedUrl`）以及含 `minimumSupportedVersion` 和 `forceAfter` 的 `policy`。两个策略字段都为 `null` 时清除已知强更；否则它们分别为语义版本和 RFC 3339 UTC 截止时间。低于最低版本且已到强更时间的客户端必须收到兼容版本。可选的 `releaseHistory` 数组包含适用于当前平台和架构的版本记录，字段为 `version`、`platform`、`arch`、中文说明 `releaseNotes.zh_CN` 和英文说明 `releaseNotes.en_US`。旧响应可省略此字段；省略或空列表不会使更新决定失效。无效响应和服务故障会保留已知强更决定。
 
-`feedUrl` 必须属于配置允许的 HTTPS 源站。Electron 随后读取 `{feedUrl}/nightly.yml`；YAML 指向带 SHA-512 摘要的已签名 NSIS 安装包，并可提供 `.blockmap`。同一源站白名单适用于 YAML、安装包、blockmap 和重定向。现有 Electron 下载准备流程继续负责差分下载及完整安装包回退；下载和安装仍分别由用户确认。
+检查响应示例：
+
+```json
+{
+  "protocolVersion": 1,
+  "release": {
+    "version": "1.2.4",
+    "feedUrl": "https://downloads.example/hxfl/stable/win-x64/"
+  },
+  "policy": { "minimumSupportedVersion": null, "forceAfter": null },
+  "releaseHistory": [
+    {
+      "version": "1.2.4",
+      "platform": "win32",
+      "arch": "x64",
+      "releaseNotes": {
+        "zh_CN": "修复稳定性问题。",
+        "en_US": "Fixes stability issues."
+      }
+    }
+  ]
+}
+```
+
+`feedUrl` 必须属于配置允许的 HTTPS 源站。Windows 读取 `{feedUrl}/nightly.yml`，其中指向已签名 NSIS EXE；macOS 读取 `{feedUrl}/nightly-mac.yml`，其中指向已签名并公证的 arm64 ZIP。DMG 用于直接安装，不是更新载荷。元数据包含载荷大小和 SHA-512。Windows 提供 `.exe.blockmap`；macOS 提供 `.zip.blockmap`。Electron 可以使用 blockmap 对比本地缓存载荷并按变化范围下载；差分准备失败时回退下载完整 EXE 或 ZIP。macOS 首次更新没有缓存 ZIP 时会下载完整 ZIP。服务端必须支持 HTTPS `Range` 请求，并对有效范围请求返回带 `Content-Range` 的 `206 Partial Content`；完整下载返回 `200`。元数据、载荷、blockmap 和重定向都受同一源站白名单约束。下载和安装仍分别由用户确认。
 
 后管负责提供以下公开资源，不需要生命周期统计接口：
 
 | 方法与路径 | 用途 |
 |---|---|
-| `POST /v1/desktop/updates/check` | 接收部署、通道、Desktop/平台/架构/dsh 版本及可选 `userId`，返回版本选择和强更策略。 |
-| `GET {feedUrl}/nightly.yml` | 返回 Electron generic channel 元数据、安装包 URL、大小和 SHA-512。 |
-| `GET {artifactUrl}` | 通过 HTTPS 匿名提供 Windows NSIS 签名安装包。 |
-| `GET {artifactUrl}.blockmap` | 可选差分下载元数据；差分准备失败时 Electron 回退完整安装包。 |
+| `POST /v1/desktop/updates/check` | 接收部署、通道、Desktop/平台/架构/dsh 版本及可选 `userId`，返回版本选择、强更策略和可选的目标平台版本历史。 |
+| `GET {feedUrl}/nightly.yml` | 返回 Windows EXE 的 Electron generic channel 元数据、大小和 SHA-512。 |
+| `GET {feedUrl}/nightly-mac.yml` | 返回 macOS arm64 ZIP 的 Electron generic channel 元数据、大小和 SHA-512。 |
+| `GET {artifactUrl}` | 通过 HTTPS 匿名提供已签名 Windows EXE 或已签名并公证的 macOS ZIP；支持按字节范围下载。 |
+| `GET {artifactUrl}.blockmap` | 提供对应平台的 blockmap；差分失败时客户端回退完整更新载荷。 |
 
 服务端管理暂停、灰度比例、最低支持版本和强更期限。相同 `userId` 的分组应保持稳定；未提供 ID 的客户端仅在全量发布后获得版本。检测请求本身用于统计客户端版本；DSH 不单独发送下载或安装事件。
 

@@ -388,9 +388,20 @@ async function main(): Promise<void> {
   // Copy comes from the same locale as the update prompts so the dialog
   // chrome and its content never mix languages.
   const showAbout = async (): Promise<void> => {
-    await ordinaryMessageBox({ type: 'info', title: locale.messages.aboutMenu, message: locale.messages.aboutProduct,
+    const key = locale.id === 'zh-CN' ? 'zh_CN' : 'en_US'
+    const result = await ordinaryMessageBox({ type: 'info', title: locale.messages.aboutMenu, message: locale.messages.aboutProduct,
       detail: formatDesktopMessage(locale.messages.aboutVersion, { version: app.getVersion() }),
-      buttons: [locale.messages.updateAcknowledge], cancelId: 0 })
+      buttons: [locale.messages.checkUpdatesMenu, locale.messages.updateAcknowledge], cancelId: 1,
+      releaseHistory: {
+        title: locale.messages.aboutHistoryTitle,
+        empty: privateUpdates?.releaseHistoryStatus === 'checking' ? locale.messages.aboutHistoryChecking
+          : privateUpdates?.releaseHistoryStatus === 'failed' ? locale.messages.aboutHistoryUnavailable
+            : locale.messages.aboutHistoryEmpty,
+        entries: (privateUpdates?.releaseHistory ?? []).map(release => ({
+          version: release.version, releaseNotes: release.releaseNotes[key],
+        })),
+      } })
+    if (result.response === 0) await openUpdatePrompt(true)
   }
   const commandManager = new DesktopCommandManager({
     resources: process.resourcesPath,
@@ -806,7 +817,7 @@ async function main(): Promise<void> {
   })
   ipcMain.handle(DESKTOP_IPC.updatesOpen, async (event) => {
     assertProductSender(event)
-    await openUpdatePrompt()
+    await openUpdatePrompt(true)
   })
 
   let promptOperation: Promise<void> | undefined
@@ -857,9 +868,11 @@ async function main(): Promise<void> {
         }
         if (state.phase !== 'available' && !(state.phase === 'error' && state.failedOperation === 'download')) return
         if (manual) {
+          const key = locale.id === 'zh-CN' ? 'zh_CN' : 'en_US'
+          const releaseNotes = privateUpdates?.releaseHistory.find(release => release.version === state.version)?.releaseNotes[key]
           const result = await ordinaryMessageBox({ title: locale.messages.updateCheckTitle,
             message: formatDesktopMessage(locale.messages.updateAvailable, { version: state.version ?? '' }),
-            detail: locale.messages.updateDetail,
+            detail: releaseNotes || locale.messages.updateDetail,
             buttons: [locale.messages.updateDownload], cancelId: 1 })
           if (result.response !== 0) return
         }
@@ -966,10 +979,8 @@ async function main(): Promise<void> {
   const applicationItems = (): MenuItemConstructorOptions[] => [
     // Windows has no system About panel; Electron's fallback is a plain
     // message box, so the shell shows its own dimmed dialog instead.
-    process.platform === 'win32'
-      ? { label: currentDesktopLocale().messages.aboutMenu,
-        click: () => { void showAbout().catch((error: unknown) => { console.error(error) }) } }
-      : { label: currentDesktopLocale().messages.aboutMenu, role: 'about' },
+    { label: currentDesktopLocale().messages.aboutMenu,
+      click: () => { void showAbout().catch((error: unknown) => { console.error(error) }) } },
     { type: 'separator' },
     { label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } },
     ...process.platform === 'darwin' || process.platform === 'win32'
@@ -1304,7 +1315,9 @@ async function main(): Promise<void> {
   if (typeof manifest !== 'object' || manifest === null) throw new Error('desktop policy: invalid application manifest')
   const privateUpdateInput = app.isPackaged && 'dshPrivateDesktopUpdates' in manifest ? manifest.dshPrivateDesktopUpdates : undefined
   if (privateUpdateInput !== undefined) {
-    if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('desktop updates: private updates require win32-x64')
+    if (!((process.platform === 'win32' && process.arch === 'x64') || (process.platform === 'darwin' && process.arch === 'arm64'))) {
+      throw new Error('desktop updates: private updates require win32-x64 or darwin-arm64')
+    }
     const config = resolvePrivateDesktopUpdateConfig(privateUpdateInput)
     privateUpdates = new PrivateDesktopUpdateClient(config, app.getVersion(), readDesktopRuntime(resources.dsh).release.version,
       (state) => {
@@ -1317,7 +1330,7 @@ async function main(): Promise<void> {
           void updateSchedule.check(false, true).catch((error: unknown) => { console.error(error) })
         }
         wasPrivateBlocking = state.blocking
-      })
+      }, fetch, process.platform as 'win32' | 'darwin', process.arch as 'x64' | 'arm64')
     let wasPrivateBlocking = false
     mandatoryPolicy = privateUpdates
     mandatoryUI = new DesktopMandatoryUpdateWindow({

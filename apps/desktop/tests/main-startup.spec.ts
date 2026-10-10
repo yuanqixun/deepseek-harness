@@ -49,6 +49,7 @@ const harness = await vi.hoisted(async () => {
   let quitCompleted = deferred()
   let policyBlocked = deferred()
   let embeddedPolicy: unknown
+  let privateDesktopUpdates: unknown
   let closeWindowsOnQuit = false
   let updateState: DesktopUpdateState = { phase: 'idle' }
   let platformDisposeDeferred: ReturnType<typeof deferred> | undefined
@@ -229,6 +230,8 @@ const harness = await vi.hoisted(async () => {
     get policyBlocked() { return policyBlocked },
     get embeddedPolicy() { return embeddedPolicy },
     set embeddedPolicy(value: unknown) { embeddedPolicy = value },
+    get privateDesktopUpdates() { return privateDesktopUpdates },
+    set privateDesktopUpdates(value: unknown) { privateDesktopUpdates = value },
     nextNavigation() { navigated = deferred(); return navigated.promise },
     nextHostStart() { hostStarted = deferred(); return hostStarted.promise },
     deferPlatformDispose() { platformDisposeDeferred = deferred(); return platformDisposeDeferred },
@@ -259,6 +262,7 @@ const harness = await vi.hoisted(async () => {
       navigated = deferred(); dialogShown = deferred(); quitCompleted = deferred()
       policyBlocked = deferred()
       embeddedPolicy = undefined
+      privateDesktopUpdates = undefined
       platformDisposeDeferred = undefined
       platformCloseDeferred = undefined
     },
@@ -307,7 +311,8 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:fs/promises')>()
   return { ...original, readFile: vi.fn((path: Parameters<typeof original.readFile>[0], encoding?: 'utf8') => {
     if (path === join('desktop-test-app', 'package.json')) {
-      return Promise.resolve(JSON.stringify({ dshDesktopAppId: 'com.deepseek.dsh', dshMandatoryUpdatePolicy: harness.embeddedPolicy }))
+      return Promise.resolve(JSON.stringify({ dshDesktopAppId: 'com.deepseek.dsh', dshMandatoryUpdatePolicy: harness.embeddedPolicy,
+        ...(harness.privateDesktopUpdates === undefined ? {} : { dshPrivateDesktopUpdates: harness.privateDesktopUpdates }) }))
     }
     return encoding === undefined ? original.readFile(path) : original.readFile(path, encoding)
   }) }
@@ -544,25 +549,72 @@ describe('desktop main startup', () => {
     const options = harness.app.setAboutPanelOptions.mock.calls[0]![0]
     const expected = JSON.parse(readFileSync(new URL('./expected/about-panel.json', import.meta.url), 'utf8')) as Record<string, unknown>
     const [about, separator] = submenu
-    expect({ menu: [{ label: about!.label, role: about!.role }, separator], options: { ...options, iconPath: '<app icon>' } })
+    expect({ menu: [{ label: about!.label, ...(about!.role === undefined ? {} : { role: about!.role }) }, separator],
+      options: { ...options, iconPath: '<app icon>' } })
       .toEqual(expected[`${platform}:${locale}`])
     expect(options.iconPath).toBe(packaged ? join('desktop-test-resources', 'icon.png')
       : join('desktop-test-app', 'resources', 'icon-windows.png'))
-    if (platform !== 'win32') { expect(about!.click).toBeUndefined(); return }
-    // Windows reuses the dimmed update dialog because Electron's fallback is a bare message box.
-    harness.dialog.showMessageBox.mockResolvedValueOnce({ response: 0 })
+    expect(about!.role).toBeUndefined()
+    expect(about!.click).toBeTypeOf('function')
     ;(about!.click as () => void)()
     await vi.advanceTimersByTimeAsync(0)
     const zh = locale === 'zh-CN'
     expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
       type: 'info', title: zh ? '关于 DeepSeek Harness' : 'About DeepSeek Harness', message: 'DeepSeek Harness',
-      detail: zh ? '版本 V1.0.0' : 'Version V1.0.0', buttons: [zh ? '确定' : 'OK'], cancelId: 0,
+      detail: zh ? '版本 V1.0.0' : 'Version V1.0.0',
+      buttons: [zh ? '检查更新…' : 'Check for Updates…', zh ? '确定' : 'OK'], cancelId: 1,
+      releaseHistory: { title: zh ? '版本更新记录' : 'Version history',
+        empty: zh ? '暂无版本更新记录' : 'No version history is available.', entries: [] },
     }))
     // A dialog that cannot open is logged, not surfaced as an unhandled rejection.
     harness.dialog.showMessageBox.mockRejectedValueOnce(new Error('overlay unavailable'))
     ;(about!.click as () => void)()
     await vi.advanceTimersByTimeAsync(0)
     expect(console.error).toHaveBeenLastCalledWith(expect.objectContaining({ message: 'overlay unavailable' }))
+  })
+
+  it('shows current-target release history in About and update notes before offering download', async () => {
+    harness.privateDesktopUpdates = { environment: 'hxfl', channel: 'stable',
+      checkUrl: 'https://updates.example/v1/desktop/updates/check', feedOrigins: ['https://downloads.example'] }
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ protocolVersion: 1, release: null,
+      policy: { minimumSupportedVersion: null, forceAfter: null }, releaseHistory: [
+        { version: '1.2.4', platform: 'win32', arch: 'x64',
+          releaseNotes: { zh_CN: '修复稳定性问题', en_US: 'Fixes stability issues' } },
+        { version: '1.2.5', platform: 'darwin', arch: 'arm64',
+          releaseNotes: { zh_CN: 'Mac 更新', en_US: 'Mac update' } },
+      ] })))
+    await readyForUpdate()
+    await vi.advanceTimersByTimeAsync(0)
+    const about = applicationMenuItems().find(item => item.label === en.aboutMenu)!.click as () => void
+    about()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({ releaseHistory: {
+      title: en.aboutHistoryTitle, empty: en.aboutHistoryEmpty,
+      entries: [{ version: '1.2.4', releaseNotes: 'Fixes stability issues' }],
+    } }))
+    harness.dialog.showMessageBox.mockResolvedValue({ response: 1 })
+    harness.updateCheck.mockResolvedValueOnce({ phase: 'available', version: '1.2.4' })
+    await invoke(DESKTOP_IPC.updatesOpen, 'app')
+    expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
+      message: 'New version available to install: 1.2.4', detail: 'Fixes stability issues',
+    }))
+    expect(harness.updateDownload).not.toHaveBeenCalled()
+  })
+
+  it('keeps startup available when the private update service is offline and marks About history unavailable', async () => {
+    harness.privateDesktopUpdates = { environment: 'hxfl', channel: 'stable',
+      checkUrl: 'https://updates.example/v1/desktop/updates/check', feedOrigins: ['https://downloads.example'] }
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockRejectedValue(new Error('offline')))
+    await readyForUpdate()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(harness.hosts).toHaveLength(1)
+    expect(harness.dialog.showMessageBox).not.toHaveBeenCalled()
+    const about = applicationMenuItems().find(item => item.label === en.aboutMenu)!.click as () => void
+    about()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({ releaseHistory: {
+      title: en.aboutHistoryTitle, empty: en.aboutHistoryUnavailable, entries: [],
+    } }))
   })
 
   it.each(['missing-file', 'missing-field', 'disabled'] as const)('suppresses every test auth dialog for %s while continuing update checks', async (configuration) => {
@@ -746,6 +798,8 @@ describe('desktop main startup', () => {
     await readyForUpdate()
     await vi.advanceTimersByTimeAsync(0)
     harness.updateState = { phase: 'available', version: '1.0.1-nightly.1' }
+    harness.dialog.showMessageBox.mockImplementation(({ message }: { message: string }) =>
+      Promise.resolve({ response: message === en.updateAvailable.replace('{version}', '1.0.1-nightly.1') ? 0 : 1 }))
     await invoke(DESKTOP_IPC.updatesOpen, 'app')
     expect(harness.updateDownload).toHaveBeenCalledWith('1.0.1-nightly.1')
     expect(testAuth.login).not.toHaveBeenCalled()
@@ -1010,8 +1064,8 @@ describe('desktop main startup', () => {
       : ['Application', 'editMenu'])
     const application = template[0]!.submenu as MenuItemConstructorOptions[]
     expect(application.filter(item => item.visible !== false).map(describeItem)).toEqual(platform === 'darwin'
-      ? ['about', 'separator', en.checkUpdatesMenu, en.cliCommandMenu, 'separator', 'hide', 'hideOthers', 'unhide', 'separator', 'quit']
-      : ['about', 'separator', en.checkUpdatesMenu, 'separator', 'quit'])
+      ? [en.aboutMenu, 'separator', en.checkUpdatesMenu, en.cliCommandMenu, 'separator', 'hide', 'hideOthers', 'unhide', 'separator', 'quit']
+      : [en.aboutMenu, 'separator', en.checkUpdatesMenu, 'separator', 'quit'])
     expect(harness.menu.setApplicationMenu).toHaveBeenCalledOnce()
   })
 
@@ -1439,6 +1493,8 @@ describe('desktop main startup', () => {
     const window = harness.windows[0]!
     harness.updateState = { phase: 'available', version: '1.0.1' }
     harness.updateDownload.mockImplementation(async () => { harness.updateState = { phase: 'ready', version: '1.0.1' }; return harness.updateState })
+    harness.dialog.showMessageBox.mockImplementation(({ message }: { message: string }) =>
+      Promise.resolve({ response: message === en.updateAvailable.replace('{version}', '1.0.1') ? 0 : 1 }))
     window.close()
     window.visible = false
     const opened = invoke(DESKTOP_IPC.updatesOpen, 'app') as Promise<void>
@@ -1619,6 +1675,8 @@ describe('desktop main startup', () => {
     await readyForUpdate()
     harness.updateCheck.mockResolvedValueOnce({ phase: 'available', version: '1.0.1-nightly.1' })
     harness.updateDownload.mockRejectedValueOnce(new Error('desktop update: download confirmation is stale'))
+    harness.dialog.showMessageBox.mockImplementation(({ message }: { message: string }) =>
+      Promise.resolve({ response: message === en.updateAvailable.replace('{version}', '1.0.1-nightly.1') ? 0 : 1 }))
     await invoke(DESKTOP_IPC.updatesOpen, 'app')
     expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'error',
       message: en.updateDownloadFailed, technicalDetails: 'desktop update: download confirmation is stale' }))
@@ -1633,6 +1691,8 @@ describe('desktop main startup', () => {
     await vi.advanceTimersByTimeAsync(0)
     harness.dialog.showMessageBox.mockClear()
     harness.updateCheck.mockResolvedValueOnce({ phase: 'available', version: '1.0.1-nightly.1' })
+    harness.dialog.showMessageBox.mockImplementation(({ message }: { message: string }) =>
+      Promise.resolve({ response: message === en.updateAvailable.replace('{version}', '1.0.1-nightly.1') ? 0 : 1 }))
     await invoke(DESKTOP_IPC.updatesOpen, 'app')
     const messages = harness.dialog.showMessageBox.mock.calls.map(call => (call.at(-1) as { message: string }).message)
     expect(messages).not.toContain(en.mandatoryUnavailable)
@@ -1645,6 +1705,8 @@ describe('desktop main startup', () => {
     const policy = Promise.withResolvers<Response>()
     vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockImplementation(() => policy.promise))
     harness.updateCheck.mockResolvedValue({ phase: 'available', version: '1.0.1-nightly.1' })
+    harness.dialog.showMessageBox.mockImplementation(({ message }: { message: string }) =>
+      Promise.resolve({ response: message === en.updateAvailable.replace('{version}', '1.0.1-nightly.1') ? 0 : 1 }))
     const operation = Promise.resolve().then(async () => {
       await readyForUpdate()
       await invoke(DESKTOP_IPC.updatesOpen, 'app')
@@ -1733,10 +1795,12 @@ describe('desktop main startup', () => {
       started.resolve(undefined)
       return downloading.promise
     })
+    harness.dialog.showMessageBox.mockImplementation(({ message }: { message: string }) =>
+      Promise.resolve({ response: message === en.updateAvailable.replace('{version}', '1.0.1-nightly.1') ? 0 : 1 }))
     const action = invoke(DESKTOP_IPC.updatesOpen, 'app')
     await started.promise
     const repeated = invoke(DESKTOP_IPC.updatesOpen, 'app')
-    expect(harness.dialog.showMessageBox).not.toHaveBeenCalled()
+    expect(harness.dialog.showMessageBox).toHaveBeenCalledTimes(2)
     expect(harness.updateDownload).toHaveBeenCalledExactlyOnceWith('1.0.1-nightly.1')
     expect(harness.updateInstall).not.toHaveBeenCalled()
     downloading.resolve({ phase: 'ready', version: '1.0.1-nightly.1' })

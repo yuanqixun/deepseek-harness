@@ -1,7 +1,12 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory, Position = 0)]
-  [string]$BuildVersion
+  [string]$BuildVersion,
+  [Parameter()]
+  [ValidatePattern('^[a-z0-9][a-z0-9-]*$')]
+  [string]$ConfigEnvironment,
+  [Parameter()]
+  [switch]$NoPreinstallPrivatePlugins
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,7 +36,15 @@ if (-not (Test-Path -LiteralPath 'apps/desktop/.env.windows' -PathType Leaf)) {
   Fail 'Missing apps/desktop/.env.windows; copy apps/desktop/.env.windows.example and configure the release credentials.'
 }
 
-& pnpm run package:desktop:win:x64 -- --build-version $BuildVersion
+$packageArguments = @('--build-version', $BuildVersion)
+if (-not $NoPreinstallPrivatePlugins) {
+  $packageArguments += '--preinstall-private-plugins'
+}
+if (-not [string]::IsNullOrWhiteSpace($ConfigEnvironment)) {
+  $packageArguments += @('--config-env', $ConfigEnvironment)
+}
+$pnpmArguments = @('run', 'package:desktop:win:x64', '--') + $packageArguments
+& pnpm @pnpmArguments
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }

@@ -16,6 +16,7 @@ export const DESKTOP_IPC = {
   enterWorkspace: 'dsh-desktop:enter-workspace',
   onboardingActive: 'dsh-desktop:onboarding-active',
   onboardingApiKey: 'dsh-desktop:onboarding-api-key',
+  quitForRequiredLogin: 'dsh-desktop:quit-for-required-login',
   bootFailed: 'dsh-desktop:boot-failed',
   browserAcquire: 'dsh-desktop:browser-acquire',
   browserRelease: 'dsh-desktop:browser-release',
@@ -80,6 +81,8 @@ export interface DshDesktopProductApi {
    * @returns `name=value` fields separated by `; `, with no hostname, user name, or serial number.
    */
   deviceInfo(): Promise<string>
+  /** Exit Desktop without showing the unfinished-task confirmation after required login is cancelled. */
+  quitForRequiredLogin(): Promise<void>
   readonly updates: {
     status(): Promise<DesktopUpdatePresentation>
     open(): Promise<void>

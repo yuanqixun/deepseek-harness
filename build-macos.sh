@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# Build the signed macOS arm64 Desktop release artifacts from this checkout.
+# Build macOS arm64 Desktop artifacts with the local enterprise plugin bundles.
 set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: ./build-macos.sh [--internal-dmg] <build-version>
+Usage: ./build-macos.sh [--internal-dmg] [--no-preinstall-private-plugins] [--config-env NAME] <build-version>
 
 By default, builds the signed macOS arm64 release artifacts: DMG, ZIP, ZIP blockmap,
-and update feed YAML. Use --internal-dmg to build only an unsigned internal DMG.
+and update feed YAML. The local dsh-pro-auth and dsh-private-market bundles are
+preinstalled by default. Use --internal-dmg to build only an unsigned internal DMG.
+Use --no-preinstall-private-plugins to omit those bundles. Without market settings,
+the private-market UI bundle is installed but its Host catalog service stays disabled.
+Set DSH_CONFIG_ENV_DIR and DSH_CONFIG_ENV in apps/desktop/.env.macos to select the
+private-market configuration. --config-env overrides the environment name for this run.
 The version must be confirmed before packaging. Configure apps/desktop/.env.macos
-from its example first; release builds also require the signing and notarization
-credentials documented for Desktop packaging.
+from its example first; signed release builds also require the signing and
+notarization credentials documented for Desktop packaging.
 EOF
 }
 
@@ -19,10 +24,25 @@ if [[ ${1:-} == --help || ${1:-} == -h ]]; then
   exit 0
 fi
 internal_dmg=0
-if [[ $# -eq 2 && $1 == --internal-dmg ]]; then
-  internal_dmg=1
+preinstall_private_plugins=1
+config_environment=
+while [[ $# -gt 1 ]]; do
+  case $1 in
+    --internal-dmg) internal_dmg=1 ;;
+    --no-preinstall-private-plugins) preinstall_private_plugins=0 ;;
+    --config-env)
+      if [[ $# -lt 3 || -z ${2:-} ]]; then
+        usage >&2
+        exit 2
+      fi
+      config_environment=$2
+      shift 2
+      continue
+      ;;
+    *) break ;;
+  esac
   shift
-fi
+done
 if [[ $# -ne 1 ]]; then
   usage >&2
   exit 2
@@ -52,6 +72,16 @@ if [[ ! -f apps/desktop/.env.macos ]]; then
 fi
 
 if [[ $internal_dmg -eq 1 ]]; then
-  exec pnpm run package:desktop:mac:arm64:internal-dmg -- --build-version "$1"
+  package_script=package:desktop:mac:arm64:internal-dmg
+else
+  package_script=package:desktop:mac:arm64
 fi
-exec pnpm run package:desktop:mac:arm64 -- --build-version "$1"
+if [[ $preinstall_private_plugins -eq 1 ]]; then
+  package_arguments=(--build-version "$1" --preinstall-private-plugins)
+else
+  package_arguments=(--build-version "$1")
+fi
+if [[ -n $config_environment ]]; then
+  package_arguments+=(--config-env "$config_environment")
+fi
+exec pnpm run "$package_script" -- "${package_arguments[@]}"

@@ -100,7 +100,7 @@ Welcome 加载共享 Toast 的配色和阴影变量，挂载在 body 下的通�
 
 Electron 拥有 `$DSH_HOME/profiles/desktop`。其 `dependencies` 包含 pnpm 安装的包；`dsh.profile.bundles` 包含内置 bundle，后接已启用插件。签名应用从 `resources/app.asar/dsh` 提供 dsh、私有 Desktop Host 及其生产依赖。打包应用选择 runtime profile 解析，不创建包链接；开发 profile 使用文件系统链接。宿主与插件在同一个 Electron Node 模式进程中执行；Desktop 不启用 `--preserve-symlinks`。CLI 不能启动此 profile。Desktop 内置命令可在应用退出后管理其插件；npm 安装的 dsh 不能修改它。
 
-应用 preload 只向 `dsh-app://app` 文档暴露启动就绪、致命启动失败上报、原生目录选择、用于 composer 路径引用的 `__DSH_HOST_PATHS__` 桥接和租约范围内的 Browser 桥接。同一个 preload 通过 `dshDesktop.deviceInfo()` 转发主进程采集的机器描述，按 `name=value` 字段以 `; ` 分隔：`platform`、`os`、`app_arch`（应用二进制实际运行的架构，模拟运行时与硬件架构不同）、`cpu` 和 `memory_gib`（物理内存总量，GiB，保留一位小数）。取值不可用时省略对应字段。该描述不包含主机名、用户名或序列号。产品页面还获得 Desktop 标记、更新展示数据和打开原生确认的操作，不能选择安装产物或授权安装。插件管理使用 Web 应用经过认证的 HTTP API；Electron 在 `dsh-app://shell/` 本地提供更新弹窗文档和资源，不依赖 Host 就绪。Electron 不提供插件管理 IPC 或独立管理页面。任何渲染进程都不会获得文件系统访问、原始 Electron IPC、shell 或任意 pnpm 参数。
+应用 preload 只向 `dsh-app://app` 文档暴露启动就绪、致命启动失败上报、原生目录选择、用于 composer 路径引用的 `__DSH_HOST_PATHS__` 桥接和租约范围内的 Browser 桥接。同一个 preload 通过 `dshDesktop.deviceInfo()` 转发主进程采集的机器描述，按 `name=value` 字段以 `; ` 分隔：`platform`、`os`、`app_arch`（应用二进制实际运行的架构，模拟运行时与硬件架构不同）、`cpu` 和 `memory_gib`（物理内存总量，GiB，保留一位小数）。取值不可用时省略对应字段。该描述不包含主机名、用户名或序列号。产品页面还获得 Desktop 标记、更新展示数据和打开原生确认的操作，不能选择安装产物或授权安装。必需登录操作可以请求壳层退出应用，并跳过未完成任务确认。插件管理使用 Web 应用经过认证的 HTTP API；Electron 在 `dsh-app://shell/` 本地提供更新弹窗文档和资源，不依赖 Host 就绪。Electron 不提供插件管理 IPC 或独立管理页面。任何渲染进程都不会获得文件系统访问、原始 Electron IPC、shell 或任意 pnpm 参数。
 
 只有主应用窗口启用 `<webview>`。guest 挂载必须匹配主进程签发的租约和分区；guest 保持 sandbox、context isolation 和 Web security，不启用 Node integration 或 guest preload。Browser IPC 监听只为应用文档创建。[Sidebar Browser](../../packages/client/ui-sidebar-browser/README.zh.md) 说明存储分组和 guest 限制；Host 鉴权仍独立于 URL 过滤而必需。
 
@@ -174,6 +174,8 @@ API Key 输入框初始为空，并通过 `autocomplete="new-password"` 请求 C
 
 Desktop 在 Host 启动后、打开工作区前检查模型 API Key 引用是否已配置。没有已配置的密钥时，欢迎窗口提供 API Key 页面。“保存并继续”通过现有凭证服务写入 DeepSeek 官方提供方配置的引用，然后打开工作区。“稍后配置”打开工作区，但不保存草稿或完成标记；下次进程启动时会重新检查凭证。“返回登录”回到入口并清空未保存的密钥和校验提示。保存或打开工作区期间，按钮保持原文案并禁用竞争操作。Desktop preload 标记使 Web 凭证弹窗不再显示，同时保留模型设置页和欢迎须知。
 
+启用 `dsh-pro-auth` 组合包后，客户端会在启动时检查 CAS 会话，并在允许操作工作区前弹出阻塞式“系统登录”对话框；即使当前已选中已有会话，也会检查。CAS 登录成功后关闭对话框；取消会直接退出 Desktop，不显示未完成任务确认。
+
 欢迎窗口在显示前读取共享的 `locale.preference`。用户明确选择的英文或中文优先；否则 Desktop 按系统语言顺序匹配支持的语言，并以英文兜底。主界面在挂载前通过隔离 preload 读取同一偏好和系统语言顺序。在设置中切换语言会更新桌面壳的当前词典和菜单；自动选择不会写入偏好。欢迎窗口不提供语言切换入口。
 
 等待浏览器登录时，欢迎页提供当前待授权请求的链接复制入口、加载指示和取消操作；剪贴板写入失败后可以重试复制，复制结果提示在两秒后恢复；已复制状态下链接禁用，恢复后可再次点击。Welcome 文字使用 Montserrat Light 并回退到系统字体，底部大按钮保留系统字体，文字按钮使用 Montserrat Light。英文欢迎正文及产品名均为 24px，中文欢迎正文为 24px、产品名为 26px。登录操作按钮宽 240px，文字为 14px。授权状态标题使用 20px Montserrat Regular 字重。API Key 页的标题为 20px，返回操作为 14px，次级按钮底边距窗口底部 84px。
@@ -235,7 +237,7 @@ pnpm run package:desktop:mac:x64
 pnpm run package:desktop:win:x64
 ```
 
-要为某个部署环境打包独立私有市场，请提供具名环境目录，并向打包命令传入 `--config-env`，例如 `DSH_CONFIG_ENV_DIR=/secure/dsh-config pnpm run package:desktop:mac:arm64 -- --config-env hxfl`。打包会构建 `../deepseek-harness-plugins/dsh-private-market`（或由 `DSH_PRIVATE_MARKET_SOURCE` 指定的仓库），并将其不可变 package tarball 与 Official optional bundle 元数据加入当前目标；打包记录保存环境名、配置摘要、包版本和 tarball 完整性。默认 profile 中的 bundle 仍保持关闭；启用后会应用所选目录 URL、凭据引用和 registry。`config.json` 不包含凭据值：
+`build-macos.sh` 和 `build-win64.ps1` 默认预置本地 `dsh-pro-auth` 与 `dsh-private-market` bundle。底层打包命令接受 `--preinstall-private-plugins`；可用 `build-macos.sh --no-preinstall-private-plugins` 或 `build-win64.ps1 -NoPreinstallPrivatePlugins` 关闭预置。打包会构建相邻目录中的两个插件仓库（可分别用 `DSH_PRO_AUTH_SOURCE` 和 `DSH_PRIVATE_MARKET_SOURCE` 覆盖），把两个 package tarball 加入内置运行时，并写入新建 Desktop profile。已有 Desktop profile 会各迁移一次，用户之后仍可关闭。把 `DSH_CONFIG_ENV_DIR` 和 `DSH_CONFIG_ENV` 放在目标对应的忽略文件 `apps/desktop/.env.macos` 或 `.env.windows` 中；相对目录路径以 `apps/desktop` 为基准。所选配置文件为 `$DSH_CONFIG_ENV_DIR/<环境名>/config.json`。命令行参数 `--config-env NAME` 可以覆盖 `DSH_CONFIG_ENV`；`build-win64.ps1` 使用等价参数 `-ConfigEnvironment NAME`。没有选择环境时，两个插件仍会启用，但私有市场没有目录 URL。打包记录保存环境名、配置摘要、包版本和 tarball 完整性。`config.json` 不包含凭据值：
 
 ```json
 {
@@ -251,7 +253,7 @@ pnpm run package:desktop:win:x64
 }
 ```
 
-文件路径为 `$DSH_CONFIG_ENV_DIR/hxfl/config.json`；不传 `--config-env` 时，Desktop 打包不会读取或包含私有市场。
+`hxfl` 环境的文件路径为 `$DSH_CONFIG_ENV_DIR/hxfl/config.json`。所选环境必须包含 `plugins.privateMarket`，才能配置市场目录和 registry。没有选择配置时，已预置的市场仍不可用，直到提供配置。
 
 同一个具名环境也可通过 `desktop.updates` 为 Windows x64 配置匿名私有更新，且无需构建或打包私有市场插件：
 
@@ -269,7 +271,7 @@ pnpm run package:desktop:win:x64
 }
 ```
 
-在 Windows x64 上使用 `DSH_CONFIG_ENV_DIR=/secure/dsh-config pnpm run package:desktop:win:x64 -- --config-env hxfl` 打包。构件只嵌入所选环境名、检测 URL、通道和 HTTPS feed 源站；其他目标会拒绝此配置。客户端匿名调用 `POST /v1/desktop/updates/check`，不携带凭据；请求发送协议版本、部署、通道、Desktop 版本、`win32`、`x64`、随包 dsh 版本，以及认证集成可提供的内存态可选 `userId`。退出登录时应清除此 ID。缺少 ID 不影响检测。
+在 `apps/desktop/.env.windows` 中设置 `DSH_CONFIG_ENV_DIR` 和 `DSH_CONFIG_ENV=hxfl`，然后在 Windows x64 上向 `build-win64.ps1` 传入构建版本。构件只嵌入所选环境名、检测 URL、通道和 HTTPS feed 源站；其他目标会拒绝此配置。客户端匿名调用 `POST /v1/desktop/updates/check`，不携带凭据；请求发送协议版本、部署、通道、Desktop 版本、`win32`、`x64`、随包 dsh 版本，以及认证集成可提供的内存态可选 `userId`。退出登录时应清除此 ID。缺少 ID 不影响检测。
 
 macOS arm64 命令要求 Apple Silicon。macOS x64 命令可以在 Intel macOS 或带 Rosetta 的 Apple Silicon 上运行。Windows x64 命令要求 Windows x64。Linux 不是受支持的 Desktop 发布目标。
 

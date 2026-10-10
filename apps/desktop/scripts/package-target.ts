@@ -28,7 +28,7 @@ import { suggestDesktopBuildVersion } from './desktop-build-version-discovery.ts
 import { desktopBuildCommitEnvironment, readDesktopBuildCommit, resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { requireDesktopToolchain } from './desktop-toolchain-preflight.ts'
 import { withMacOSNotarizationProxy } from './macos-notarization-proxy.ts'
-import { packagePrivateMarket, resolvePrivateMarketSource } from './private-market-package.ts'
+import { packagePrivateMarket, resolvePrivateMarketSource, resolveProAuthSource } from './private-market-package.ts'
 import { readPrivateMarketEnvironment } from '../../../scripts/config-environment.ts'
 import { readPrivateDesktopUpdates } from './private-desktop-update-environment.mjs'
 
@@ -223,6 +223,7 @@ interface DesktopPackageInvocation {
   readonly prepareOnly: boolean
   readonly unsigned: boolean
   readonly internalDmg: boolean
+  readonly preinstallPrivatePlugins: boolean
   readonly check: boolean
   /** Named deployment environment whose private market or Desktop update settings are selected. */
   readonly configEnvironment: string | undefined
@@ -258,6 +259,7 @@ export function parseDesktopPackageInvocation(
       'prepare-only': { type: 'boolean', default: false },
       unsigned: { type: 'boolean', default: false },
       'internal-dmg': { type: 'boolean', default: false },
+      'preinstall-private-plugins': { type: 'boolean', default: false },
       check: { type: 'boolean', default: false },
       'build-version': { type: 'string' },
       'config-env': { type: 'string' },
@@ -281,6 +283,7 @@ export function parseDesktopPackageInvocation(
     prepareOnly: values['prepare-only'],
     unsigned: values.unsigned,
     internalDmg: values['internal-dmg'],
+    preinstallPrivatePlugins: values['preinstall-private-plugins'],
     check: values.check,
     configEnvironment: values['config-env'],
     requestedBuildVersion,
@@ -368,30 +371,31 @@ async function main(): Promise<void> {
   const invocation = parseDesktopPackageInvocation(process.argv.slice(2))
   const { target } = invocation
   const environment = loadDesktopPackageEnvironment(target.platform)
+  const configEnvironment = invocation.configEnvironment ?? (environment.DSH_CONFIG_ENV?.trim() || undefined)
   const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   // Release settings come from the target dotenv file alone, so the version this run publishes is an
   // argument; the environment variable below only carries it to the child processes that build.
   const buildVersion = await resolveRequestedBuildVersion(invocation, productVersion, environment)
   environment[DESKTOP_BUILD_VERSION_ENV] = buildVersion
   let selectedPrivateDesktopUpdates: ReturnType<typeof readPrivateDesktopUpdates> | undefined
-  let includesPrivateMarket = false
-  if (invocation.configEnvironment !== undefined) {
-    const configRoot = environment.DSH_CONFIG_ENV_DIR ?? process.env.DSH_CONFIG_ENV_DIR
-    if (!/^[a-z0-9][a-z0-9-]*$/u.test(invocation.configEnvironment)) throw new Error('desktop package: invalid config environment name')
+  let configuredPrivateMarket = false
+  if (configEnvironment !== undefined) {
+    const configRoot = environment.DSH_CONFIG_ENV_DIR
+    if (!/^[a-z0-9][a-z0-9-]*$/u.test(configEnvironment)) throw new Error('desktop package: invalid config environment name')
     if (configRoot === undefined || configRoot === '') throw new Error('desktop package: set DSH_CONFIG_ENV_DIR to read a named environment')
     let document: unknown
-    try { document = JSON.parse(readFileSync(join(configRoot, invocation.configEnvironment, 'config.json'), 'utf8')) }
-    catch (error) { throw new Error(`desktop package: cannot read selected config environment ${invocation.configEnvironment}`, { cause: error }) }
-    if (!isRecord(document) || document.schemaVersion !== 1 || document.environment !== invocation.configEnvironment) {
+    try { document = JSON.parse(readFileSync(join(configRoot, configEnvironment, 'config.json'), 'utf8')) }
+    catch (error) { throw new Error(`desktop package: cannot read selected config environment ${configEnvironment}`, { cause: error }) }
+    if (!isRecord(document) || document.schemaVersion !== 1 || document.environment !== configEnvironment) {
       throw new Error('desktop package: selected config environment must match schemaVersion 1 and its name')
     }
-    if (isRecord(document.plugins) && 'privateMarket' in document.plugins) includesPrivateMarket = true
+    configuredPrivateMarket = isRecord(document.plugins) && 'privateMarket' in document.plugins
     if (isRecord(document.desktop) && 'updates' in document.desktop) {
       if (target.name !== 'win-x64') throw new Error('desktop package: private desktop updates require win-x64')
-      selectedPrivateDesktopUpdates = readPrivateDesktopUpdates(configRoot, invocation.configEnvironment)
+      selectedPrivateDesktopUpdates = readPrivateDesktopUpdates(configRoot, configEnvironment)
       environment.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG = JSON.stringify(selectedPrivateDesktopUpdates)
     }
-    if (!includesPrivateMarket && selectedPrivateDesktopUpdates === undefined) {
+    if (!configuredPrivateMarket && selectedPrivateDesktopUpdates === undefined && !invocation.preinstallPrivatePlugins) {
       throw new Error('desktop package: selected config environment must configure plugins.privateMarket or desktop.updates')
     }
   }
@@ -399,12 +403,21 @@ async function main(): Promise<void> {
     validateDesktopPackageEnvironment(environment, target, {
       ...invocation, privateDesktopUpdates: selectedPrivateDesktopUpdates !== undefined,
     })
-    if (invocation.configEnvironment !== undefined) {
-      if (includesPrivateMarket) {
-        readPrivateMarketEnvironment(environment.DSH_CONFIG_ENV_DIR ?? process.env.DSH_CONFIG_ENV_DIR, invocation.configEnvironment)
+    if (configEnvironment !== undefined) {
+      if (configuredPrivateMarket) {
+        readPrivateMarketEnvironment(environment.DSH_CONFIG_ENV_DIR, configEnvironment)
         const source = resolvePrivateMarketSource(REPOSITORY_ROOT, environment)
         const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as { name?: unknown }
         if (manifest.name !== '@deepseek-ai/dsh-private-market') throw new Error(`desktop package: invalid private market source ${source}`)
+      }
+    }
+    if (invocation.preinstallPrivatePlugins) {
+      for (const [source, packageName] of [
+        [resolvePrivateMarketSource(REPOSITORY_ROOT, environment), '@deepseek-ai/dsh-private-market'],
+        [resolveProAuthSource(REPOSITORY_ROOT, environment), 'dsh-pro-auth'],
+      ] as const) {
+        const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as { name?: unknown }
+        if (manifest.name !== packageName) throw new Error(`desktop package: invalid preinstalled plugin source ${source}`)
       }
     }
     await requireDesktopToolchain(target.platform, environment)
@@ -442,9 +455,11 @@ async function main(): Promise<void> {
         downloadProxyConfigured: settings.downloadProxy !== undefined,
         notarizationProxyConfigured: settings.notarizationProxy !== undefined })
       await packagingStep(run.directory, 'macos-package', () => withMacOSSigningKeychain(environment,
-        signingEnvironment => packageTarget(invocation, signingEnvironment, run, includesPrivateMarket)), secrets)
+        signingEnvironment => packageTarget(invocation, signingEnvironment, run,
+          configuredPrivateMarket ? configEnvironment : undefined)), secrets)
     } else {
-      await packagingStep(run.directory, 'windows-package', () => packageTarget(invocation, environment, run, includesPrivateMarket), secrets)
+      await packagingStep(run.directory, 'windows-package', () => packageTarget(invocation, environment, run,
+        configuredPrivateMarket ? configEnvironment : undefined), secrets)
     }
     success = true
   } catch (error) {
@@ -463,14 +478,14 @@ async function main(): Promise<void> {
  * @param invocation Validated host, target and packaging mode.
  * @param environment File-owned release configuration.
  * @param run Persistent stage supervisor; required for signed Windows packaging and enabled for all release commands.
- * @param includesPrivateMarket Whether the selected environment includes the private-market namespace.
+ * @param configuredMarketEnvironment Selected environment name when it configures the private market.
  * @returns Resolves after preparation or complete packaging; any failed stage prevents a release record.
  */
 export async function packageTarget(
   invocation: DesktopPackageInvocation,
   environment: NodeJS.ProcessEnv,
   run: ReturnType<typeof createPackagingRun> | undefined,
-  includesPrivateMarket = false,
+  configuredMarketEnvironment?: string,
 ): Promise<void> {
   const { target } = invocation
   const execute = (args: readonly string[], env: NodeJS.ProcessEnv, cwd: string = APP_ROOT) => runPnpm(args, env, cwd, run)
@@ -529,14 +544,19 @@ export async function packageTarget(
   }
   await execute(['run', 'build:official'], buildEnv, REPOSITORY_ROOT)
   await execute(['run', 'release:pack', '--family', 'dsh', '--out', buildPaths.packedDsh, ...packArguments], buildEnv, REPOSITORY_ROOT)
-  if (invocation.configEnvironment !== undefined && includesPrivateMarket) {
+  if (invocation.preinstallPrivatePlugins || configuredMarketEnvironment !== undefined) {
     const source = resolvePrivateMarketSource(REPOSITORY_ROOT, environment)
+    const authSource = resolveProAuthSource(REPOSITORY_ROOT, environment)
     await execute(['run', 'build'], buildEnv, source)
+    if (invocation.preinstallPrivatePlugins) await execute(['run', 'build'], buildEnv, authSource)
     const marketRecord = await packagePrivateMarket({
       repositoryRoot: REPOSITORY_ROOT,
       source,
-      configRoot: environment.DSH_CONFIG_ENV_DIR ?? process.env.DSH_CONFIG_ENV_DIR,
-      environment: invocation.configEnvironment,
+      ...(invocation.preinstallPrivatePlugins ? { authSource } : {}),
+      configRoot: environment.DSH_CONFIG_ENV_DIR,
+      ...(configuredMarketEnvironment !== undefined
+        ? { environment: configuredMarketEnvironment }
+        : {}),
       output: buildPaths.packedDsh,
       runPnpm: (args, cwd) => execute(args, buildEnv, cwd),
     })

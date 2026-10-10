@@ -9,6 +9,7 @@ import {
   realpathSync,
   closeSync,
   readFileSync,
+  renameSync,
   unlinkSync,
   writeFileSync,
   writeSync,
@@ -22,6 +23,7 @@ import {
 import type { DesktopPaths } from './paths.ts'
 import type { DesktopRelease } from './release.ts'
 import { readDesktopRuntime } from './runtime-tree.ts'
+import { desktopProfileBundles, PREINSTALLED_PLUGIN_BUNDLES } from './preinstalled-plugin-bundles.ts'
 import {
   initProfile, PROFILE_TEMPLATES, removeLinkProjections, sanitizeProfile, type ProfileTemplate,
 } from '@deepseek-ai/dsh-app-boot'
@@ -30,6 +32,7 @@ const PROJECT_NAME = '@deepseek-ai/dsh-desktop-runtime'
 const DSH_PACKAGE = '@deepseek-ai/dsh'
 const CORE_BUILD_PACKAGE = '@deepseek-ai/dsh-subprocess-local'
 const WEB_PROFILE = PROFILE_TEMPLATES.web as ProfileTemplate
+const PREINSTALLED_BUNDLE_MARKERS = '.desktop-preinstalled-bundles'
 const WORKSPACE_SETTINGS = 'nodeLinker: hoisted\nautoInstallPeers: false\n'
 function writeJson(path: string, value: unknown): void {
   writeFileSync(path, `${JSON.stringify(value, undefined, 2)}\n`, { mode: 0o600 })
@@ -85,7 +88,9 @@ export class DesktopProjectManager {
       // Validation only: an unreadable or mismatched runtime descriptor stops preparation before the Host starts.
       readDesktopRuntime(this.runtime.dsh)
       migrateProfileSettings(this.paths.profile)
-      createPluginProfile(this.paths.profile)
+      const bundles = runtimeProfileBundles(this.runtime.dsh)
+      createPluginProfile(this.paths.profile, bundles)
+      seedPreinstalledBundles(this.paths.profile, bundles)
       removeLinkProjections(this.paths.profile)
     })
   }
@@ -139,7 +144,7 @@ export function createRuntimeProjectMetadata(projectDir: string, release: Deskto
     private: true,
     version: '0.0.0',
     dependencies: desktopCorePackageOverrides(packageSet),
-    dsh: { profile: { bundles: [...WEB_PROFILE.bundles] } },
+    dsh: { profile: { bundles: desktopProfileBundles(packageSet.packages.map(record => record.name)) } },
   }
   writeJson(join(projectDir, 'package.json'), manifest)
   writeFileSync(
@@ -171,6 +176,51 @@ export function createDevelopmentProjectMetadata(projectDir: string, release: De
 }
 
 /** Create the first external plugin profile without running a package manager. */
-export function createPluginProfile(projectDir: string): void {
-  initProfile(projectDir, WEB_PROFILE.bundles)
+export function createPluginProfile(projectDir: string, bundles: readonly string[] = WEB_PROFILE.bundles): void {
+  initProfile(projectDir, bundles)
+}
+
+function runtimeProfileBundles(runtimeRoot: string): string[] {
+  const manifest = JSON.parse(readFileSync(join(runtimeRoot, 'package.json'), 'utf8')) as {
+    dsh?: { profile?: { bundles?: unknown } }
+  }
+  const bundles = manifest.dsh?.profile?.bundles
+  if (bundles === undefined) return [...WEB_PROFILE.bundles]
+  if (!Array.isArray(bundles) || !bundles.every(bundle => typeof bundle === 'string')) {
+    throw new Error('desktop project: bundled dsh package has invalid default profile bundles')
+  }
+  return desktopProfileBundles(bundles)
+}
+
+function seedPreinstalledBundles(profileDir: string, defaults: readonly string[]): void {
+  const candidates = PREINSTALLED_PLUGIN_BUNDLES.filter(name => defaults.includes(name))
+  if (candidates.length === 0) return
+
+  const markersDir = join(profileDir, PREINSTALLED_BUNDLE_MARKERS)
+  mkdirSync(markersDir, { recursive: true, mode: 0o700 })
+  const path = join(profileDir, 'package.json')
+  const manifest = JSON.parse(readFileSync(path, 'utf8')) as {
+    dsh?: { profile?: { bundles?: unknown } }
+  }
+  const current = manifest.dsh?.profile?.bundles
+  if (!Array.isArray(current) || !current.every(bundle => typeof bundle === 'string')) {
+    throw new Error('desktop project: profile has invalid bundle list')
+  }
+
+  const unseeded = candidates.filter(name => !existsSync(join(markersDir, Buffer.from(name).toString('hex'))))
+  if (unseeded.length === 0) return
+  const merged = [...current]
+  for (const name of unseeded) if (!merged.includes(name)) merged.push(name)
+  if (merged.length !== current.length) {
+    const updated = {
+      ...manifest,
+      dsh: { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles: merged } },
+    }
+    const temporary = `${path}.tmp-${process.pid}`
+    writeFileSync(temporary, `${JSON.stringify(updated, undefined, 2)}\n`, { mode: 0o600 })
+    renameSync(temporary, path)
+  }
+  for (const name of unseeded) {
+    writeFileSync(join(markersDir, Buffer.from(name).toString('hex')), `${name}\n`, { mode: 0o600 })
+  }
 }

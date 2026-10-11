@@ -1,6 +1,6 @@
 /** Package terminal launch scripts that reuse the installed Electron runtime. */
 
-import { chmodSync, copyFileSync, mkdirSync } from 'node:fs'
+import { chmodSync, copyFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
@@ -8,10 +8,11 @@ import { join } from 'node:path'
  * @param destination - Physical runtime/cli directory prepared for the application.
  * @param platform - Target Desktop operating system.
  */
-export function prepareDesktopCli(destination: string, platform: 'darwin' | 'win32'): void {
+export function prepareDesktopCli(destination: string, platform: 'darwin' | 'win32', productName = 'DeepSeek Harness'): void {
   const name = platform === 'win32' ? 'dsh.cmd' : 'dsh'
   const command = join(destination, 'bin', name)
   mkdirSync(join(destination, 'bin'), { recursive: true })
   copyFileSync(join(import.meta.dirname, '..', 'cli', name), command)
+  writeFileSync(join(destination, 'product-name.txt'), `${productName}\n`)
   if (platform === 'darwin') chmodSync(command, 0o755)
 }

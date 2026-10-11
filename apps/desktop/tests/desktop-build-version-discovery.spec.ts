@@ -16,12 +16,13 @@ const directories: string[] = []
 async function releaseTreeWith(
   names: readonly string[],
   target: 'mac-arm64' | 'mac-x64' | 'win-x64' = 'win-x64',
+  base = 'deepseek-harness',
 ): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'dsh-discovery-'))
   directories.push(directory)
   for (const name of names) {
-    const match = /^deepseek-harness-(.+)-(?:mac|win)-(?:arm64|x64)(?:-(?:unsigned|internal))?\.(?:exe|dmg|zip)$/u.exec(name)
-    if (match === null) throw new Error(`unexpected fixture artifact ${name}`)
+    const match = new RegExp(`^${base}-(.+)-(?:mac|win)-(?:arm64|x64)(?:-(?:unsigned|internal))?\\.(?:exe|dmg|zip)$`, 'u').exec(name)
+    if (match === null) continue
     const targetDirectory = desktopTargetReleaseArtifactsDirectory(target, match[1]!, directory)
     await mkdir(targetDirectory, { recursive: true })
     await writeFile(join(targetDirectory, name), '')
@@ -76,7 +77,7 @@ describe('desktop build version discovery', () => {
     const releasesRoot = await releaseTreeWith([
       `deepseek-harness-${PRERELEASE}.${DATE}.3-mac-arm64.dmg`,
       `deepseek-harness-${PRERELEASE}.${DATE}.3-mac-arm64.zip`,
-    ])
+    ], 'mac-arm64')
     await expect(suggestDesktopBuildVersion({ productVersion: PRERELEASE, target: 'mac-arm64', environment: {}, date: DATE, releasesRoot }))
       .resolves.toBe(`${PRERELEASE}.${DATE}.4`)
   })
@@ -93,8 +94,15 @@ describe('desktop build version discovery', () => {
   it('counts internal macOS disk images written under their own suffix', async () => {
     const releasesRoot = await releaseTreeWith([
       `deepseek-harness-${PRERELEASE}.${DATE}.2-mac-arm64-internal.dmg`,
-    ])
+    ], 'mac-arm64')
     await expect(suggestDesktopBuildVersion({ productVersion: PRERELEASE, target: 'mac-arm64', environment: {}, date: DATE, releasesRoot }))
       .resolves.toBe(`${PRERELEASE}.${DATE}.3`)
+  })
+
+  it('scans local artifacts under the selected environment filename base', async () => {
+    const releasesRoot = await releaseTreeWith([`金租办公-${PRERELEASE}.${DATE}.6-win-x64.exe`], 'win-x64', '金租办公')
+    const environment = { DSH_DESKTOP_BRANDING: JSON.stringify({ displayName: '金租办公', iconSet: 'dsh', artifactNameBase: '金租办公' }) }
+    await expect(suggestDesktopBuildVersion({ productVersion: PRERELEASE, target: 'win-x64', environment, date: DATE, releasesRoot }))
+      .resolves.toBe(`${PRERELEASE}.${DATE}.7`)
   })
 })

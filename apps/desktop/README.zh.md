@@ -36,7 +36,7 @@ macOS 安装会创建 `/usr/local/bin/dsh`；目录权限需要时，系统会�
 
 关闭主窗口（macOS 的关闭按钮和 ⌘W；Windows 的 ×、Alt+F4 和任务栏"关闭窗口"）会隐藏窗口；Windows 首次隐藏前需要确认。页面和 Host 继续运行，任务不受影响，下次显示时仍是原来的文档，会话、草稿和滚动位置都保留；macOS 全屏窗口先退出全屏再隐藏。macOS 通过 Dock 图标、再次启动或 `dsh://open` 找回窗口，Windows 通过托盘找回。最小化行为不变。进入工作区前关闭欢迎窗口，Windows 上走退出流程，macOS 上应用留在 Dock 中且没有窗口。
 
-Windows 在整个运行期间常驻托盘图标。悬停提示为产品名，单击显示并聚焦窗口，右键菜单提供壳语言下的"打开 DeepSeek Harness"和"退出 DeepSeek Harness"。首次隐藏前复用更新弹窗，显示“正在运行的任务不会中断，可在系统托盘中重新打开窗口”和“确认”按钮。确认后隐藏窗口，并在 Electron userData 下写入 `background-close-confirmed`；Esc、关闭弹窗或加载失败均保持主窗口可见，不记录确认。重复关闭请求会聚焦已有壳弹窗。覆盖更新保留标记，卸载删除标记。旧的 `background-notice-shown` 标记不会跳过此确认。关闭窗口不发送系统通知。托盘位图是 `resources/tray-windows.ico`，由 `pnpm run render:tray-icon` 从 `resources/icon-windows.svg` 按 16、20、24、32、40、48、64 像素分别渲染，打包为 `resources/tray.ico`。macOS 不提供菜单栏图标。
+Windows 在整个运行期间常驻托盘图标。悬停提示为产品名，单击显示并聚焦窗口，右键菜单提供壳语言下的"打开 DeepSeek Harness"和"退出 DeepSeek Harness"。首次隐藏前复用更新弹窗，显示“正在运行的任务不会中断，可在系统托盘中重新打开窗口”和“确认”按钮。确认后隐藏窗口，并在 Electron userData 下写入 `background-close-confirmed`；Esc、关闭弹窗或加载失败均保持主窗口可见，不记录确认。重复关闭请求会聚焦已有壳弹窗。覆盖更新保留标记，卸载删除标记。旧的 `background-notice-shown` 标记不会跳过此确认。关闭窗口不发送系统通知。DSH 托盘位图位于 `resources/brand-sets/dsh/tray-windows.ico`，由 `pnpm run render:tray-icon` 从 `resources/icon-windows.svg` 按 16、20、24、32、40、48、64 像素分别渲染，打包为 `resources/tray.ico`。macOS 不提供菜单栏图标。
 
 所有普通退出入口——⌘Q、应用菜单、Dock 菜单、Windows 托盘和标题栏"应用程序"菜单，以及关闭强制更新窗口或欢迎窗口引起的退出——都先向 Host 查询退出会中断什么。Host 通过私有 IPC 通道回答两项事实：与更新重启检查同一口径的运行中任务（运行中的 agent，包括子代理和等待审批的回合、排队消息、运行中或停止中的后台任务），以及本次运行中已加载会话里由 `workspace/session-activity` 的 `schedule` family 报告的已挂定时器的提醒。两项都没有时直接退出，不弹框。否则弹出一个没有父窗口的原生消息框——隐藏的窗口保持隐藏——标题为**退出 DeepSeek Harness？**，正文为三种本地化说明之一：正在运行的任务将会中断、应用关闭期间定时任务不会运行，或两者兼有。"退出"是默认按钮，Esc 等同"取消"；macOS 上"取消"在"退出"左侧，Windows 上"退出"在"取消"左侧，Windows 任务对话框显示应用图标且不跟随应用主题、始终为浅色。Host 尚未就绪或已失败时不可能有任务在跑，直接退出。查询失败或 Host 超过两秒截止时间未答复，按运行中任务处理。弹框打开期间，再次请求退出只会并入同一弹框而不叠加新弹框（macOS 上还会把它提到前面；Electron 不暴露 Windows 任务对话框的句柄）；任务开始或结束不会改变文案；点"退出"不再重新查询即停止应用；点"取消"不发生任何变化。取消由关闭欢迎窗口引起的退出时，欢迎窗口会重新显示。
 
@@ -234,6 +234,28 @@ pnpm --dir apps/desktop run check:package
 ```sh
 pnpm run package:desktop
 ```
+
+### 按环境配置品牌
+
+所选 `config.json` 可在 `desktop.branding` 下设置 `displayName`、`iconSet` 和可选的 `artifactNameBase`。`local` 和 `hxfl` 环境会在应用和侧栏品牌名称中显示“金租办公”，并使用 `hxfl` 图标；未设置这些值的环境继续使用 DSH 默认值。空值按未配置处理。设置 `displayName` 后若省略 `artifactNameBase`，安装文件名基础名称也使用显示名称；如果发布文件名需要 ASCII 前缀，可单独设置 `artifactNameBase`。使用 `--config-env hxfl` 选择 `hxfl` 环境打包。
+
+```json
+"desktop": {
+  "branding": {
+    "displayName": "金租办公",
+    "iconSet": "hxfl"
+  }
+}
+```
+
+每套图标放在 `resources/brand-sets/<iconSet>/`，其中包含 `sidebar-mark.svg`、`icon-windows.png`、`icon-macos.png`、`tray-windows.ico` 以及 `installer/` 下的五张 PNG 图片。侧栏标记可按套装替换，并使用侧栏文字颜色显示。选择图标套装前须补齐全部资源；缺少文件会使打包失败。打包和上传 `local` 环境时，都通过 `--config-env local` 选择该环境。
+
+```sh
+pnpm --dir apps/desktop run package:win:x64 --config-env local
+pnpm --dir apps/desktop run upload:win:x64 --config-env local
+```
+
+版本化文件继续使用 `<artifactNameBase>-<version>-<os>-<arch>[-unsigned|-internal].<ext>`；`dsh-latest-*` 下载别名和更新通道文件名保持稳定。应用 ID、协议、用户数据和诊断日志路径沿用现有值。
 
 发布自动化使用固定目标命令，确保运行时准备、dsh 准备与 electron-builder 接收相同的平台和架构：
 

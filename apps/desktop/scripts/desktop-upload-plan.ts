@@ -17,6 +17,7 @@ import {
   desktopTargetReleaseArtifactsDirectory,
 } from './desktop-build-paths.mjs'
 import { validateDesktopBuildVersion } from './desktop-build-version.mjs'
+import { desktopBrandingFromEnvironment, readDesktopBranding } from './desktop-branding-environment.mjs'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const REPOSITORY_ROOT = resolve(APP_ROOT, '..', '..')
@@ -245,6 +246,14 @@ export async function createDesktopUploadPlan(
     || buildRecord.publicUrl !== update.publicUrl) {
     throw new Error(`desktop upload: ${targetName} package completion record for ${buildVersion} does not match the ${update.environment} update destination`)
   }
+  const configEnvironment = environment.DSH_CONFIG_ENV?.trim() || undefined
+  const branding = configEnvironment === undefined
+    ? desktopBrandingFromEnvironment({})
+    : readDesktopBranding(environment.DSH_CONFIG_ENV_DIR, configEnvironment)
+  if (buildRecord.configEnvironment !== configEnvironment
+    || JSON.stringify(buildRecord.branding) !== JSON.stringify(branding)) {
+    throw new Error(`desktop upload: ${targetName} package completion record for ${buildVersion} does not match the selected branding environment`)
+  }
 
   const metadataFilename = desktopUpdateMetadataFilename(buildVersion, target.platform)
   const metadataPath = join(artifactsRoot, metadataFilename)
@@ -264,7 +273,7 @@ export async function createDesktopUploadPlan(
     throw new Error(`desktop upload: ${metadataFilename}.files must contain exactly one target update file`)
   }
 
-  const base = `deepseek-harness-${buildVersion}-${target.os}-${target.arch}`
+  const base = `${branding.artifactNameBase}-${buildVersion}-${target.os}-${target.arch}`
   const updaterExtension = target.platform === 'darwin' ? 'zip' : 'exe'
   const updaterInfo = updateFileInfo(metadata.files[0], `${metadataFilename}.files[0]`, `${base}.${updaterExtension}`)
   const updaterPath = await verifyChecksummedArtifact(artifactsRoot, updaterInfo)
@@ -293,7 +302,7 @@ export async function createDesktopUploadPlan(
     artifacts.push(uploadArtifact(blockmapPath, binaryPrefix, 'application/octet-stream'))
   }
 
-  const payloadUrl = `${update.origin}/${binaryPrefix}/${updaterInfo.filename}`
+  const payloadUrl = `${update.origin}/${binaryPrefix}/${encodeURIComponent(updaterInfo.filename)}`
   const published = {
     ...metadata,
     files: [{ ...object(metadata.files[0], `${metadataFilename}.files[0]`), url: payloadUrl }],

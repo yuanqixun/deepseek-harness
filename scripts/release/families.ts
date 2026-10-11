@@ -355,7 +355,7 @@ class DshFamily extends ReleaseFamily {
 
   /** Require current artifacts from a complete official client build. */
   override verifyBuildArtifacts(root: string): void {
-    readClientBuildRecord(root, officialClientBuildEnvironment(root))
+    readClientBuildRecord(root, officialClientBuildEnvironment(root, process.env))
   }
 
   /**

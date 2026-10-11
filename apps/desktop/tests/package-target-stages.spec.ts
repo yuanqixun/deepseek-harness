@@ -68,6 +68,23 @@ it('requires one signing preflight before building, then records only the comple
   expect(record.publicUrl).toBe('https://updates.example.com/dsh-desk/0123456789abcdef0123456789abcdef/feeds/win-x64/')
 })
 
+it('passes a configured Desktop brand name into the client build and omits it for the DSH default', async () => {
+  const branded = supervisor()
+  await packageTarget(parseDesktopPackageInvocation(['win-x64', '--prepare-only'], 'win32', 'x64'), {
+    ...environment,
+    DSH_DESKTOP_BRANDING: JSON.stringify({ displayName: '金租办公', iconSet: 'dsh', artifactNameBase: '金租办公' }),
+  }, branded.run)
+  const brandedBuild = branded.run.run.mock.calls.find(call => call[0] === 'run build:official')
+  expect(brandedBuild?.[3].env.DSH_CLIENT_BRAND_NAME).toBe('金租办公')
+  expect(brandedBuild?.[3].env.DSH_CLIENT_BRAND_MARK).toMatch(/^data:image\/svg\+xml;base64,/u)
+
+  const defaults = supervisor()
+  await packageTarget(parseDesktopPackageInvocation(['win-x64', '--prepare-only'], 'win32', 'x64'), environment, defaults.run)
+  const defaultBuild = defaults.run.run.mock.calls.find(call => call[0] === 'run build:official')
+  expect(defaultBuild?.[3].env).not.toHaveProperty('DSH_CLIENT_BRAND_NAME')
+  expect(defaultBuild?.[3].env.DSH_CLIENT_BRAND_MARK).toMatch(/^data:image\/svg\+xml;base64,/u)
+})
+
 it('initializes shared storage only after acquiring the preflight stage lock', async () => {
   const { run } = supervisor()
   vi.mocked(withWindowsSigningStage).mockImplementationOnce(async (_options, operation) => {

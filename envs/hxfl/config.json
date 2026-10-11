@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "environment": "hxfl",
+  "plugins": {
+    "privateMarket": {
+      "catalogUrl": "https://dsh-market.superbpm.com/v1/plugins",
+      "registryUrl": "https://hxflnexus.superbpm.com/repository/npm-group/"
+    }
+  },
+  "desktop": {
+    "branding": {
+      "displayName": "金租办公",
+      "iconSet": "hxfl"
+    },
+    "updates": {
+      "distribution": "dshwork",
+      "checkUrl": "https://hxai.superbpm.com/app-api/v1/desktop/updates/check",
+      "channel": "stable",
+      "feedOrigins": ["https://hxai.superbpm.com"]
+    }
+  }
+}

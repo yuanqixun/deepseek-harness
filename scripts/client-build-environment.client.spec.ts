@@ -115,6 +115,18 @@ describe('client build environment', () => {
       DSH_CLIENT_TITLE: 'DeepSeek Harness',
       DSH_CLIENT_VERSION: '1.2.3',
     })
+    expect(resolveClientBuildEnvironment({
+      ...parent,
+      DSH_CLIENT_BRAND_NAME: '金租办公',
+    })).toMatchObject({ DSH_CLIENT_BRAND_NAME: '金租办公' })
+    const brandMark = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='
+    expect(resolveClientBuildEnvironment({ ...parent, DSH_CLIENT_BRAND_MARK: brandMark }))
+      .toMatchObject({ DSH_CLIENT_BRAND_MARK: brandMark })
+    expect(() => resolveClientBuildEnvironment({ ...parent, DSH_CLIENT_BRAND_MARK: '/tmp/mark.svg' }))
+      .toThrow(/base64 SVG data URL/u)
+    expect(() => {
+      resolveClientBuildEnvironment({ ...parent, DSH_CLIENT_BRAND_NAME: ' 金租办公' })
+    }).toThrow(/DSH_CLIENT_BRAND_NAME/u)
     expect(() => {
       resolveClientBuildEnvironment({ DSH_BUILD_CLIENT_PROFILE: 'official' })
     }).toThrow(/DSH_CLIENT_COMMIT_HASH/)
@@ -162,6 +174,10 @@ describe('client build environment', () => {
       DSH_CLIENT_TITLE: 'DeepSeek Harness',
       DSH_CLIENT_VERSION: '1.2.3-rc.4',
     })
+    expect(officialClientBuildEnvironment(fixtureRoot, { DSH_CLIENT_BRAND_NAME: '金租办公' }))
+      .toMatchObject({ DSH_CLIENT_BRAND_NAME: '金租办公' })
+    expect(officialClientBuildEnvironment(fixtureRoot, { DSH_CLIENT_BRAND_MARK: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' }))
+      .toMatchObject({ DSH_CLIENT_BRAND_MARK: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' })
 
     write(join(fixtureRoot, '.gitignore'), 'ignored.txt\n')
     git(fixtureRoot, ['add', '.gitignore'])

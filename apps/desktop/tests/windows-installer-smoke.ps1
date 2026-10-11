@@ -16,7 +16,7 @@ $expected = Get-Content (Join-Path $PSScriptRoot 'expected/windows-installer.jso
 $localizedCopy = @{ ENGLISH = @{}; SIMPCHINESE = @{} }
 Get-Content (Join-Path $PSScriptRoot '../installer/strings.nsh') -Encoding UTF8 | ForEach-Object {
     if ($_ -match '^LangString (INSTALLER_\w+) \$\{LANG_(ENGLISH|SIMPCHINESE)\} "(.*)"$') {
-        $localizedCopy[$Matches[2]][$Matches[1]] = $Matches[3]
+        $localizedCopy[$Matches[2]][$Matches[1]] = $Matches[3].Replace('$(^Name)', $ProductName)
     }
 }
 function Wait-Control([Diagnostics.Process]$Process, [string]$Text, [switch]$Dialog) {

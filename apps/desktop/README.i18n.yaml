@@ -9,8 +9,8 @@
   en: bef92953c237363f
   zh: d21d6effd21b8c00
 /deepseek-harness-desktop/closing-the-window-and-quitting:
-  en: c323e02e3f0305fe
-  zh: 3c730db632136443
+  en: fb81d2192ab0fb19
+  zh: b3c5fc48bf0d2e54
 /deepseek-harness-desktop/key-technical-decisions:
   en: 069fdfd72d2ea26a
   zh: 76ae549d43c99bb4
@@ -42,8 +42,11 @@
   en: 4cd8a8da6977928d
   zh: 9f624855a2edac37
 /deepseek-harness-desktop/package/release-versions:
-  en: 4401942a69bccddb
-  zh: 62805e5c20a92db2
+  en: 3b7e765fb92047c3
+  zh: b3eca61e95ca512d
+/deepseek-harness-desktop/package/environment-branding:
+  en: b8894d1615a706b2
+  zh: 878a44d456b1c501
 /deepseek-harness-desktop/package/local-macos-dmg-without-release-signing:
   en: 57869a5e3885f843
   zh: 7cfc01b2dcbebd78

@@ -5,6 +5,7 @@ import { createReadStream } from 'node:fs'
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { load } from 'js-yaml'
+import { desktopBrandingFromEnvironment } from './desktop-branding-environment.mjs'
 
 function object(value, label) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -31,11 +32,11 @@ async function artifact(root, filename, kind) {
  * @param {string} version Version embedded in the build.
  * @returns {Promise<{ metadata: object, artifacts: object[] }>} Validated metadata and local file summaries.
  */
-export async function verifyPrivateDesktopUpdateArtifacts(root, target, version) {
+export async function verifyPrivateDesktopUpdateArtifacts(root, target, version, branding = desktopBrandingFromEnvironment()) {
   const darwin = target.platform === 'darwin'
   const metadataFilename = darwin ? 'nightly-mac.yml' : 'nightly.yml'
   const extension = darwin ? 'zip' : 'exe'
-  const base = `deepseek-harness-${version}-${darwin ? 'mac' : 'win'}-${target.arch}`
+  const base = `${branding.artifactNameBase}-${version}-${darwin ? 'mac' : 'win'}-${target.arch}`
   const metadata = object(load(readFileSync(join(root, metadataFilename), 'utf8')), metadataFilename)
   if (metadata.version !== version || !Array.isArray(metadata.files) || metadata.files.length !== 1) {
     throw new Error(`desktop updates: ${metadataFilename} must describe exactly version ${version}`)

@@ -135,18 +135,38 @@ export function repositoryClientBuildEnvironment(
 /**
  * Resolve the exact public values required by an official build at one commit.
  * @param root - repository root whose HEAD must match the built source.
- * @param environment - optional explicit commit source for non-Git build environments.
+ * @param environment - optional commit source and environment-specific client brand.
  * @returns complete official client environment.
  */
 export function officialClientBuildEnvironment(
   root: string,
   environment: NodeJS.ProcessEnv = process.env,
 ): Readonly<Record<`DSH_CLIENT_${string}`, string>> {
+  const brandName = resolveClientBrandName(environment)
+  const brandMark = resolveClientBrandMark(environment)
   return {
     DSH_CLIENT_COMMIT_HASH: repositoryCommitHash(root, environment),
     DSH_CLIENT_VERSION: repositoryVersion(root),
     ...OFFICIAL_CLIENT_BUILD_ENVIRONMENT,
+    ...(brandName === undefined ? {} : { DSH_CLIENT_BRAND_NAME: brandName }),
+    ...(brandMark === undefined ? {} : { DSH_CLIENT_BRAND_MARK: brandMark }),
   }
+}
+
+function resolveClientBrandName(environment: NodeJS.ProcessEnv): string | undefined {
+  const value = environment.DSH_CLIENT_BRAND_NAME
+  if (value !== undefined && (value === '' || value.trim() !== value || /[\x00-\x1f\x7f]/u.test(value))) {
+    throw new Error('DSH_CLIENT_BRAND_NAME must be a nonempty string without control characters')
+  }
+  return value
+}
+
+function resolveClientBrandMark(environment: NodeJS.ProcessEnv): string | undefined {
+  const value = environment.DSH_CLIENT_BRAND_MARK
+  if (value !== undefined && !/^data:image\/svg\+xml;base64,[A-Za-z0-9+/]+={0,2}$/u.test(value)) {
+    throw new Error('DSH_CLIENT_BRAND_MARK must be a base64 SVG data URL')
+  }
+  return value
 }
 
 /** Digest of every client artifact produced by the complete root build. */
@@ -192,6 +212,8 @@ export function resolveClientBuildEnvironment(
   if (profile === 'official') {
     const commitHash = environment[CLIENT_COMMIT_HASH_VARIABLE]
     const version = environment[CLIENT_VERSION_VARIABLE]
+    const brandName = resolveClientBrandName(environment)
+    const brandMark = resolveClientBrandMark(environment)
     if (commitHash === undefined) {
       throw new Error(`${CLIENT_COMMIT_HASH_VARIABLE} is required for the official client build profile`)
     }
@@ -202,6 +224,8 @@ export function resolveClientBuildEnvironment(
       DSH_CLIENT_COMMIT_HASH: commitHash,
       DSH_CLIENT_VERSION: version,
       ...OFFICIAL_CLIENT_BUILD_ENVIRONMENT,
+      ...(brandName === undefined ? {} : { DSH_CLIENT_BRAND_NAME: brandName }),
+      ...(brandMark === undefined ? {} : { DSH_CLIENT_BRAND_MARK: brandMark }),
     }
   }
   throw new Error(`unknown client build profile ${JSON.stringify(profile)}; expected "official"`)

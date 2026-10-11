@@ -8,6 +8,10 @@
     }
   },
   "desktop": {
+    "branding": {
+      "displayName": "金租办公",
+      "iconSet": "hxfl"
+    },
     "updates": {
       "distribution": "dshwork",
       "checkUrl": "http://localhost:48080/app-api/v1/desktop/updates/check",

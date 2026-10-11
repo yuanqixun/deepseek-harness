@@ -8,6 +8,7 @@ import { readDesktopRuntime, verifyDesktopRuntime } from '../src/runtime-tree.ts
 import { verifyWindowsCode } from './windows-runtime-signature.mjs'
 import { smokePreparedRuntime } from './smoke-prepared-runtime.ts'
 import { resolveDesktopPackageTarget } from './package-target.ts'
+import { desktopBrandingFromEnvironment } from './desktop-branding-environment.mjs'
 
 const paths = resolveDesktopTargetBuildPaths()
 const { values } = parseArgs({ options: { unsigned: { type: 'boolean', default: false }, 'internal-dmg': { type: 'boolean', default: false } }, allowPositionals: false })
@@ -21,10 +22,11 @@ const artifacts = values.unsigned ? paths.unsignedArtifacts
   : values['internal-dmg'] ? desktopTargetInternalArtifactsDirectory(target, resolveDesktopBuildVersion(process.env,
     JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version))
     : paths.artifacts
+const displayName = desktopBrandingFromEnvironment(process.env).displayName
 const application = windows ? join(artifacts, 'win-unpacked')
-  : join(artifacts, target === 'mac-arm64' ? 'mac-arm64' : 'mac', 'DeepSeek Harness.app', 'Contents')
+  : join(artifacts, target === 'mac-arm64' ? 'mac-arm64' : 'mac', `${displayName}.app`, 'Contents')
 const resources = join(application, windows ? 'resources' : 'Resources')
-const executable = windows ? join(application, 'DeepSeek Harness.exe') : join(application, 'MacOS', 'DeepSeek Harness')
+const executable = windows ? join(application, `${displayName}.exe`) : join(application, 'MacOS', displayName)
 const descriptor = await verifyDesktopRuntime(paths.dsh, readDesktopRuntime(paths.dsh).release.version,
   resolveDesktopPackageTarget(target))
 if (windows && !values.unsigned) await verifyWindowsCode(application)

@@ -153,13 +153,15 @@ const harness = await vi.hoisted(async () => {
   }
   const app = Object.assign(new EventEmitter(), {
     isPackaged: true,
-    name: 'Desktop test',
+    name: 'DeepSeek Harness',
     whenReady: () => Promise.resolve(),
     getLocale: (): string => 'en-US',
     getPreferredSystemLanguages: () => ['en-US'],
     getVersion: () => '1.0.0',
+    getName: (): string => 'DeepSeek Harness',
     getAppPath: (): string => 'desktop-test-app',
     setAppLogsPath: vi.fn(),
+    setPath: vi.fn(),
     getPath: vi.fn<(name: string) => string>(),
     setAboutPanelOptions: vi.fn<(options: Electron.AboutPanelOptionsOptions) => void>(),
     requestSingleInstanceLock: () => true,
@@ -553,7 +555,7 @@ describe('desktop main startup', () => {
       options: { ...options, iconPath: '<app icon>' } })
       .toEqual(expected[`${platform}:${locale}`])
     expect(options.iconPath).toBe(packaged ? join('desktop-test-resources', 'icon.png')
-      : join('desktop-test-app', 'resources', 'icon-windows.png'))
+      : join('desktop-test-app', 'resources', 'brand-sets', 'dsh', 'icon-windows.png'))
     expect(about!.role).toBeUndefined()
     expect(about!.click).toBeTypeOf('function')
     ;(about!.click as () => void)()
@@ -749,6 +751,24 @@ describe('desktop main startup', () => {
       login.resolve('cancelled')
       await Promise.allSettled(checks)
     }
+  })
+
+  it('pins userData and sessionData to the legacy DSH directory before Electron is ready', async () => {
+    await import('../src/main.ts')
+    expect(harness.app.setPath).toHaveBeenCalledWith('userData', join('desktop-test-appData', 'DeepSeek Harness'))
+    expect(harness.app.setPath).toHaveBeenCalledWith('sessionData', join('desktop-test-appData', 'DeepSeek Harness'))
+    expect(harness.app.setAppLogsPath).toHaveBeenCalledWith(process.platform === 'darwin'
+      ? join('desktop-test-home', 'Library', 'Logs', 'DeepSeek Harness')
+      : join('desktop-test-appData', 'DeepSeek Harness', 'logs'))
+  })
+
+  it('uses the packaged product name in the native menu while keeping diagnostic paths stable', async () => {
+    vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
+    vi.spyOn(harness.app, 'getName').mockReturnValue('金租办公')
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    expect(harness.menu.mock.calls[0]?.[0][0]?.label).toBe('金租办公')
+    expect(harness.app.setPath).toHaveBeenCalledWith('userData', join('desktop-test-appData', 'DeepSeek Harness'))
   })
 
   it.each(['returned', 'cancelled', 'failed'] as const)('requires explicit test login and handles %s without downloading', async (outcome) => {
@@ -1060,7 +1080,7 @@ describe('desktop main startup', () => {
       .find(items => items.some(item => item.role === 'editMenu'))
     if (template === undefined) throw new Error('application menu missing')
     expect(template.map(describeItem)).toEqual(platform === 'darwin'
-      ? ['Desktop test', en.fileMenu, 'editMenu', 'windowMenu']
+      ? ['DeepSeek Harness', en.fileMenu, 'editMenu', 'windowMenu']
       : ['Application', 'editMenu'])
     const application = template[0]!.submenu as MenuItemConstructorOptions[]
     expect(application.filter(item => item.visible !== false).map(describeItem)).toEqual(platform === 'darwin'
@@ -2220,7 +2240,7 @@ describe('desktop main startup', () => {
     expect(report.error).toBeInstanceOf(Error)
     expect((report.error as Error).message).toContain('fatal uncaught exception: ENOENT')
     expect(report.rendererConsole).toEqual(['dsh-app://app/assets/entry.js:12 client-modules: bundle script plugins/??a/client.js&rev=1 failed to load'])
-    expect(report.app).toMatchObject({ name: 'Desktop test', version: '1.0.0', platform: process.platform, locale: 'en' })
+    expect(report.app).toMatchObject({ name: 'DeepSeek Harness', version: '1.0.0', platform: process.platform, locale: 'en' })
     expect(report.time).toBeInstanceOf(Date)
     host.exited.resolve()
     await harness.quitCompleted.promise

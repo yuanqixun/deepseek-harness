@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -57,6 +57,8 @@ async function fixture(
     schemaVersion: 1,
     target,
     version,
+    configEnvironment: undefined,
+    branding: { displayName: 'DeepSeek Harness', iconSet: 'dsh', artifactNameBase: 'deepseek-harness' },
     environment,
     publicUrl: `${origin}/dsh-desk/${environment === 'test' ? `${RELEASE_ID}/` : ''}feeds/${target}/`,
   })}\n`)
@@ -113,6 +115,36 @@ afterEach(async () => {
 })
 
 describe('desktop upload plan', () => {
+  it('uses the selected environment filename base and rejects a different recorded brand', async () => {
+    const paths = await fixture('win-x64')
+    const configRoot = join(paths.repositoryRoot, 'envs')
+    const localRoot = join(configRoot, 'local')
+    const otherRoot = join(configRoot, 'other')
+    await mkdir(localRoot, { recursive: true })
+    await mkdir(otherRoot, { recursive: true })
+    const branding = { displayName: '金租办公', iconSet: 'dsh', artifactNameBase: '金租办公' }
+    await writeFile(join(localRoot, 'config.json'), JSON.stringify({ schemaVersion: 1, environment: 'local', desktop: { branding } }))
+    await writeFile(join(otherRoot, 'config.json'), JSON.stringify({ schemaVersion: 1, environment: 'other', desktop: { branding: { displayName: 'dsh办公' } } }))
+    const recordPath = join(paths.artifactsRoot, 'win-x64-release.json')
+    const record = JSON.parse(await readFile(recordPath, 'utf8')) as Record<string, unknown>
+    await writeFile(recordPath, JSON.stringify({ ...record, configEnvironment: 'local', branding }))
+    const source = 'deepseek-harness-1.2.3-win-x64.exe'
+    const filename = '金租办公-1.2.3-win-x64.exe'
+    await rename(join(paths.artifactsRoot, source), join(paths.artifactsRoot, filename))
+    await rename(join(paths.artifactsRoot, `${source}.blockmap`), join(paths.artifactsRoot, `${filename}.blockmap`))
+    const metadataPath = join(paths.artifactsRoot, desktopUpdateMetadataFilename('1.2.3', 'win32'))
+    const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as { path: string; files: Array<{ url: string }> }
+    metadata.path = filename
+    metadata.files[0]!.url = filename
+    await writeFile(metadataPath, JSON.stringify(metadata))
+    const environment = { ...paths.environment, DSH_CONFIG_ENV: 'local', DSH_CONFIG_ENV_DIR: configRoot }
+    const plan = await createDesktopUploadPlan('win-x64', { ...paths, environment })
+    expect(plan.artifacts.map(artifact => artifact.filename)).toContain(filename)
+    expect(plan.artifacts.find(artifact => artifact.filename === 'nightly.yml')?.contents).toContain(encodeURIComponent(filename))
+    await expect(createDesktopUploadPlan('win-x64', { ...paths, environment: { ...environment, DSH_CONFIG_ENV: 'other' } }))
+      .rejects.toThrow(/selected branding environment/u)
+  })
+
   it('uploads only the selected latest installer to each deployment using the existing COS transport', async () => {
     const published = []
     for (const environment of ['production', 'test'] as const) {

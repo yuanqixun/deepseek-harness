@@ -73,6 +73,7 @@ let shuttingDown = false
  */
 let skipQuitConfirmation = false
 let windowsLanguage: string | undefined
+const desktopDisplayName = app.isPackaged ? app.getName() : 'DeepSeek Harness'
 /**
  * Whether the backend has reached ready: false until the first ready, back to
  * false when a restart returns it to starting, frozen during shutdown so a
@@ -82,12 +83,18 @@ let backendReady = false
 /** Error-level console output of the primary window, attached to crash reports. */
 const rendererConsole = new RendererConsoleTail()
 
+// Keep Electron's legacy per-user storage location when productName changes between releases.
+const legacyUserDataPath = join(app.getPath('appData'), 'DeepSeek Harness')
+app.setPath('userData', legacyUserDataPath)
+app.setPath('sessionData', legacyUserDataPath)
 // Platform-conventional logs directory (macOS ~/Library/Logs/<name>, otherwise under userData);
 // set before ready so the first fatal report already resolves under it.
-app.setAppLogsPath()
+app.setAppLogsPath(process.platform === 'darwin'
+  ? join(app.getPath('home'), 'Library', 'Logs', 'DeepSeek Harness')
+  : join(legacyUserDataPath, 'logs'))
 
 function currentDesktopLocale(): ReturnType<typeof resolveDesktopLocale> {
-  return resolveDesktopLocale(windowsLanguage ?? app.getLocale())
+  return resolveDesktopLocale(windowsLanguage ?? app.getLocale(), desktopDisplayName)
 }
 /** Quit without the task confirmation; the caller has already decided the application must stop. */
 function quitWithoutConfirmation(): void {
@@ -116,7 +123,7 @@ function persistCrashReport(error: unknown, source: CrashReportSource): Promise<
     ...(error instanceof DesktopHostFatalError && error.diagnostic !== undefined ? { hostDiagnostic: error.diagnostic } : {}),
     rendererConsole: rendererConsole.snapshot(),
     app: {
-      name: app.name, version: app.getVersion(), platform: process.platform, arch: process.arch,
+      name: 'DeepSeek Harness', version: app.getVersion(), platform: process.platform, arch: process.arch,
       electron: process.versions.electron, node: process.versions.node, locale: currentDesktopLocale().id,
     },
     time: new Date(),
@@ -355,7 +362,7 @@ async function main(): Promise<void> {
   let updateStopFailure: DesktopHostUncleanExitError | undefined
   let updateState: DesktopUpdateState = { phase: 'idle' }
   const systemLanguages = app.getPreferredSystemLanguages()
-  let locale = resolveDesktopStartupLocale(null, systemLanguages)
+  let locale = resolveDesktopStartupLocale(null, systemLanguages, desktopDisplayName)
   windowsLanguage = locale.id
   let mandatoryPolicy: Pick<DesktopMandatoryUpdatePolicy, 'state' | 'check' | 'dispose'> | PrivateDesktopUpdateClient | undefined
   let privateUpdates: PrivateDesktopUpdateClient | undefined
@@ -777,7 +784,7 @@ async function main(): Promise<void> {
     const window = mainWindow
     if (window === undefined || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame
       || typeof next !== 'string') return
-    const current = resolveDesktopStartupLocale(next, systemLanguages)
+    const current = resolveDesktopStartupLocale(next, systemLanguages, desktopDisplayName)
     if (current.id === locale.id) return
     locale = current
     platformView.notifyLocaleChanged()
@@ -958,10 +965,10 @@ async function main(): Promise<void> {
     updates.dispose()
   })
 
-  const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'icon-windows.png')
+  const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'brand-sets', 'dsh', 'icon-windows.png')
     : join(process.resourcesPath, 'icon.png')
   app.setAboutPanelOptions({
-    applicationName: 'DeepSeek Harness',
+    applicationName: desktopDisplayName,
     applicationVersion: app.getVersion(),
     // The release has no separate build number; omit Electron's bundle version.
     version: '',
@@ -970,7 +977,7 @@ async function main(): Promise<void> {
   })
   // A custom application menu replaces Electron's default menu, so macOS needs
   // its standard menus and application hide commands declared explicitly.
-  // Keep app.name stable: Electron derives its default userData directory from it.
+  // Product name is environment-selected; the legacy userData path remains fixed above.
   const darwin = process.platform === 'darwin'
   const platformMenus = (): MenuItemConstructorOptions[] => darwin
     ? [shortcuts.fileMenu(currentDesktopLocale().messages), { role: 'editMenu' }, { role: 'windowMenu' }]
@@ -1009,13 +1016,13 @@ async function main(): Promise<void> {
   ]
   const refreshApplicationMenu = (): void => {
     Menu.setApplicationMenu(Menu.buildFromTemplate(process.platform === 'win32' ? devToolsItems : [{
-      label: darwin ? app.name : currentDesktopLocale().messages.application,
+      label: darwin ? desktopDisplayName : currentDesktopLocale().messages.application,
       submenu: [...applicationItems(), ...devToolsItems],
     }, ...platformMenus()]))
     tray?.relabel()
   }
   refreshApplicationMenu()
-  const trayIconPath = development ? join(app.getAppPath(), 'resources', 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico')
+  const trayIconPath = development ? join(app.getAppPath(), 'resources', 'brand-sets', 'dsh', 'tray-windows.ico') : join(process.resourcesPath, 'tray.ico')
   if (process.platform === 'win32') {
     // The tray is the way back to a hidden window; without it, relaunching the application still focuses it.
     try {
@@ -1232,7 +1239,7 @@ async function main(): Promise<void> {
     if (quitting || recovery.active) return
     const state = await readWelcomeState()
     if (isQuitting() || backend.state.phase !== 'ready') return
-    locale = resolveDesktopStartupLocale(state.localePreference, systemLanguages)
+    locale = resolveDesktopStartupLocale(state.localePreference, systemLanguages, desktopDisplayName)
     windowsLanguage = locale.id
     refreshApplicationMenu()
     if (!enteredWorkspace && needsWelcome({ loggedIn: state.loggedIn, hasApiKey: state.hasApiKey })) {

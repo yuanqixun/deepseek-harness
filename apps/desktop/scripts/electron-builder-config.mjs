@@ -22,6 +22,7 @@ import {
 import { resolveDesktopAutoUpdateConfig } from './desktop-auto-update-environment.mjs'
 import { resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { resolveDesktopBuildVersion } from './desktop-build-version.mjs'
+import { desktopBrandingFromEnvironment, resolveDesktopIconSet } from './desktop-branding-environment.mjs'
 import { resolveDesktopPolicyEnvironment } from './desktop-policy-environment.mjs'
 import {
   desktopTargetInternalArtifactsDirectory,
@@ -87,6 +88,8 @@ export function createElectronBuilderConfig(
   const macOSSigning = packagesMacOS && !unsigned && !internalDmg ? resolveMacOSSigningEnvironment(env) : undefined
   if (packagesMacOS && !unsigned && !internalDmg) resolveMacOSNotarizationEnvironment(env)
   const target = resolveDesktopBuildTarget(env, hostPlatform, hostArch)
+  const branding = desktopBrandingFromEnvironment(env)
+  const iconSet = resolveDesktopIconSet(fileURLToPath(new URL('../resources/brand-sets', import.meta.url)), branding.iconSet)
   const buildPaths = desktopTargetBuildPaths(target)
   let primaryRuntimeDestination
   let dshDestination
@@ -128,14 +131,15 @@ export function createElectronBuilderConfig(
     protocols: [{ name: 'DeepSeek Harness', schemes: ['dsh'] }],
     extraMetadata: {
       dshDesktopAppId: appId,
+      dshDesktopBranding: branding,
       ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
       ...(privateDesktopUpdates === undefined ? {} : { dshPrivateDesktopUpdates: privateDesktopUpdates }),
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },
     },
-    productName: 'DeepSeek Harness',
+    productName: branding.displayName,
     // Local artifacts carry their own suffix so they cannot pass for release builds.
-    artifactName: `deepseek-harness-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : internalDmg ? '-internal' : ''}.\${ext}`,
+    artifactName: `${branding.artifactNameBase}-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : internalDmg ? '-internal' : ''}.\${ext}`,
     directories: { output: unsigned ? buildPaths.unsignedArtifacts
       : internalDmg ? desktopTargetInternalArtifactsDirectory(target, buildVersion) : artifactsDirectory },
     asar: true,
@@ -145,7 +149,7 @@ export function createElectronBuilderConfig(
       if (resolvedPlatform !== 'win32') return true
       await promisify(execFile)('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
         fileURLToPath(new URL('./prepare-windows-installer.ps1', import.meta.url)),
-        '-OutputDirectory', join(buildPaths.root, 'installer-ui')], {
+        '-OutputDirectory', join(buildPaths.root, 'installer-ui'), '-IconSetDirectory', fileURLToPath(new URL(`../resources/brand-sets/${branding.iconSet}/installer`, import.meta.url))], {
         env: scrubWindowsSigningEnvironment(env), windowsHide: true,
       })
       if (windowsSigner !== undefined) {
@@ -171,12 +175,12 @@ export function createElectronBuilderConfig(
     asarUnpack: unpack,
     extraResources: [
       { from: buildPaths.runtime, to: 'runtime' },
-      { from: fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)), to: 'icon.png' },
+      { from: iconSet['icon-windows.png'], to: 'icon.png' },
       // Windows tray bitmaps; macOS keeps the Dock and ships no menu bar icon.
-      ...(packagesWindows ? [{ from: fileURLToPath(new URL('../resources/tray-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
+      ...(packagesWindows ? [{ from: iconSet['tray-windows.ico'], to: 'tray.ico' }] : []),
     ],
     mac: {
-      icon: fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
+      icon: iconSet['icon-macos.png'],
       category: 'public.app-category.developer-tools',
       // macOS matches localization and microphone descriptions against the application bundle.
       // Ad-hoc signing keeps a local modified Electron executable runnable without a Developer ID.
@@ -185,7 +189,7 @@ export function createElectronBuilderConfig(
       hardenedRuntime: !internalDmg,
       extendInfo: {
         CFBundleLocalizations: ['en', 'zh_CN'],
-        NSMicrophoneUsageDescription: 'DeepSeek Harness uses your microphone to transcribe speech into message drafts.',
+        NSMicrophoneUsageDescription: `${branding.displayName} uses your microphone to transcribe speech into message drafts.`,
       },
       entitlements: fileURLToPath(new URL('./macos-entitlements.plist', import.meta.url)),
       entitlementsInherit: fileURLToPath(new URL('./macos-entitlements.plist', import.meta.url)),
@@ -252,7 +256,7 @@ export function createElectronBuilderConfig(
       )
     },
     win: {
-      icon: fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)),
+      icon: iconSet['icon-windows.png'],
       forceCodeSigning: !unsigned,
       signtoolOptions: {
         sign: windowsSigner,

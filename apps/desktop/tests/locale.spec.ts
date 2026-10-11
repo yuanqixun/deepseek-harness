@@ -9,6 +9,15 @@ describe('desktop locale dictionaries', () => {
     expect(resolveDesktopLocale('fr-FR').messages).toEqual(en)
   })
 
+  it('projects the configured product name into user-visible shell strings', () => {
+    expect(resolveDesktopLocale('zh-CN', '金租办公').messages).toMatchObject({
+      aboutMenu: '关于 金租办公', aboutProduct: '金租办公', welcomeTitle: '金租办公',
+      updateTitle: '金租办公 更新', quitTitle: '退出 金租办公？',
+    })
+    expect(resolveDesktopLocale('en', '金租办公').messages.aboutMenu).toBe('About 金租办公')
+    expect(resolveDesktopLocale('en').messages.aboutMenu).toBe('About DeepSeek Harness')
+  })
+
   it('formats named values without consuming unknown placeholders', () => {
     expect(formatDesktopMessage('{name}@{version} {missing}', { name: 'plugin', version: '1.2.3' }))
       .toBe('plugin@1.2.3 {missing}')

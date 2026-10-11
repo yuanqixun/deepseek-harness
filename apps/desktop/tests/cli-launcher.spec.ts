@@ -21,10 +21,11 @@ function fixture() {
   })
   const application = join(root, 'Application 中文 with spaces.app')
   const platform = process.platform === 'win32' ? 'win32' : 'darwin'
+  const productName = '金租办公'
   const resources = join(application, ...platform === 'darwin' ? ['Contents', 'Resources'] : ['resources'])
   const cli = join(resources, 'runtime', 'cli')
-  prepareDesktopCli(cli, platform)
-  const electron = join(application, ...platform === 'darwin' ? ['Contents', 'MacOS', 'DeepSeek Harness'] : ['DeepSeek Harness.exe'])
+  prepareDesktopCli(cli, platform, productName)
+  const electron = join(application, ...platform === 'darwin' ? ['Contents', 'MacOS', productName] : [`${productName}.exe`])
   mkdirSync(dirname(electron), { recursive: true })
   if (platform === 'win32') copyFileSync(process.execPath, electron)
   else symlinkSync(process.execPath, electron)

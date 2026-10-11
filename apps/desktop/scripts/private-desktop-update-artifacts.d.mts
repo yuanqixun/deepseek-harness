@@ -9,4 +9,5 @@ export function verifyPrivateDesktopUpdateArtifacts(
   root: string,
   target: { readonly name: string; readonly platform: string; readonly arch: string },
   version: string,
+  branding?: { readonly displayName: string; readonly iconSet: string; readonly artifactNameBase: string },
 ): Promise<{ readonly metadata: { readonly filename: string; readonly version: string }; readonly artifacts: readonly PrivateDesktopUpdateArtifact[] }>

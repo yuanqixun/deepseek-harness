@@ -79,6 +79,8 @@ describe('official browser-brand plugin', () => {
   })
 
   it('renders the official name independently from both requested mark sizes', () => {
+    vi.stubEnv('DSH_CLIENT_BRAND_NAME', undefined)
+    vi.stubEnv('DSH_CLIENT_BRAND_MARK', undefined)
     const name = render(<OfficialBrandName />)
     expect(name.container.querySelector('svg')?.getAttribute('viewBox')).toBe('26 0 156 24')
     name.unmount()
@@ -87,5 +89,22 @@ describe('official browser-brand plugin', () => {
     expect(mark.container.querySelector('svg')?.getAttribute('width')).toBe('34')
     mark.rerender(<OfficialBrandMark size={24} />)
     expect(mark.container.querySelector('svg')?.getAttribute('width')).toBe('24')
+  })
+
+  it('renders the configured brand name beside the official mark', () => {
+    vi.stubEnv('DSH_CLIENT_BRAND_NAME', '金租办公')
+    const name = render(<OfficialBrandName />)
+    expect(name.container.textContent).toBe('金租办公')
+    expect(name.container.querySelector('svg')).toBeNull()
+  })
+
+  it('renders the selected icon-set mark using the sidebar text color', () => {
+    vi.stubEnv('DSH_CLIENT_BRAND_MARK', 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=')
+    const mark = render(<OfficialBrandMark size={34} />)
+    const element = mark.container.querySelector('span')
+    expect(element?.getAttribute('aria-hidden')).toBe('true')
+    expect(element?.style.width).toBe('34px')
+    expect(element?.style.backgroundColor).toBe('currentcolor')
+    expect(element?.style.maskImage).toContain('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=')
   })
 })

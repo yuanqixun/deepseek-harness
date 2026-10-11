@@ -65,7 +65,7 @@ export function resolveCredentialUploadEnvironment(
  */
 export async function uploadDesktopTarget(args: string[]): Promise<void> {
   const { positionals, values } = parseArgs({ args, allowPositionals: true, options: {
-    latest: { type: 'boolean' },
+    latest: { type: 'boolean' }, 'config-env': { type: 'string' },
     'credential-launcher': { type: 'boolean' }, environment: { type: 'string' }, bucket: { type: 'string' },
   } })
   const target = positionals[0]
@@ -74,6 +74,10 @@ export async function uploadDesktopTarget(args: string[]): Promise<void> {
   }
   const name = targetName(target)
   const fileEnvironment = loadDesktopPackageEnvironment(name === 'win-x64' ? 'win32' : 'darwin')
+  if (values['config-env'] !== undefined) {
+    if (!/^[a-z0-9][a-z0-9-]*$/u.test(values['config-env'])) throw new Error('desktop upload: invalid config environment name')
+    fileEnvironment.DSH_CONFIG_ENV = values['config-env']
+  }
   const launcher = values['credential-launcher'] === true
   if (launcher ? values.environment === undefined || values.bucket === undefined
     : values.environment !== undefined || values.bucket !== undefined) {

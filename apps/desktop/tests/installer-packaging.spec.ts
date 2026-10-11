@@ -77,6 +77,26 @@ describe('installer preparation preserves application dependencies', () => {
     expect(config.artifactName).toBe('deepseek-harness-${version}-${os}-${arch}-unsigned.${ext}')
   })
 
+  it('projects one environment brand to builder identity, artifact naming, and its complete icon set', async () => {
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    const branding = { displayName: '金租办公', iconSet: 'dsh', artifactNameBase: '金租办公' }
+    const config = createElectronBuilderConfig({
+      DSH_DESKTOP_APP_ID: 'com.example.installer',
+      DSH_DESKTOP_BRANDING: JSON.stringify(branding),
+      DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
+      DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
+      DSH_DESKTOP_TARGET_PLATFORM: 'win32',
+      DSH_DESKTOP_TARGET_ARCH: 'x64',
+      DSH_DESKTOP_UNSIGNED: '1',
+    }, 'win32', 'x64')
+    expect(config).toMatchObject({ appId: 'com.example.installer', productName: branding.displayName,
+      artifactName: '金租办公-${version}-${os}-${arch}-unsigned.${ext}',
+      protocols: [{ schemes: ['dsh'] }], extraMetadata: { dshDesktopBranding: branding } })
+    expect(config.win.icon).toContain('/brand-sets/dsh/icon-windows.png')
+    expect(config.mac.icon).toContain('/brand-sets/dsh/icon-macos.png')
+    expect(config.extraResources.find(resource => resource.to === 'tray.ico')?.from).toContain('/brand-sets/dsh/tray-windows.ico')
+  })
+
   it('packages every preload entry point the shell loads', async () => {
     const { readdirSync, readFileSync } = await import('node:fs')
     const sourceDirectory = new URL('../src/', import.meta.url)

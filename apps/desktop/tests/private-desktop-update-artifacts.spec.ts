@@ -65,4 +65,21 @@ describe('private desktop update artifact qualification', () => {
       artifacts: [{ kind: 'updater-payload', filename }, { kind: 'blockmap', filename: `${filename}.blockmap` }],
     })
   })
+
+  it('validates Windows update payloads using the selected environment filename base', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'private-desktop-update-branded-'))
+    roots.push(root)
+    const filename = `金租办公-${version}-win-x64.exe`
+    const bytes = Buffer.from('signed branded installer')
+    await writeFile(join(root, filename), bytes)
+    await writeFile(join(root, `${filename}.blockmap`), 'blockmap')
+    await writeFile(join(root, 'nightly.yml'), dump({ version, files: [{
+      url: filename, size: bytes.length, sha512: createHash('sha512').update(bytes).digest('base64'),
+    }] }))
+    await expect(verifyPrivateDesktopUpdateArtifacts(root,
+      { name: 'win-x64', platform: 'win32', arch: 'x64' }, version,
+      { displayName: '金租办公', iconSet: 'dsh', artifactNameBase: '金租办公' })).resolves.toMatchObject({
+      artifacts: [{ filename }, { filename: `${filename}.blockmap` }],
+    })
+  })
 })

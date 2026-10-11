@@ -17,6 +17,7 @@ const TEST_ORIGIN = 'https://desktop-updates.example.com'
 const TEST_BUCKET = 'test-download-bucket-1250000000'
 const RELEASE_ID = '0123456789abcdef0123456789abcdef'
 const PRODUCTION_BUCKET = 'production-download-bucket-1250000000'
+const DSH_VERSION = '0.2.1-alpha.2'
 const require = createRequire(import.meta.url)
 const { createBlockmap } = require('app-builder-lib/out/targets/differentialUpdateInfoBuilder.js') as {
   createBlockmap: (file: string, target: object, packager: { info: { emitArtifactBuildCompleted(event: object): Promise<void> } },
@@ -45,7 +46,7 @@ async function fixture(
   const appRoot = join(repositoryRoot, 'apps', 'desktop')
   const artifactsRoot = join(appRoot, '.desktop-build', 'artifacts')
   await mkdir(artifactsRoot, { recursive: true })
-  await writeFile(join(repositoryRoot, 'package.json'), `${JSON.stringify({ version })}\n`)
+  await writeFile(join(repositoryRoot, 'package.json'), `${JSON.stringify({ version: DSH_VERSION })}\n`)
   await writeFile(join(appRoot, 'package.json'), `${JSON.stringify({ version })}\n`)
 
   const [os, arch] = target.split('-') as ['mac' | 'win', 'arm64' | 'x64']
@@ -54,9 +55,10 @@ async function fixture(
     ? TEST_ORIGIN
     : 'https://download.deepseek.com'
   await writeFile(join(artifactsRoot, `${target}-release.json`), `${JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     target,
     version,
+    dshVersion: DSH_VERSION,
     configEnvironment: undefined,
     branding: { displayName: 'DeepSeek Harness', iconSet: 'dsh', artifactNameBase: 'deepseek-harness' },
     environment,
@@ -306,11 +308,11 @@ describe('desktop upload plan', () => {
     await expect(createDesktopUploadPlan('win-x64', paths)).rejects.toThrow(/missing or empty artifact.*\.exe\.blockmap/u)
   })
 
-  it('rejects a completed build from another dsh version or deployment', async () => {
+  it('accepts independent Desktop and dsh versions and rejects a stale dsh runtime or deployment', async () => {
     const paths = await fixture('mac-x64')
-    await writeFile(join(paths.repositoryRoot, 'package.json'), '{"version":"1.2.4"}\n')
-    await writeFile(join(paths.appRoot, 'package.json'), '{"version":"1.2.4"}\n')
-    await expect(createDesktopUploadPlan('mac-x64', paths)).rejects.toThrow(/completion record.*1\.2\.4/u)
+    expect((await createDesktopUploadPlan('mac-x64', paths)).version).toBe('1.2.3')
+    await writeFile(join(paths.repositoryRoot, 'package.json'), '{"version":"0.2.1-alpha.3"}\n')
+    await expect(createDesktopUploadPlan('mac-x64', paths)).rejects.toThrow(/completion record dsh version.*0\.2\.1-alpha\.3/u)
 
     const productionPaths = await fixture('mac-x64', '1.2.3', 'production')
     await expect(createDesktopUploadPlan('mac-x64', {

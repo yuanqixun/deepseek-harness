@@ -174,9 +174,6 @@ async function writeReleaseRecord(
 ): Promise<void> {
   const desktopVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   const dshVersion = packageVersion(join(REPOSITORY_ROOT, 'package.json'), 'dsh package')
-  if (desktopVersion !== dshVersion) {
-    throw new Error(`desktop package: desktop version ${desktopVersion} does not match dsh version ${dshVersion}`)
-  }
   const packaged = resolveDesktopBuildCommit(environment)
   const privateUpdates = environment.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG === undefined
     ? undefined
@@ -186,7 +183,7 @@ async function writeReleaseRecord(
       checkUrl: string
     }
   const update = privateUpdates === undefined ? resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch) : undefined
-  const buildVersion = resolveDesktopBuildVersion(environment, dshVersion)
+  const buildVersion = resolveDesktopBuildVersion(environment, desktopVersion)
   const branding = desktopBrandingFromEnvironment(environment)
   const updateArtifacts = privateDesktopUpdates
     ? await verifyPrivateDesktopUpdateArtifacts(artifactsRoot, target, buildVersion, branding) : undefined
@@ -194,9 +191,10 @@ async function writeReleaseRecord(
   const recordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
   const temporaryPath = `${recordPath}.tmp`
   writeFileSync(temporaryPath, `${JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     target: target.name,
     version: buildVersion,
+    dshVersion,
     configEnvironment: environment.DSH_CONFIG_ENV?.trim() || undefined,
     branding,
     environment: update?.environment ?? privateUpdates?.environment,

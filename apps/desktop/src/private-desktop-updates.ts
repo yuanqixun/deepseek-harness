@@ -27,6 +27,20 @@ export interface PrivateDesktopRelease {
   readonly platform: 'win32' | 'darwin'
   readonly arch: 'x64' | 'arm64'
   readonly releaseNotes: { readonly zh_CN: string; readonly en_US: string }
+  /** Full installer to download manually; constrained to the configured HTTPS download origins. */
+  readonly installerUrl?: string
+}
+
+function resolveInstallerUrl(value: unknown, config: PrivateDesktopUpdateConfig): string | undefined {
+  if (typeof value !== 'string') return undefined
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:' || url.username !== '' || url.password !== ''
+      || !config.feedOrigins.includes(url.origin) || url.search !== '' || url.hash !== '') return undefined
+    return url.href
+  } catch {
+    return undefined
+  }
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -113,8 +127,13 @@ function parseDecision(input: unknown, config: PrivateDesktopUpdateConfig, curre
       || typeof notes.en_US !== 'string' || notes.en_US.length > 16_384) {
       throw new Error('desktop updates: invalid release history entry')
     }
+    const installerUrl = item.installerUrl == null ? undefined : resolveInstallerUrl(item.installerUrl, config)
+    if (item.installerUrl != null && installerUrl === undefined) {
+      throw new Error('desktop updates: invalid full installer URL')
+    }
     return { version: item.version, platform: item.platform, arch: item.arch,
-      releaseNotes: { zh_CN: notes.zh_CN, en_US: notes.en_US } }
+      releaseNotes: { zh_CN: notes.zh_CN, en_US: notes.en_US },
+      ...(installerUrl !== undefined && gt(item.version, currentVersion) ? { installerUrl } : {}) }
   }).filter(entry => entry.platform === platform && entry.arch === arch)
     .sort((left, right) => compare(right.version, left.version))
   return { release, policy: { minimumSupportedVersion: minimumVersion, forceAfter: deadline }, releaseHistory }
@@ -152,6 +171,12 @@ export class PrivateDesktopUpdateClient {
 
   /** Latest validated release notes returned by the update service, filtered to this build target. */
   get releaseHistory(): readonly PrivateDesktopRelease[] { return this.releases }
+
+  /** Resolve a renderer-requested installer URL against the configured HTTPS download origins.
+   * @param value - URL displayed in the current release history.
+   * @returns The normalized allowlisted URL, or `undefined` when it is not allowed.
+   */
+  resolveInstallerUrl(value: string): string | undefined { return resolveInstallerUrl(value, this.config) }
 
   /** Whether validated release history is loading, available, or unavailable after a failed check. */
   get releaseHistoryStatus(): 'idle' | 'checking' | 'loaded' | 'failed' { return this.historyStatus }

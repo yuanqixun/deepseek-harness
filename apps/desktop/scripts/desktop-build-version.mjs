@@ -5,15 +5,15 @@
  * Manual Windows CI uses UTC date, workflow run number and attempt as
  * `.YYYYMMDD.run.attempt`; these identify unpublished builds, not release sequences.
  *
- * A production release publishes the version in the manifests, aligned with the
- * `dsh` npm package. A test build publishes a version that appends a date and a
- * sequence number, so one test feed can carry several builds of a single
- * product version: `0.1.6-alpha.1.20260916.1` from a prerelease base and
- * `0.1.6-test.20260916.1` from a stable one, as the release versions table in
- * `apps/desktop/README.md` gives them. Passing that version here keeps it out
- * of the manifests, so the tracked version stays the product's while the build
- * version reaches electron-builder, the update feed, and the upload validation
- * as one input.
+ * A production release publishes the Desktop package version. The bundled dsh
+ * runtime keeps the root package version and is recorded separately. A test
+ * build appends a date and sequence number, so one test feed can carry several
+ * builds of one Desktop version. For example, `0.1.6-alpha.1.20260916.1`
+ * extends a prerelease base and `0.1.6-test.20260916.1` extends a stable one,
+ * as the release versions table in `apps/desktop/README.md` shows. Passing the
+ * build version here keeps it out of the manifests, so the tracked version stays the Desktop product's while
+ * the build version reaches electron-builder, the update feed, and upload
+ * validation as one input.
  *
  * `electron-updater` compares feed versions with `semver.gt` against the
  * installed `app.getVersion()`, so validation uses the same library. Sequence

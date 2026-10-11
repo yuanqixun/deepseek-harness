@@ -49,6 +49,17 @@ function render(state) {
       version.textContent = entry.version
       notes.textContent = entry.releaseNotes
       item.append(version, notes)
+      if (entry.installerUrl !== undefined) {
+        const download = document.createElement('button')
+        download.type = 'button'
+        download.className = 'installer-download secondary'
+        download.textContent = history.downloadInstaller
+        download.addEventListener('click', () => {
+          download.disabled = true
+          void api.openInstaller(entry.installerUrl).catch(() => { download.disabled = false })
+        })
+        item.append(download)
+      }
       entries.append(item)
     }
     entries.hidden = empty

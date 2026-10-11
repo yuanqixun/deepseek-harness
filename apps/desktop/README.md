@@ -8,7 +8,7 @@ The desktop application is an Electron shell around the complete dsh Web applica
 
 Desktop binds `127.0.0.1`, the address Electron dials for the ready URL and the WebSocket credential filter. WebSocket streams use `ws:` or `wss:` according to the Host listener; credentials require matching authority and scheme.
 
-The first application-menu command, **About DeepSeek Harness**, opens a Desktop-owned dialog with the product name, installed release version, and available release history. The same dialog opens from **Version & updates…** beside the current version in General Settings. The history shows only releases for the current platform and architecture; when history is loading or unavailable, the dialog identifies that state and still shows the installed version. The dialog follows the Desktop shell locale and includes a manual update check. On macOS, Hide, Hide Others, Show All, and Quit use localized labels; Hide and Quit include the DeepSeek Harness product name. These commands retain their native actions and shortcuts.
+The first application-menu command, **About DeepSeek Harness**, opens a Desktop-owned dialog with the product name, installed release version, and available release history. The same dialog opens from **Version & updates…** beside the current version in General Settings. The history shows only releases for the current platform and architecture; when history is loading or unavailable, the dialog identifies that state and still shows the installed version. A published full-installer release includes a **Download full installer** action; it opens the configured HTTPS download URL in the system browser so the user can install it manually. Incremental releases continue through the updater. The dialog follows the Desktop shell locale and includes a manual update check. On macOS, Hide, Hide Others, Show All, and Quit use localized labels; Hide and Quit include the DeepSeek Harness product name. These commands retain their native actions and shortcuts.
 
 Desktop’s local native directory flow opens an Electron folder dialog attached to the application window, restoring, showing, and focusing that window first. Concurrent requests share one dialog; cancellation returns no path and failures remain retryable. Ordinary Web uses the Host chooser. Browse mode lists Host directories. On Linux without zenity or kdialog, automatic selection uses browse instead of the Electron dialog.
 
@@ -30,7 +30,7 @@ The application menu's **Manage dsh Command…** entry, immediately below **Chec
 
 On macOS, installation creates `/usr/local/bin/dsh` and requests administrator authentication when the directory requires it. Shell startup files are unchanged. On Windows, the management dialog registers the command in the current user's PATH. A pre-existing command requires confirmation before switching; repairing Desktop's own selected command does not repeat that confirmation. The macOS link preserves and restores the displaced launcher; Windows preserves other PATH entries, including entries that predate registration. A command with higher PATH precedence is reported with its location. After moving the application, use Repair on macOS or Install from the new location on Windows. Remove leaves unrelated installations intact.
 
-Command registration is optional after installing Desktop. Use **Manage dsh Command… → Remove** before uninstalling Desktop to remove its CLI registration; the application uninstaller does not remove it. Finish CLI commands before updating or uninstalling Desktop. The CLI runtime version follows the installed Desktop release. See [bundled command runtime](#bundled-command-runtime) for Desktop plugin commands and runtime limitations.
+Command registration is optional after installing Desktop. Use **Manage dsh Command… → Remove** before uninstalling Desktop to remove its CLI registration; the application uninstaller does not remove it. Finish CLI commands before updating or uninstalling Desktop. The CLI runs the dsh version bundled with that Desktop release; the Desktop and dsh version strings may differ. See [bundled command runtime](#bundled-command-runtime) for Desktop plugin commands and runtime limitations.
 
 ## Closing the window and quitting
 
@@ -76,13 +76,13 @@ The shared Desktop/SDK runtime builder omits directories named `tests` beneath N
 
 | Decision | Why | Direct consequence |
 |---|---|---|
-| Release identity | The shell API, Web client, backend, and plugin graph are qualified as one combination; independent versions would create untested combinations and ambiguous update availability. | Electron and `@deepseek-ai/dsh` always have the same exact version. A dsh upgrade is a Desktop release, even when the shell code is unchanged. |
+| Release identity | The shell API, Web client, backend, and plugin graph are qualified as one combination; the Desktop artifact still carries one exact bundled runtime. | The Desktop package version controls app and updater ordering. The root dsh version independently identifies and validates the bundled runtime; both versions are recorded and reported to update services. |
 | Runtime | The application must run without a system Node.js or pnpm installation. | dsh runs under Electron with `ELECTRON_RUN_AS_NODE=1` and `--expose-internals` and every package operation uses the bundled pnpm. Package-manager configuration and the Host environment follow the user's settings. Package scripts use a `node` shell launcher that forwards to Electron. |
 | Package sources | Core installation at startup adds work even when offline. | `app.asar/dsh` carries a complete production dependency tree; the profile installs only external plugins. |
 | State ownership | Sharing executable dependency graphs would let CLI and Desktop change each other's dsh, Cordis, plugin, or native-module versions, while two desktop processes could race on the same profile. | Electron acquires its process-lifetime single-instance lock before any profile access and exclusively owns `$DSH_HOME/profiles/desktop` plus its package-manager state. CLI and Desktop share supported product data under `$DSH_HOME`, but never executable packages, plugin activation, lockfiles, or `node_modules`. |
 | Transport | Web serving and authentication share one implementation. | Electron loads packaged Web assets; the Host supplies boot injections and authenticated APIs. |
 | Plugin changes | Desktop and Web need the same installation and activation behavior. | The main application uses the shared Web Plugin Manager and bundled pnpm. |
-| Updates | Independent shell and dsh updates would recreate version splits, while unchanged shell blocks should not require a complete transfer. | The Electron shell, matching dsh runtime and pnpm form one signed update unit. Platform update artifacts may reuse unchanged blocks, but runtime version selection never splits from the Desktop release. |
+| Updates | The Desktop shell and bundled runtime must be qualified together in each signed artifact, while the shell release number can advance on its own. | One Electron update replaces the shell and its bundled runtime as a unit. Desktop and dsh versions may differ; changed blocks may be reused, and runtime selection remains pinned by the package set. |
 
 The [thin-wrapper decision](../../.agents/notes/implemented/architecture/2026-09-10-desktop-web-wrapper.md) owns shared Web behavior and Desktop adapters. The [Electron packaging and update decision](../../.agents/notes/implemented/architecture/2026-08-25-electron-desktop-packaging-and-updates.md) owns release identity, signing, and update qualification.
 
@@ -192,11 +192,11 @@ The welcome window follows system appearance with the design’s Platform light/
 
 ### Release versions
 
-Before each Desktop packaging run, first confirm the complete version string with the current user. Check the selected deployment, dsh base version, retained release records, and published objects, then propose the exact version for approval. Do not start packaging until the user confirms that version; the deployment setting alone does not authorize a version choice.
+Before each Desktop packaging run, first confirm the complete Desktop version string with the current user. Check the selected deployment, `apps/desktop/package.json` version, retained Desktop release records, and published objects, then propose the exact version for approval. Do not start packaging until the user confirms that version; the deployment setting alone does not authorize a version choice. Record the bundled dsh version separately from the Desktop version.
 
-Record the current dsh version as the base. A production Desktop release uses that exact version, including any `alpha`, `beta`, or `rc` identifiers. A test release preserves the complete prerelease base and appends `.YYYYMMDD.index`; a stable base uses `-test.YYYYMMDD.index` instead.
+The Desktop package version is the production release base. A test release preserves its complete prerelease base and appends `.YYYYMMDD.index`; a stable base uses `-test.YYYYMMDD.index` instead. Updating `apps/desktop/package.json` does not change the root dsh version or the bundled runtime.
 
-| dsh base | Production Desktop | Test Desktop example |
+| Desktop base | Production Desktop | Test Desktop example |
 |---|---|---|
 | `0.1.6-alpha.1` | `0.1.6-alpha.1` | `0.1.6-alpha.1.20260916.1` |
 | `0.1.6-beta.2` | `0.1.6-beta.2` | `0.1.6-beta.2.20260916.1` |
@@ -205,7 +205,7 @@ Record the current dsh version as the base. A production Desktop release uses th
 
 Use the actual creation date in Asia/Shanghai. For each base and date, start the index at 1 and increment after checking retained release records and published objects; never reuse a published version. Test distribution does not publish the corresponding unsuffixed base.
 
-Manual Windows CI uses a separate unpublished build identifier: `auto` appends the UTC date, workflow run number and attempt (`.YYYYMMDD.run.attempt`, with `-test` for a stable base). For example, `0.2.1-alpha.1.20261008.42.2`. These numbers are not reserved release sequence numbers.
+Manual Windows CI uses a separate unpublished Desktop build identifier: `auto` appends the UTC date, workflow run number and attempt (`.YYYYMMDD.run.attempt`, with `-test` for a stable base). For example, `1.0.2.20261008.42.2`. These numbers are not reserved release sequence numbers.
 
 Pass the confirmed version to the packaging command as `--build-version`, which reaches the artifact names, the update feed, and the upload validation as one value. The manifests keep the product version, so a test build no longer rewrites the release family and leaves nothing to revert:
 
@@ -532,7 +532,7 @@ Confirmed Host exit without successful task teardown displays localized recovery
 
 ### Private Windows and macOS update interface
 
-The private configuration replaces the ordinary update-policy service only in the selected Windows x64 or macOS arm64 build. Both platforms use the same `POST /v1/desktop/updates/check` protocol. The request reports the packaged platform and architecture so the service can select the correct release and record version distribution. The response must include `protocolVersion: 1`, `release` (`null` or a version and `feedUrl`), and `policy` with `minimumSupportedVersion` and `forceAfter`. Both policy fields are `null` to clear a known force decision; otherwise they are a semantic version and an RFC 3339 UTC deadline. An outdated client whose deadline has passed must receive a compatible release. The optional `releaseHistory` array contains platform- and architecture-specific entries with `version`, `platform`, `arch`, and `releaseNotes.zh_CN`/`releaseNotes.en_US`. Older responses may omit it; an omitted or empty list does not invalidate an update decision. Invalid responses and service failures retain any known force decision.
+The private configuration replaces the ordinary update-policy service only in the selected Windows x64 or macOS arm64 build. Both platforms use the same `POST /v1/desktop/updates/check` protocol. The request reports the packaged platform and architecture so the service can select the correct release and record version distribution. The response must include `protocolVersion: 1`, `release` (`null` or a version and `feedUrl`), and `policy` with `minimumSupportedVersion` and `forceAfter`. Both policy fields are `null` to clear a known force decision; otherwise they are a semantic version and an RFC 3339 UTC deadline. An outdated client whose deadline has passed must receive a compatible release. The optional `releaseHistory` array contains platform- and architecture-specific entries with `version`, `platform`, `arch`, and `releaseNotes.zh_CN`/`releaseNotes.en_US`; a newer full-installer release may also include `installerUrl`. Older responses may omit the history or installer URL; an omitted or empty list does not invalidate an update decision. Installer URLs must use HTTPS and a configured download origin. Invalid responses and service failures retain any known force decision.
 
 Example check response:
 
@@ -564,10 +564,11 @@ The backend implementation owns these public resources; it does not require a li
 
 | Method and path | Purpose |
 |---|---|
-| `POST /v1/desktop/updates/check` | Receive distribution, channel, Desktop/platform/architecture/dsh versions, and optional `userId`; return release selection, force policy, and optional release history for the requested target. |
+| `POST /v1/desktop/updates/check` | Receive distribution, channel, Desktop/platform/architecture/dsh versions, and optional `userId`; return release selection, force policy, and optional release history with newer full-installer URLs for the requested target. |
 | `GET {feedUrl}/nightly.yml` | Return Windows Electron generic channel metadata for the EXE, size, and SHA-512. |
 | `GET {feedUrl}/nightly-mac.yml` | Return macOS Electron generic channel metadata for the arm64 ZIP, size, and SHA-512. |
 | `GET {artifactUrl}` | Serve the signed Windows EXE or signed and notarized macOS ZIP anonymously over HTTPS; support byte ranges for differential requests. |
+| `GET {installerUrl}` | Serve a published full installer anonymously over HTTPS for manual installation from the Desktop release history. |
 | `GET {artifactUrl}.blockmap` | Serve the matching platform blockmap; differential failure falls back to the complete updater payload. |
 
 The server controls pauses, rollout percentage, minimum supported version, and force deadline. It should keep cohort assignment stable for a given `userId`; clients without one receive a release only after full rollout. The check request is the version-statistics record. DSH does not send separate download or installation events.

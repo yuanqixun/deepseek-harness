@@ -3,7 +3,7 @@
   "environment": "hxfl",
   "plugins": {
     "privateMarket": {
-      "catalogUrl": "https://dsh-market.superbpm.com/v1/plugins",
+      "catalogUrl": "http://localhost:48080/v1/plugins",
       "registryUrl": "https://hxflnexus.superbpm.com/repository/npm-group/"
     }
   },
@@ -14,9 +14,9 @@
     },
     "updates": {
       "distribution": "dshwork",
-      "checkUrl": "https://hxai.superbpm.com/app-api/v1/desktop/updates/check",
+      "checkUrl": "http://localhost:48080/app-api/v1/desktop/updates/check",
       "channel": "stable",
-      "feedOrigins": ["https://hxai.superbpm.com"]
+      "feedOrigins": ["http://localhost:48080"]
     }
   }
 }

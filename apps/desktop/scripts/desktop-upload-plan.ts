@@ -202,7 +202,7 @@ function uploadArtifact(
 }
 
 /**
- * Validate the completed package record, dsh version, update metadata, hashes, and target files.
+ * Validate the completed package record, independent Desktop and dsh versions, update metadata, hashes, and target files.
  * @param targetName - Fixed platform and architecture selected by the upload command.
  * @param options - Optional filesystem roots and environment for tests or release automation.
  * @returns A fixed installer upload or an update plan with channel metadata ordered last.
@@ -221,9 +221,6 @@ export async function createDesktopUploadPlan(
   const artifactsRoot = options.artifactsRoot ?? await latestReleaseArtifactsRoot(targetName)
   const dshVersion = await manifestVersion(join(repositoryRoot, 'package.json'), 'dsh package')
   const desktopVersion = await manifestVersion(join(appRoot, 'package.json'), 'desktop package')
-  if (dshVersion !== desktopVersion) {
-    throw new Error(`desktop upload: desktop version ${desktopVersion} does not match current dsh version ${dshVersion}`)
-  }
 
   const update = resolveDesktopUploadConfig(environment, target.platform, target.arch)
   const buildRecord = await jsonFile(
@@ -234,13 +231,16 @@ export async function createDesktopUploadPlan(
   const recordedVersion = stringField(buildRecord.version, `${targetName} package completion record.version`)
   let buildVersion: string
   try {
-    buildVersion = validateDesktopBuildVersion(recordedVersion, dshVersion)
+    buildVersion = validateDesktopBuildVersion(recordedVersion, desktopVersion)
   }
   catch (error) {
-    throw new Error(`desktop upload: ${targetName} package completion record holds ${recordedVersion}, which is not a build of dsh ${dshVersion}: ${
+    throw new Error(`desktop upload: ${targetName} package completion record holds ${recordedVersion}, which is not a build of Desktop ${desktopVersion}: ${
       error instanceof Error ? error.message : String(error)}`)
   }
-  if (buildRecord.schemaVersion !== 1
+  if (buildRecord.dshVersion !== dshVersion) {
+    throw new Error(`desktop upload: ${targetName} package completion record dsh version ${String(buildRecord.dshVersion)} does not match current dsh version ${dshVersion}`)
+  }
+  if (buildRecord.schemaVersion !== 2
     || buildRecord.target !== targetName
     || buildRecord.environment !== update.environment
     || buildRecord.publicUrl !== update.publicUrl) {

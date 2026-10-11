@@ -4,18 +4,20 @@ import type { DesktopLocale } from './locale.ts'
 import type { DesktopUpdateOverlays } from './update-overlay.ts'
 
 /** Channels available only to the isolated update-dialog document. */
-export const UPDATE_DIALOG_IPC = { status: 'dsh-update-dialog:status', changed: 'dsh-update-dialog:changed', respond: 'dsh-update-dialog:respond' } as const
+export const UPDATE_DIALOG_IPC = { status: 'dsh-update-dialog:status', changed: 'dsh-update-dialog:changed', respond: 'dsh-update-dialog:respond', openInstaller: 'dsh-update-dialog:open-installer' } as const
 
 /** One localized release record displayed in the shell-owned About dialog. */
 export interface UpdateDialogRelease {
   readonly version: string
   readonly releaseNotes: string
+  readonly installerUrl?: string
 }
 
 /** Localized history heading, empty state, and validated current-target releases. */
 export interface UpdateDialogReleaseHistory {
   readonly title: string
   readonly empty: string
+  readonly downloadInstaller: string
   readonly entries: readonly UpdateDialogRelease[]
 }
 
@@ -45,6 +47,7 @@ export interface UpdateDialogOptions extends MessageBoxOptions {
 export interface UpdateDialogApi {
   status(): Promise<UpdateDialogView | null>
   respond(revision: number, index: number): Promise<void>
+  openInstaller(url: string): Promise<void>
   subscribe(listener: (view: UpdateDialogView | null) => void): () => void
 }
 
@@ -72,7 +75,8 @@ export class DesktopUpdateDialog {
    * @param overlays - Application-owned overlay creation and input tracking.
    */
   constructor(private readonly preload: string, private readonly locale: DesktopLocale | (() => DesktopLocale),
-    private readonly overlays: Pick<DesktopUpdateOverlays, 'create'>) {
+    private readonly overlays: Pick<DesktopUpdateOverlays, 'create'>,
+    private readonly openInstaller: (url: string) => Promise<void> = async () => { throw new Error('desktop update: installer download is unavailable') }) {
     ipcMain.handle(UPDATE_DIALOG_IPC.status, (event) => { this.owned(event); return this.active?.view ?? null })
     ipcMain.handle(UPDATE_DIALOG_IPC.respond, (event, revision: unknown, index: unknown) => {
       this.owned(event)
@@ -83,6 +87,13 @@ export class DesktopUpdateDialog {
         throw new Error('desktop update: invalid dialog response')
       }
       active.finish(index)
+    })
+    ipcMain.handle(UPDATE_DIALOG_IPC.openInstaller, async (event, url: unknown) => {
+      this.owned(event)
+      if (typeof url !== 'string' || !this.active?.view.releaseHistory?.entries.some(entry => entry.installerUrl === url)) {
+        throw new Error('desktop update: installer URL is not part of the displayed release history')
+      }
+      await this.openInstaller(url)
     })
   }
 
@@ -144,6 +155,7 @@ export class DesktopUpdateDialog {
     this.close()
     ipcMain.removeHandler(UPDATE_DIALOG_IPC.status)
     ipcMain.removeHandler(UPDATE_DIALOG_IPC.respond)
+    ipcMain.removeHandler(UPDATE_DIALOG_IPC.openInstaller)
   }
 
   private close(): void {

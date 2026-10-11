@@ -8,7 +8,7 @@
 
 Desktop 绑定 `127.0.0.1`，即 Electron 为就绪 URL 与 WebSocket 凭据过滤器拨号的地址。WebSocket 流按 Host 监听器使用 `ws:` 或 `wss:`；附加凭据要求 authority 与 scheme 均匹配。
 
-应用菜单第一项“**关于 DeepSeek Harness**”打开 Desktop 自有对话框，展示产品名称、当前安装版本和可用的版本记录。通用设置当前版本旁的“**版本与更新…**”入口也会打开此对话框。记录只显示当前平台与架构适用的版本；历史记录正在加载或暂时不可用时会显示对应状态，同时保留当前安装版本。对话框跟随 Desktop 壳语言，并提供手动检查更新入口。macOS 的隐藏、隐藏其他、显示全部和退出条目使用本地化文案，隐藏和退出条目包含 DeepSeek Harness 产品名称。这些条目保留原生动作和快捷键。
+应用菜单第一项“**关于 DeepSeek Harness**”打开 Desktop 自有对话框，展示产品名称、当前安装版本和可用的版本记录。通用设置当前版本旁的“**版本与更新…**”入口也会打开此对话框。记录只显示当前平台与架构适用的版本；历史记录正在加载或暂时不可用时会显示对应状态，同时保留当前安装版本。完整安装包发布后，版本记录会显示“下载完整安装包”操作；点击后在系统浏览器中打开配置的 HTTPS 下载地址，由用户手动安装。增量版本仍通过更新器升级。对话框跟随 Desktop 壳语言，并提供手动检查更新入口。macOS 的隐藏、隐藏其他、显示全部和退出条目使用本地化文案，隐藏和退出条目包含 DeepSeek Harness 产品名称。这些条目保留原生动作和快捷键。
 
 Desktop 的本地原生目录流程打开绑定应用窗口的 Electron 文件夹对话框，并先恢复、显示和聚焦该窗口。并发请求共用一个对话框；取消不返回路径，失败后可以重试。普通 Web 使用 Host 选择器。浏览模式列出 Host 目录。Linux 缺少 zenity 或 kdialog 时，自动选择使用浏览模式，不使用 Electron 对话框。
 
@@ -30,7 +30,7 @@ Desktop Host 的 Platform API 请求与更新策略请求用相同的 Platform �
 
 macOS 安装会创建 `/usr/local/bin/dsh`；目录权限需要时，系统会请求管理员认证，不会修改 shell 启动文件。Windows 管理对话框将命令注册到当前用户的 PATH。切换已有命令前会要求确认；修复当前已选中的 Desktop 命令不会重复要求切换确认。macOS 链接会保留并恢复被替换的启动器；Windows 会保留其他 PATH 条目，包括注册前就已存在的条目。若其他命令的 PATH 优先级更高，对话框会显示其位置。移动应用后，macOS 使用“修复”，Windows 从新位置使用“安装”。“移除”不会改动无关安装。
 
-命令注册是安装 Desktop 后的可选操作。卸载 Desktop 前，请通过**管理 dsh 命令… → 移除**删除其 CLI 注册；应用卸载程序不会移除该注册。更新或卸载 Desktop 前请结束 CLI 命令。CLI 运行时版本随已安装的 Desktop 版本变化。Desktop 插件命令与运行时限制见[内置命令运行时](#bundled-command-runtime)。
+命令注册是安装 Desktop 后的可选操作。卸载 Desktop 前，请通过**管理 dsh 命令… → 移除**删除其 CLI 注册；应用卸载程序不会移除该注册。更新或卸载 Desktop 前请结束 CLI 命令。CLI 运行 Desktop 发布包内置的 dsh 版本；Desktop 与 dsh 的版本字符串可以不同。Desktop 插件命令与运行时限制见[内置命令运行时](#bundled-command-runtime)。
 
 ## 关闭窗口与退出
 
@@ -78,13 +78,13 @@ Desktop/SDK 共享运行时构建器在复制或签名产物前，裁剪 NumPy �
 
 | 决策 | 原因 | 直接结果 |
 |---|---|---|
-| 发布身份 | 桌面壳 API、Web 客户端、后端与插件依赖图作为一个组合完成验证；独立版本会产生未经验证的组合，并让更新可用性含糊不清。 | Electron 与 `@deepseek-ai/dsh` 始终使用同一精确版本。即使桌面壳代码不变，升级 dsh 也必须发布新 Desktop 版本。 |
+| 发布身份 | 桌面壳 API、Web 客户端、后端与插件依赖图作为一个组合完成验证；每个 Desktop 产物仍携带一个精确匹配的运行时。 | Desktop 包版本决定应用和更新器的版本排序。根 dsh 版本独立标识并校验内置运行时；两个版本都会记录并报告给更新服务。 |
 | 运行时 | 应用必须能够在没有系统 Node.js 或 pnpm 的机器上运行。 | dsh 通过设置 `ELECTRON_RUN_AS_NODE=1` 和 `--expose-internals` 的 Electron 运行，所有包操作都使用内置 pnpm。包管理器配置和 Host 环境遵循用户设置。包脚本通过 `node` shell 启动器转发给 Electron。 |
 | 包来源 | 即使离线，启动时安装核心依赖也会增加开销。 | `app.asar/dsh` 携带完整生产依赖树；profile 只安装外部插件。 |
 | 状态归属 | 共享可执行依赖图会让 CLI（命令行界面）与 Desktop 相互改变 dsh、Cordis、插件或原生模块版本，而两个桌面进程还可能争用同一个 profile。 | Electron 在访问任何 profile 前获取进程生命周期单实例锁，并独占 `$DSH_HOME/profiles/desktop` 及其包管理器状态。CLI 与 Desktop 共享 `$DSH_HOME` 下受支持的产品数据，但绝不共享可执行包、插件激活、锁文件或 `node_modules`。 |
 | 传输 | Web 服务与认证共享一套实现。 | Electron 加载打包的 Web 资源；Host 提供启动注入和经过认证的 API。 |
 | 插件变更 | Desktop 与 Web 需要一致的安装和激活行为。 | 主应用使用共享 Web 插件管理器和内置 pnpm。 |
-| 更新 | 桌面壳与 dsh 独立更新会重新产生版本分裂，而桌面壳未变化的数据块不应强制完整传输。 | Electron 壳、匹配的 dsh 运行时与 pnpm 组成一个已签名更新单元。平台更新产物可以复用未变化的数据块，但运行时版本选择绝不脱离 Desktop 发布。 |
+| 更新 | 每个签名产物都必须一起验收 Desktop 壳和内置运行时，同时壳的发布号可以独立递增。 | 一次 Electron 更新会整体替换壳及其内置运行时。Desktop 与 dsh 版本可以不同；平台可复用未变化的数据块，运行时仍由包集合固定。 |
 
 [薄壳决策](../../.agents/notes/implemented/architecture/2026-09-10-desktop-web-wrapper.zh.md)负责共享 Web 行为与 Desktop 适配。[Electron 打包与更新决策](../../.agents/notes/implemented/architecture/2026-08-25-electron-desktop-packaging-and-updates.zh.md)负责发布身份、签名及更新验收。
 
@@ -194,11 +194,11 @@ Desktop 在 Host 启动后、打开工作区前检查模型 API Key 引用是否
 
 ### 发布版本
 
-每次 Desktop 打包前，第一步都要与当前用户确认完整版本号。检查所选部署环境、dsh 基础版本、保留的发布记录和已发布对象，再提出准确版本供用户确认。用户确认前不得启动打包；仅选择部署环境不代表用户已认可版本号。
+每次 Desktop 打包前，第一步都要与当前用户确认完整 Desktop 版本号。检查所选部署环境、`apps/desktop/package.json` 版本、保留的 Desktop 发布记录和已发布对象，再提出准确版本供用户确认。用户确认前不得启动打包；仅选择部署环境不代表用户已认可版本号。内置 dsh 版本与 Desktop 版本分别记录。
 
-记录当前 dsh 版本作为基础版本。production Desktop 使用完全相同的版本，包括其中的 `alpha`、`beta` 或 `rc` 标识。test 发布保留完整的预发布基础版本并追加 `.YYYYMMDD.index`；稳定基础版本则追加 `-test.YYYYMMDD.index`。
+Desktop 包版本作为 production 发布基础版本。test 发布保留其完整的预发布基础版本并追加 `.YYYYMMDD.index`；稳定基础版本则追加 `-test.YYYYMMDD.index`。修改 `apps/desktop/package.json` 不会改变根 dsh 版本或内置运行时。
 
-| dsh 基础版本 | production Desktop | test Desktop 示例 |
+| Desktop 基础版本 | production Desktop | test Desktop 示例 |
 |---|---|---|
 | `0.1.6-alpha.1` | `0.1.6-alpha.1` | `0.1.6-alpha.1.20260916.1` |
 | `0.1.6-beta.2` | `0.1.6-beta.2` | `0.1.6-beta.2.20260916.1` |
@@ -207,7 +207,7 @@ Desktop 在 Host 启动后、打开工作区前检查模型 API Key 引用是否
 
 日期使用实际创建时的 Asia/Shanghai 日期。每个基础版本、每天的序号从 1 开始，检查保留的发布记录与已发布对象后递增；绝不复用已发布版本。test 分发不发布对应的无后缀基础版本。
 
-Windows 手动 CI 使用独立的未发布构建标识：`auto` 追加 UTC 日期、工作流运行编号和尝试次数（`.YYYYMMDD.run.attempt`，稳定基础版本使用 `-test`）。例如 `0.2.1-alpha.1.20261008.42.2`。这些编号不是预留的发布序号。
+Windows 手动 CI 使用独立的未发布 Desktop 构建标识：`auto` 追加 UTC 日期、工作流运行编号和尝试次数（`.YYYYMMDD.run.attempt`，稳定基础版本使用 `-test`）。例如 `1.0.2.20261008.42.2`。这些编号不是预留的发布序号。
 
 把确认后的版本通过 `--build-version` 传给打包命令，该值同时决定产物文件名、更新 feed 与上传校验。清单保留产品版本，因此 test 打包不再改写发布家族，也不留下需要还原的改动：
 
@@ -534,7 +534,7 @@ Windows 下载完成后的更新确认说明应用会在安装期间关闭、完
 
 ### Windows 与 macOS 私有升级接口
 
-仅所选 Windows x64 或 macOS arm64 构件会使用此配置替代原有的更新策略服务。两个平台都使用相同的 `POST /v1/desktop/updates/check` 协议。请求会上报构件的平台和架构，供服务端选择版本并记录版本分布。响应必须包含 `protocolVersion: 1`、`release`（`null` 或含版本和 `feedUrl`）以及含 `minimumSupportedVersion` 和 `forceAfter` 的 `policy`。两个策略字段都为 `null` 时清除已知强更；否则它们分别为语义版本和 RFC 3339 UTC 截止时间。低于最低版本且已到强更时间的客户端必须收到兼容版本。可选的 `releaseHistory` 数组包含适用于当前平台和架构的版本记录，字段为 `version`、`platform`、`arch`、中文说明 `releaseNotes.zh_CN` 和英文说明 `releaseNotes.en_US`。旧响应可省略此字段；省略或空列表不会使更新决定失效。无效响应和服务故障会保留已知强更决定。
+仅所选 Windows x64 或 macOS arm64 构件会使用此配置替代原有的更新策略服务。两个平台都使用相同的 `POST /v1/desktop/updates/check` 协议。请求会上报构件的平台和架构，供服务端选择版本并记录版本分布。响应必须包含 `protocolVersion: 1`、`release`（`null` 或含版本和 `feedUrl`）以及含 `minimumSupportedVersion` 和 `forceAfter` 的 `policy`。两个策略字段都为 `null` 时清除已知强更；否则它们分别为语义版本和 RFC 3339 UTC 截止时间。低于最低版本且已到强更时间的客户端必须收到兼容版本。可选的 `releaseHistory` 数组包含适用于当前平台和架构的版本记录，字段为 `version`、`platform`、`arch`、中文说明 `releaseNotes.zh_CN` 和英文说明 `releaseNotes.en_US`；较新的完整安装包记录可额外包含 `installerUrl`。旧响应可省略历史或安装包地址；省略历史或返回空数组不会使更新决定失效。安装包地址必须使用 HTTPS 且属于配置允许的下载源。无效响应和服务故障会保留已知强更决定。
 
 检查响应示例：
 
@@ -566,10 +566,11 @@ Windows 下载完成后的更新确认说明应用会在安装期间关闭、完
 
 | 方法与路径 | 用途 |
 |---|---|
-| `POST /v1/desktop/updates/check` | 接收部署、通道、Desktop/平台/架构/dsh 版本及可选 `userId`，返回版本选择、强更策略和可选的目标平台版本历史。 |
+| `POST /v1/desktop/updates/check` | 接收部署、通道、Desktop/平台/架构/dsh 版本及可选 `userId`，返回版本选择、强更策略和可选的目标平台版本历史及较新完整安装包地址。 |
 | `GET {feedUrl}/nightly.yml` | 返回 Windows EXE 的 Electron generic channel 元数据、大小和 SHA-512。 |
 | `GET {feedUrl}/nightly-mac.yml` | 返回 macOS arm64 ZIP 的 Electron generic channel 元数据、大小和 SHA-512。 |
 | `GET {artifactUrl}` | 通过 HTTPS 匿名提供已签名 Windows EXE 或已签名并公证的 macOS ZIP；支持按字节范围下载。 |
+| `GET {installerUrl}` | 通过 HTTPS 匿名提供已发布的完整安装包，供 Desktop 版本历史手动下载和安装。 |
 | `GET {artifactUrl}.blockmap` | 提供对应平台的 blockmap；差分失败时客户端回退完整更新载荷。 |
 
 服务端管理暂停、灰度比例、最低支持版本和强更期限。相同 `userId` 的分组应保持稳定；未提供 ID 的客户端仅在全量发布后获得版本。检测请求本身用于统计客户端版本；DSH 不单独发送下载或安装事件。

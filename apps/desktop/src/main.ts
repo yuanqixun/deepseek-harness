@@ -380,7 +380,12 @@ async function main(): Promise<void> {
   const ordinaryDialogs = new Set<AbortController>()
   const currentDialogWindow = (): BrowserWindow | undefined => welcomeWindow ?? mainWindow
   const updateOverlays = new DesktopUpdateOverlays()
-  const updateDialog = new DesktopUpdateDialog(fileURLToPath(new URL('./preload-update-dialog.cjs', import.meta.url)), () => locale, updateOverlays)
+  const updateDialog = new DesktopUpdateDialog(fileURLToPath(new URL('./preload-update-dialog.cjs', import.meta.url)), () => locale, updateOverlays,
+    async (url) => {
+      const allowedUrl = privateUpdates?.resolveInstallerUrl(url)
+      if (allowedUrl === undefined) throw new Error('desktop updates: full installer URL is outside configured HTTPS origins')
+      await shell.openExternal(allowedUrl)
+    })
   const isMandatory = (): boolean => mandatoryPolicy?.state.blocking === true
   const ordinaryMessageBox = async (options: UpdateDialogOptions): Promise<Electron.MessageBoxReturnValue> => {
     const controller = new AbortController()
@@ -404,8 +409,10 @@ async function main(): Promise<void> {
         empty: privateUpdates?.releaseHistoryStatus === 'checking' ? locale.messages.aboutHistoryChecking
           : privateUpdates?.releaseHistoryStatus === 'failed' ? locale.messages.aboutHistoryUnavailable
             : locale.messages.aboutHistoryEmpty,
+        downloadInstaller: locale.messages.aboutDownloadInstaller,
         entries: (privateUpdates?.releaseHistory ?? []).map(release => ({
           version: release.version, releaseNotes: release.releaseNotes[key],
+          ...(release.installerUrl === undefined ? {} : { installerUrl: release.installerUrl }),
         })),
       } })
     if (result.response === 0) await openUpdatePrompt(true)

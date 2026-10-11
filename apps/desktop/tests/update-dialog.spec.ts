@@ -148,7 +148,7 @@ it('passes release history to its owned renderer and preserves an empty-history 
   const f = setup()
   const pending = dialogs!.show(f.parent as unknown as BrowserWindow, {
     message: 'DeepSeek Harness', detail: 'Version 1.0.0', buttons: ['Check updates', 'Close'], cancelId: 1,
-    releaseHistory: { title: 'Version history', empty: 'No version history is available.', entries: [
+    releaseHistory: { title: 'Version history', empty: 'No version history is available.', downloadInstaller: 'Download full installer', entries: [
       { version: '1.2.3', releaseNotes: 'Stability improvements.' },
     ] },
   })

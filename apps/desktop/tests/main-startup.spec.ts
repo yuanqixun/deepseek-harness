@@ -566,7 +566,8 @@ describe('desktop main startup', () => {
       detail: zh ? '版本 V1.0.0' : 'Version V1.0.0',
       buttons: [zh ? '检查更新…' : 'Check for Updates…', zh ? '确定' : 'OK'], cancelId: 1,
       releaseHistory: { title: zh ? '版本更新记录' : 'Version history',
-        empty: zh ? '暂无版本更新记录' : 'No version history is available.', entries: [] },
+        empty: zh ? '暂无版本更新记录' : 'No version history is available.',
+        downloadInstaller: zh ? '下载完整安装包' : 'Download full installer', entries: [] },
     }))
     // A dialog that cannot open is logged, not surfaced as an unhandled rejection.
     harness.dialog.showMessageBox.mockRejectedValueOnce(new Error('overlay unavailable'))
@@ -592,6 +593,7 @@ describe('desktop main startup', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({ releaseHistory: {
       title: en.aboutHistoryTitle, empty: en.aboutHistoryEmpty,
+      downloadInstaller: en.aboutDownloadInstaller,
       entries: [{ version: '1.2.4', releaseNotes: 'Fixes stability issues' }],
     } }))
     harness.dialog.showMessageBox.mockResolvedValue({ response: 1 })
@@ -615,7 +617,8 @@ describe('desktop main startup', () => {
     about()
     await vi.advanceTimersByTimeAsync(0)
     expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({ releaseHistory: {
-      title: en.aboutHistoryTitle, empty: en.aboutHistoryUnavailable, entries: [],
+      title: en.aboutHistoryTitle, empty: en.aboutHistoryUnavailable,
+      downloadInstaller: en.aboutDownloadInstaller, entries: [],
     } }))
   })
 

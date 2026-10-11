@@ -48,7 +48,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Validate package-set data read from a release artifact or active profile.
  * @param value - Parsed descriptor JSON.
- * @param expectedReleaseVersion - Required dsh and Desktop Host version when validating one release.
+ * @param expectedReleaseVersion - Required dsh and Desktop Host version for the bundled runtime.
  * @returns The normalized package set in deterministic name order.
  */
 export function parseDesktopCorePackageSet(
@@ -125,7 +125,7 @@ export function desktopDshPackageSpec(packageSet: DesktopCorePackageSet): string
 /**
  * Verify every local tarball and reject extra package files before pnpm executes them.
  * @param projectDir - Build directory containing the package set.
- * @param expectedReleaseVersion - Exact dsh and Desktop Host version bound to Electron.
+ * @param expectedReleaseVersion - Exact dsh and Desktop Host version for the bundled runtime.
  * @returns The verified package set.
  */
 export function verifyDesktopCorePackageSet(

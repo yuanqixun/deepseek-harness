@@ -15,7 +15,7 @@ vi.mock('electron-updater', () => ({
 const { DesktopUpdateCoordinator } = await import('../src/update-coordinator.ts')
 
 describe('desktop release metadata', () => {
-  it('accepts one exact release identity for Electron and dsh', () => {
+  it('accepts the exact version identity for the bundled dsh runtime', () => {
     expect(parseDesktopRelease({
       schemaVersion: 1,
       version: '1.2.3',

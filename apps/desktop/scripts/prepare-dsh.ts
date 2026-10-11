@@ -7,8 +7,7 @@ import { tmpdir } from 'node:os'
 import { delimiter, join, relative, resolve } from 'node:path'
 import { desktopNodeEnvironment } from '../src/node-environment.ts'
 import { createRuntimeProjectMetadata } from '../src/project-manager.ts'
-import { DESKTOP_HOST_PROTOCOL_VERSION } from '../src/host-protocol.ts'
-import { parseDesktopRelease, type DesktopRelease } from '../src/release.ts'
+import type { DesktopRelease } from '../src/release.ts'
 import {
   DESKTOP_HOST_PACKAGE,
   DESKTOP_HOST_RUNTIME_FILES,
@@ -34,6 +33,7 @@ import { desktopTargetPlatform, resolveDesktopBuildTarget, resolveDesktopTargetB
 import { desktopRuntimeFileExclusion } from './runtime-file-policy.ts'
 import { selectOfficeEngine } from '../../../scripts/libreoffice-packages.mjs'
 import { desktopProfileBundles } from '../src/preinstalled-plugin-bundles.ts'
+import { readDesktopRuntimeRelease } from './desktop-runtime-release.ts'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const BUILD_PATHS = resolveDesktopTargetBuildPaths()
@@ -46,26 +46,8 @@ const PACKAGE_SET_ROOT = BUILD_PATHS.packageSet
 const NODE = join(BUILD_PATHS.electron, process.platform === 'win32' ? 'electron.exe' : 'Electron.app/Contents/MacOS/Electron')
 const PNPM = join(RUNTIME_ROOT, 'primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.mjs')
 
-function manifestVersion(path: string, subject: string): string {
-  const manifest = JSON.parse(readFileSync(path, 'utf8')) as { version?: unknown }
-  if (typeof manifest.version !== 'string') throw new Error(`desktop runtime: ${subject} has no version`)
-  return manifest.version
-}
-
 function desktopRelease(): DesktopRelease {
-  const version = manifestVersion(join(APP_ROOT, 'package.json'), 'desktop package')
-  const dshVersion = manifestVersion(resolve(APP_ROOT, '..', '..', 'package.json'), 'root dsh package')
-  if (version !== dshVersion) {
-    throw new Error(`desktop runtime: Electron ${version} must bind the same version of @deepseek-ai/dsh, found ${dshVersion}`)
-  }
-  const runtime = JSON.parse(readFileSync(join(RUNTIME_ROOT, 'versions.json'), 'utf8')) as Record<string, unknown>
-  return parseDesktopRelease({
-    schemaVersion: 1,
-    version,
-    hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION,
-    nodeVersion: runtime.node,
-    pnpmVersion: runtime.pnpm,
-  })
+  return readDesktopRuntimeRelease(resolve(APP_ROOT, '..', '..'), RUNTIME_ROOT)
 }
 
 function runPnpm(args: readonly string[]): Promise<void> {

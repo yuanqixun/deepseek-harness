@@ -208,6 +208,22 @@ describe('virtualManifest', () => {
       rmSync(root, { recursive: true, force: true })
     }
   })
+
+  it('skips empty optional platform stubs in the virtual store', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-notices-optional-stub-'))
+    try {
+      const name = '@scope/pkg'
+      const store = join(root, 'store')
+      mkdirSync(join(store, `${name.replace('/', '+')}@1.0.0`), { recursive: true })
+      const manifestDir = join(store, `${name.replace('/', '+')}@2.0.0`, 'node_modules', name)
+      mkdirSync(manifestDir, { recursive: true })
+      writeFileSync(join(manifestDir, 'package.json'), JSON.stringify({ name, version: '2.0.0', license: 'MIT' }))
+
+      expect(virtualManifest(store, name)).toMatchObject({ name, version: '2.0.0' })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('parseVendoredRows', () => {

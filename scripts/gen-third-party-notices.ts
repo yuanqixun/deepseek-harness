@@ -277,7 +277,9 @@ export function virtualManifest(
   const prefix = `${name.replace('/', '+')}@`
   const entries = readdirSync(virtual)
   for (const entry of entries.filter(dir => dir.startsWith(prefix))) {
-    const manifest = JSON.parse(readFileSync(resolve(virtual, entry, 'node_modules', name, 'package.json'), 'utf8')) as VirtualManifest
+    const path = resolve(virtual, entry, 'node_modules', name, 'package.json')
+    if (!existsSync(path)) continue
+    const manifest = JSON.parse(readFileSync(path, 'utf8')) as VirtualManifest
     if (expectedVersion === undefined || manifest.version === expectedVersion) return manifest
   }
   for (const dir of entries) {

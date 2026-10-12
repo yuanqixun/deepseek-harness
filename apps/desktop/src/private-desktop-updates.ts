@@ -24,10 +24,11 @@ interface PrivateUpdateDecision {
 /** Published release notes returned for one supported Desktop platform and architecture. */
 export interface PrivateDesktopRelease {
   readonly version: string
+  readonly releaseType: 'incremental' | 'full-installer'
   readonly platform: 'win32' | 'darwin'
   readonly arch: 'x64' | 'arm64'
   readonly releaseNotes: { readonly zh_CN: string; readonly en_US: string }
-  /** Full installer to download manually; constrained to the configured HTTPS download origins. */
+  /** Full installer to download manually; constrained to configured HTTP/HTTPS origins. */
   readonly installerUrl?: string
 }
 
@@ -35,7 +36,7 @@ function resolveInstallerUrl(value: unknown, config: PrivateDesktopUpdateConfig)
   if (typeof value !== 'string') return undefined
   try {
     const url = new URL(value)
-    if (url.protocol !== 'https:' || url.username !== '' || url.password !== ''
+    if (!isAllowedUpdateProtocol(url) || url.username !== '' || url.password !== ''
       || !config.feedOrigins.includes(url.origin) || url.search !== '' || url.hash !== '') return undefined
     return url.href
   } catch {
@@ -131,9 +132,13 @@ function parseDecision(input: unknown, config: PrivateDesktopUpdateConfig, curre
     if (item.installerUrl != null && installerUrl === undefined) {
       throw new Error('desktop updates: invalid full installer URL')
     }
-    return { version: item.version, platform: item.platform, arch: item.arch,
+    const releaseType = item.releaseType ?? (item.installerUrl == null ? 'incremental' : 'full-installer')
+    if (releaseType !== 'incremental' && releaseType !== 'full-installer') {
+      throw new Error('desktop updates: invalid release type')
+    }
+    return { version: item.version, releaseType, platform: item.platform, arch: item.arch,
       releaseNotes: { zh_CN: notes.zh_CN, en_US: notes.en_US },
-      ...(installerUrl !== undefined && gt(item.version, currentVersion) ? { installerUrl } : {}) }
+      ...(releaseType === 'full-installer' && installerUrl !== undefined && gt(item.version, currentVersion) ? { installerUrl } : {}) }
   }).filter(entry => entry.platform === platform && entry.arch === arch)
     .sort((left, right) => compare(right.version, left.version))
   return { release, policy: { minimumSupportedVersion: minimumVersion, forceAfter: deadline }, releaseHistory }
@@ -172,7 +177,14 @@ export class PrivateDesktopUpdateClient {
   /** Latest validated release notes returned by the update service, filtered to this build target. */
   get releaseHistory(): readonly PrivateDesktopRelease[] { return this.releases }
 
-  /** Resolve a renderer-requested installer URL against the configured HTTPS download origins.
+  /** Return the newest full installer when it is newer than the current incremental candidate. */
+  newerFullInstallerThan(version?: string): PrivateDesktopRelease | undefined {
+    const latest = this.releases.find(release => release.releaseType === 'full-installer'
+      && gt(release.version, this.currentVersion))
+    return latest !== undefined && (version === undefined || gt(latest.version, version)) ? latest : undefined
+  }
+
+  /** Resolve a renderer-requested installer URL against configured HTTP/HTTPS download origins.
    * @param value - URL displayed in the current release history.
    * @returns The normalized allowlisted URL, or `undefined` when it is not allowed.
    */

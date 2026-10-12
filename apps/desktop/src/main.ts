@@ -383,7 +383,7 @@ async function main(): Promise<void> {
   const updateDialog = new DesktopUpdateDialog(fileURLToPath(new URL('./preload-update-dialog.cjs', import.meta.url)), () => locale, updateOverlays,
     async (url) => {
       const allowedUrl = privateUpdates?.resolveInstallerUrl(url)
-      if (allowedUrl === undefined) throw new Error('desktop updates: full installer URL is outside configured HTTPS origins')
+      if (allowedUrl === undefined) throw new Error('desktop updates: full installer URL is outside configured origins')
       await shell.openExternal(allowedUrl)
     })
   const isMandatory = (): boolean => mandatoryPolicy?.state.blocking === true
@@ -397,24 +397,27 @@ async function main(): Promise<void> {
     }
     finally { ordinaryDialogs.delete(controller) }
   }
+  const updateReleaseHistory = (): NonNullable<UpdateDialogOptions['releaseHistory']> => {
+    const key = locale.id === 'zh-CN' ? 'zh_CN' : 'en_US'
+    return {
+      title: locale.messages.aboutHistoryTitle,
+      empty: privateUpdates?.releaseHistoryStatus === 'checking' ? locale.messages.aboutHistoryChecking
+        : privateUpdates?.releaseHistoryStatus === 'failed' ? locale.messages.aboutHistoryUnavailable
+          : locale.messages.aboutHistoryEmpty,
+      downloadInstaller: locale.messages.aboutDownloadInstaller,
+      entries: (privateUpdates?.releaseHistory ?? []).map(release => ({
+        version: release.version, releaseNotes: release.releaseNotes[key],
+        ...(release.installerUrl === undefined ? {} : { installerUrl: release.installerUrl }),
+      })),
+    }
+  }
   // Copy comes from the same locale as the update prompts so the dialog
   // chrome and its content never mix languages.
   const showAbout = async (): Promise<void> => {
-    const key = locale.id === 'zh-CN' ? 'zh_CN' : 'en_US'
     const result = await ordinaryMessageBox({ type: 'info', title: locale.messages.aboutMenu, message: locale.messages.aboutProduct,
       detail: formatDesktopMessage(locale.messages.aboutVersion, { version: app.getVersion() }),
       buttons: [locale.messages.checkUpdatesMenu, locale.messages.updateAcknowledge], cancelId: 1,
-      releaseHistory: {
-        title: locale.messages.aboutHistoryTitle,
-        empty: privateUpdates?.releaseHistoryStatus === 'checking' ? locale.messages.aboutHistoryChecking
-          : privateUpdates?.releaseHistoryStatus === 'failed' ? locale.messages.aboutHistoryUnavailable
-            : locale.messages.aboutHistoryEmpty,
-        downloadInstaller: locale.messages.aboutDownloadInstaller,
-        entries: (privateUpdates?.releaseHistory ?? []).map(release => ({
-          version: release.version, releaseNotes: release.releaseNotes[key],
-          ...(release.installerUrl === undefined ? {} : { installerUrl: release.installerUrl }),
-        })),
-      } })
+      releaseHistory: updateReleaseHistory() })
     if (result.response === 0) await openUpdatePrompt(true)
   }
   const commandManager = new DesktopCommandManager({
@@ -871,6 +874,22 @@ async function main(): Promise<void> {
         }
         if (isMandatory()) { mandatoryUI?.focus(); return }
         if (state.phase === 'error' && state.failedOperation === 'check') { await showUpdateFailure(state); return }
+        if (manual && (state.phase === 'idle' || state.phase === 'available'
+          || (state.phase === 'error' && state.failedOperation === 'download'))) {
+          const incrementalVersion = state.phase === 'available'
+            || (state.phase === 'error' && state.failedOperation === 'download') ? state.version : undefined
+          const fullInstaller = privateUpdates?.newerFullInstallerThan(incrementalVersion)
+          if (fullInstaller !== undefined) {
+            const key = locale.id === 'zh-CN' ? 'zh_CN' : 'en_US'
+            const message = fullInstaller.installerUrl === undefined
+              ? locale.messages.updateFullInstallerUnavailable : locale.messages.updateFullInstallerAvailable
+            await ordinaryMessageBox({ type: 'info', title: locale.messages.updateCheckTitle,
+              message: formatDesktopMessage(message, { version: fullInstaller.version }),
+              detail: fullInstaller.releaseNotes[key], buttons: [locale.messages.updateAcknowledge], cancelId: 0,
+              releaseHistory: updateReleaseHistory() })
+            return
+          }
+        }
         if (state.phase === 'idle') {
           await ordinaryMessageBox({ type: 'info', title: locale.messages.updateCheckTitle,
             message: locale.messages.updateCurrent,

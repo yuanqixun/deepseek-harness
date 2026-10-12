@@ -8,7 +8,7 @@
 
 Desktop 绑定 `127.0.0.1`，即 Electron 为就绪 URL 与 WebSocket 凭据过滤器拨号的地址。WebSocket 流按 Host 监听器使用 `ws:` 或 `wss:`；附加凭据要求 authority 与 scheme 均匹配。
 
-应用菜单第一项“**关于 DeepSeek Harness**”打开 Desktop 自有对话框，展示产品名称、当前安装版本和可用的版本记录。通用设置当前版本旁的“**版本与更新…**”入口也会打开此对话框。记录只显示当前平台与架构适用的版本；历史记录正在加载或暂时不可用时会显示对应状态，同时保留当前安装版本。完整安装包发布后，版本记录会显示“下载完整安装包”操作；点击后在系统浏览器中打开配置的 HTTPS 下载地址，由用户手动安装。增量版本仍通过更新器升级。对话框跟随 Desktop 壳语言，并提供手动检查更新入口。macOS 的隐藏、隐藏其他、显示全部和退出条目使用本地化文案，隐藏和退出条目包含 DeepSeek Harness 产品名称。这些条目保留原生动作和快捷键。
+应用菜单第一项“**关于 DeepSeek Harness**”打开 Desktop 自有对话框，展示产品名称、当前安装版本和可用的版本记录。通用设置当前版本旁的“**版本与更新…**”入口也会打开此对话框。记录只显示当前平台与架构适用的版本；历史记录正在加载或暂时不可用时会显示对应状态，同时保留当前安装版本。完整安装包发布后，版本记录会显示“下载完整安装包”操作；点击后在系统浏览器中打开配置允许的 HTTP/HTTPS 下载地址，由用户手动安装。手动检查更新会比较最新完整包与增量版本：增量版本走应用内更新，完整包提供手动下载入口。对话框跟随 Desktop 壳语言，并提供手动检查更新入口。macOS 的隐藏、隐藏其他、显示全部和退出条目使用本地化文案，隐藏和退出条目包含 DeepSeek Harness 产品名称。这些条目保留原生动作和快捷键。
 
 Desktop 的本地原生目录流程打开绑定应用窗口的 Electron 文件夹对话框，并先恢复、显示和聚焦该窗口。并发请求共用一个对话框；取消不返回路径，失败后可以重试。普通 Web 使用 Host 选择器。浏览模式列出 Host 目录。Linux 缺少 zenity 或 kdialog 时，自动选择使用浏览模式，不使用 Electron 对话框。
 
@@ -534,7 +534,7 @@ Windows 下载完成后的更新确认说明应用会在安装期间关闭、完
 
 ### Windows 与 macOS 私有升级接口
 
-仅所选 Windows x64 或 macOS arm64 构件会使用此配置替代原有的更新策略服务。两个平台都使用相同的 `POST /v1/desktop/updates/check` 协议。请求会上报构件的平台和架构，供服务端选择版本并记录版本分布。响应必须包含 `protocolVersion: 1`、`release`（`null` 或含版本和 `feedUrl`）以及含 `minimumSupportedVersion` 和 `forceAfter` 的 `policy`。两个策略字段都为 `null` 时清除已知强更；否则它们分别为语义版本和 RFC 3339 UTC 截止时间。低于最低版本且已到强更时间的客户端必须收到兼容版本。可选的 `releaseHistory` 数组包含适用于当前平台和架构的版本记录，字段为 `version`、`platform`、`arch`、中文说明 `releaseNotes.zh_CN` 和英文说明 `releaseNotes.en_US`；较新的完整安装包记录可额外包含 `installerUrl`。旧响应可省略历史或安装包地址；省略历史或返回空数组不会使更新决定失效。安装包地址必须使用 HTTPS 且属于配置允许的下载源。无效响应和服务故障会保留已知强更决定。
+仅所选 Windows x64 或 macOS arm64 构件会使用此配置替代原有的更新策略服务。两个平台都使用相同的 `POST /v1/desktop/updates/check` 协议。请求会上报构件的平台和架构，供服务端选择版本并记录版本分布。响应必须包含 `protocolVersion: 1`、`release`（`null` 或含版本和 `feedUrl`）以及含 `minimumSupportedVersion` 和 `forceAfter` 的 `policy`。两个策略字段都为 `null` 时清除已知强更；否则它们分别为语义版本和 RFC 3339 UTC 截止时间。低于最低版本且已到强更时间的客户端必须收到兼容版本。可选的 `releaseHistory` 数组包含适用于当前平台和架构的版本记录，字段为 `version`、`releaseType`、`platform`、`arch`、中文说明 `releaseNotes.zh_CN` 和英文说明 `releaseNotes.en_US`；较新的完整安装包记录可额外包含 `installerUrl`。旧响应可省略历史或安装包地址；省略历史或返回空数组不会使更新决定失效。`feedUrl` 和 `installerUrl` 必须属于构件配置明确允许的 HTTP/HTTPS 下载源。检查更新时，客户端按版本比较完整包和增量发行：较新的增量包进入应用内更新，较新的完整包展示手动下载入口。无效响应和服务故障会保留已知强更决定。
 
 检查响应示例：
 
@@ -549,6 +549,7 @@ Windows 下载完成后的更新确认说明应用会在安装期间关闭、完
   "releaseHistory": [
     {
       "version": "1.2.4",
+      "releaseType": "incremental",
       "platform": "win32",
       "arch": "x64",
       "releaseNotes": {
@@ -570,7 +571,7 @@ Windows 下载完成后的更新确认说明应用会在安装期间关闭、完
 | `GET {feedUrl}/nightly.yml` | 返回 Windows EXE 的 Electron generic channel 元数据、大小和 SHA-512。 |
 | `GET {feedUrl}/nightly-mac.yml` | 返回 macOS arm64 ZIP 的 Electron generic channel 元数据、大小和 SHA-512。 |
 | `GET {artifactUrl}` | 通过 HTTPS 匿名提供已签名 Windows EXE 或已签名并公证的 macOS ZIP；支持按字节范围下载。 |
-| `GET {installerUrl}` | 通过 HTTPS 匿名提供已发布的完整安装包，供 Desktop 版本历史手动下载和安装。 |
+| `GET {installerUrl}` | 通过配置允许的 HTTP/HTTPS origin 匿名提供已发布的完整安装包，供 Desktop 版本历史手动下载和安装。 |
 | `GET {artifactUrl}.blockmap` | 提供对应平台的 blockmap；差分失败时客户端回退完整更新载荷。 |
 
 服务端管理暂停、灰度比例、最低支持版本和强更期限。相同 `userId` 的分组应保持稳定；未提供 ID 的客户端仅在全量发布后获得版本。检测请求本身用于统计客户端版本；DSH 不单独发送下载或安装事件。

@@ -6,7 +6,9 @@ param(
   [ValidatePattern('^[a-z0-9][a-z0-9-]*$')]
   [string]$ConfigEnvironment,
   [Parameter()]
-  [switch]$NoPreinstallPrivatePlugins
+  [switch]$NoPreinstallPrivatePlugins,
+  [Parameter()]
+  [switch]$Sign
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,7 +22,7 @@ function Fail([string]$Message) {
 $repositoryRoot = $PSScriptRoot
 Set-Location $repositoryRoot
 
-if (-not $IsWindows) {
+if ($env:OS -ne 'Windows_NT') {
   Fail 'build-win64.ps1 requires a Windows x64 host.'
 }
 foreach ($command in 'node', 'pnpm') {
@@ -33,7 +35,7 @@ if ($LASTEXITCODE -ne 0 -or $nodeArchitecture -ne 'x64') {
   Fail 'build-win64.ps1 requires an x64 Node.js runtime on Windows.'
 }
 if (-not (Test-Path -LiteralPath 'apps/desktop/.env.windows' -PathType Leaf)) {
-  Fail 'Missing apps/desktop/.env.windows; copy apps/desktop/.env.windows.example and configure the release credentials.'
+  Fail 'Missing apps/desktop/.env.windows; copy apps/desktop/.env.windows.example and configure the build settings.'
 }
 
 $packageArguments = @('--build-version', $BuildVersion)
@@ -43,7 +45,9 @@ if (-not $NoPreinstallPrivatePlugins) {
 if (-not [string]::IsNullOrWhiteSpace($ConfigEnvironment)) {
   $packageArguments += @('--config-env', $ConfigEnvironment)
 }
-$pnpmArguments = @('run', 'package:desktop:win:x64', '--') + $packageArguments
+$packageScript = if ($Sign) { 'package:desktop:win:x64' } else { 'package:desktop:win:x64:unsigned' }
+$pnpmArguments = @('run', $packageScript, '--') + $packageArguments
+Remove-Item Env:ELECTRON_CUSTOM_DIR -ErrorAction SilentlyContinue
 & pnpm @pnpmArguments
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE

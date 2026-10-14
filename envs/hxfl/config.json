@@ -3,8 +3,8 @@
   "environment": "hxfl",
   "plugins": {
     "privateMarket": {
-      "catalogUrl": "http://localhost:48080/v1/plugins",
-      "registryUrl": "https://hxflnexus.superbpm.com/repository/npm-group/"
+      "catalogUrl": "https://dsh-market.hxfl.com.cn/app-api/v1/plugins",
+      "registryUrl": "https://repo.hxfl.com.cn/repository/npm/"
     }
   },
   "desktop": {
@@ -14,9 +14,9 @@
     },
     "updates": {
       "distribution": "dshwork",
-      "checkUrl": "http://localhost:48080/app-api/v1/desktop/updates/check",
+      "checkUrl": "https://dsh-market.hxfl.com.cn/app-api/v1/desktop/updates/check",
       "channel": "stable",
-      "feedOrigins": ["http://localhost:48080"]
+      "feedOrigins": ["https://dsh-market.hxfl.com.cn"]
     }
   }
 }

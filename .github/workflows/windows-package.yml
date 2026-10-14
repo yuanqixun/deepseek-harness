@@ -89,7 +89,7 @@ jobs:
         with:
           name: windows-x64-unsigned-${{ steps.settings.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
           include-hidden-files: true
-          path: apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts/*.exe
+          path: releases/${{ steps.settings.outputs.version }}/windows/x64/internal/*.exe
           if-no-files-found: error
           retention-days: 14
       - name: Remove generated package settings

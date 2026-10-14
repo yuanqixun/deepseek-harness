@@ -14,13 +14,15 @@ const paths = resolveDesktopTargetBuildPaths()
 const { values } = parseArgs({ options: { unsigned: { type: 'boolean', default: false }, 'internal-dmg': { type: 'boolean', default: false } }, allowPositionals: false })
 const target = resolveDesktopBuildTarget()
 const windows = target === 'win-x64'
+const buildVersion = resolveDesktopBuildVersion(process.env,
+  JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version)
+const internalArtifacts = desktopTargetInternalArtifactsDirectory(target, buildVersion)
 if (values.unsigned && !['win-x64', 'mac-arm64', 'mac-x64'].includes(target)) {
   throw new Error('desktop smoke: unsigned artifacts require a supported release target')
 }
 if (values['internal-dmg'] && (windows || values.unsigned)) throw new Error('desktop smoke: internal disk images require macOS')
-const artifacts = values.unsigned ? paths.unsignedArtifacts
-  : values['internal-dmg'] ? desktopTargetInternalArtifactsDirectory(target, resolveDesktopBuildVersion(process.env,
-    JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version))
+const artifacts = values.unsigned ? windows ? internalArtifacts : paths.unsignedArtifacts
+  : values['internal-dmg'] ? internalArtifacts
     : paths.artifacts
 const displayName = desktopBrandingFromEnvironment(process.env).displayName
 const application = windows ? join(artifacts, 'win-unpacked')

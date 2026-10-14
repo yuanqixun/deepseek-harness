@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto'
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { runtimePath, verifyDesktopRuntime, writeDesktopRuntime } from '../src/runtime-tree.ts'
+import { runtimePath, verifyDesktopRuntime, writeDesktopRuntimeAsync } from '../src/runtime-tree.ts'
 import { readInstalledUpdateRun } from './installed-update-qualification.ts'
 
 interface PackageMetadata {
@@ -51,7 +51,7 @@ export async function prepareInstalledUpdateRuntime(manifest: string, sourceRoot
         }
         await writeFile(path, `${JSON.stringify(metadata, null, 2)}\n`)
       }
-      writeDesktopRuntime(runtime, { ...source.release, version }, source.sharedPackages.map(entry => entry.name), source)
+      await writeDesktopRuntimeAsync(runtime, { ...source.release, version }, source.sharedPackages.map(entry => entry.name), source)
       const verified = await verifyDesktopRuntime(runtime, version, source)
       results.push({ version, runtime, files: verified.files.length, sharedPackages: verified.sharedPackages.length,
         descriptorSha256: createHash('sha256').update(await readFile(join(runtime, 'desktop-runtime.json'))).digest('hex') })

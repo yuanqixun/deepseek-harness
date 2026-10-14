@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { relative, resolve } from 'node:path'
+import { resolve } from 'node:path'
 import yaml from 'js-yaml'
 import { expect, it } from 'vitest'
-import { desktopTargetBuildPaths } from '../apps/desktop/scripts/desktop-build-paths.mjs'
 
 const root = resolve(import.meta.dirname, '..')
 const workflow = yaml.load(readFileSync(resolve(root, '.github/workflows/windows-package.yml'), 'utf8')) as {
@@ -61,7 +60,7 @@ it('retains failure diagnostics and only uploads successful installers from the 
   const installer = uploads.find(step => step !== logs)!
   expect(installer.if).toBeUndefined()
   expect(installer.with).toMatchObject({
-    path: `${relative(root, desktopTargetBuildPaths('win-x64').unsignedArtifacts).replaceAll('\\', '/')}/*.exe`,
+    path: 'releases/${{ steps.settings.outputs.version }}/windows/x64/internal/*.exe',
     'include-hidden-files': true, 'if-no-files-found': 'error',
   })
   const cleanup = job.steps.find(step => step.run?.includes('Remove-Item -LiteralPath apps/desktop/.env.windows'))!

@@ -535,11 +535,13 @@ export async function packageTarget(
   const journal = target.platform === 'darwin' ? process.env.DSH_DESKTOP_PACKAGING_RUN_DIR : undefined
   const proxyEvent = (status: string) => { if (journal) recordPackagingEvent(journal, { type: 'notarization-proxy', status }) }
   const mac = target.platform === 'darwin' ? resolveMacOSPackageSettings(environment) : undefined
-  const packArguments = mac === undefined ? [] : ['--concurrency', String(mac.packConcurrency)]
+  const packArguments = ['--concurrency', String(mac?.packConcurrency ?? 4)]
   const buildPaths = desktopTargetBuildPaths(target.name)
   const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   const buildVersion = resolveDesktopBuildVersion(environment, productVersion)
-  const artifactsRoot = invocation.unsigned ? buildPaths.unsignedArtifacts
+  const unsignedArtifacts = target.platform === 'win32'
+    ? desktopTargetInternalArtifactsDirectory(target.name, buildVersion) : buildPaths.unsignedArtifacts
+  const artifactsRoot = invocation.unsigned ? unsignedArtifacts
     : invocation.internalDmg ? desktopTargetInternalArtifactsDirectory(target.name, buildVersion)
       : desktopTargetReleaseArtifactsDirectory(target.name, buildVersion)
   const releaseRecordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))

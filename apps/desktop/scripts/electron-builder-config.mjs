@@ -126,6 +126,8 @@ export function createElectronBuilderConfig(
   const dshVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../../../package.json', import.meta.url)), 'utf8')).version
   const buildVersion = resolveDesktopBuildVersion(env, productVersion)
   const artifactsDirectory = desktopTargetReleaseArtifactsDirectory(target, buildVersion)
+  const unsignedArtifactsDirectory = packagesWindows
+    ? desktopTargetInternalArtifactsDirectory(target, buildVersion) : buildPaths.unsignedArtifacts
   const packaged = resolveDesktopBuildCommit(env)
   return {
     appId,
@@ -141,7 +143,7 @@ export function createElectronBuilderConfig(
     productName: branding.displayName,
     // Local artifacts carry their own suffix so they cannot pass for release builds.
     artifactName: `${branding.artifactNameBase}-\${version}-\${os}-\${arch}${unsigned ? '-unsigned' : internalDmg ? '-internal' : ''}.\${ext}`,
-    directories: { output: unsigned ? buildPaths.unsignedArtifacts
+    directories: { output: unsigned ? unsignedArtifactsDirectory
       : internalDmg ? desktopTargetInternalArtifactsDirectory(target, buildVersion) : artifactsDirectory },
     asar: true,
     electronDist: buildPaths.electron,

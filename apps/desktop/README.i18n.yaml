@@ -2,42 +2,54 @@
 # section, a hash of its English and Chinese blocks outside code blocks and generated regions.
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write apps/desktop/README.md
+/:
+  en: 0d36989eb614345d
+  zh: a0a1a18c07621393
 /deepseek-harness-desktop:
-  en: dad3075172a03069
-  zh: ee285af57c6f1059
+  en: 69a6e0c6712e463b
+  zh: 84e1d0b09c803704
+/deepseek-harness-desktop/summary:
+  en: 7bc8bf30de693222
+  zh: e85993d8852b6cab
+/deepseek-harness-desktop/table-of-contents:
+  en: 05fd227f99ee535a
+  zh: 60d7d62bc0026973
+/deepseek-harness-desktop/application-overview:
+  en: 584ccc14573a1a42
+  zh: 6f6c3c3f6b36c565
 /deepseek-harness-desktop/terminal-command:
-  en: 33a51a7cd07c284a
-  zh: 6537b66990eee322
+  en: b00ee8596fbe639d
+  zh: 13dfb3bb682f2123
 /deepseek-harness-desktop/closing-the-window-and-quitting:
-  en: fb81d2192ab0fb19
-  zh: b3c5fc48bf0d2e54
+  en: 5d3658c33a5aea17
+  zh: 8987ff40941a7cab
 /deepseek-harness-desktop/key-technical-decisions:
-  en: 069fdfd72d2ea26a
+  en: 3724c53da4f7647b
   zh: 76ae549d43c99bb4
 /deepseek-harness-desktop/key-technical-decisions/bundled-workspace-dependencies:
-  en: a06b6dd246452189
-  zh: e45da3e5c3423578
+  en: 31a4d702a46b116b
+  zh: 725e7f3c9d56ce51
 /deepseek-harness-desktop/bundled-command-runtime:
-  en: 09f0b75af9f0ed14
-  zh: 60bbc2e67d5e87a8
+  en: 372297005b57a08b
+  zh: 074a635ac17e4362
 /deepseek-harness-desktop/installation-ownership:
-  en: 87e7d5ca3e7060a0
-  zh: aa09c064d59698c7
+  en: 203db83b5586b1bd
+  zh: a9d925cc6eb2833a
 /deepseek-harness-desktop/installation-ownership/runtime-and-plugin-activation:
   en: a1a47b09f4a72ba4
   zh: 7b1cf27f0b72cf31
 /deepseek-harness-desktop/installation-ownership/host-environment:
-  en: 84a9cc7ca9455aa8
-  zh: 4091b8aa8231b74a
+  en: 98cf848762482d48
+  zh: 74f9100a39ec8c2f
 /deepseek-harness-desktop/develop:
-  en: fe6d23e6a3d3bc66
-  zh: d60c8d3a55747916
+  en: faf7676ba18bbf2f
+  zh: f1d7b75ad348c548
 /deepseek-harness-desktop/develop/startup-onboarding:
   en: b7332709b66397fa
   zh: 7ccbfe962a3f0b2d
 /deepseek-harness-desktop/develop/welcome-window-appearance:
-  en: ae319a496639b38d
-  zh: ef044103240ac9da
+  en: 617a89aeb28131b9
+  zh: 4d84bd5d86501c86
 /deepseek-harness-desktop/package:
   en: 4cd8a8da6977928d
   zh: 9f624855a2edac37
@@ -54,26 +66,23 @@
   en: 5f05072ec82cc62d
   zh: a3d63b58d1ef2db7
 /deepseek-harness-desktop/package/runtime-file-selection:
-  en: e7c1eb8e78fe46e3
-  zh: b7ea497dd75be524
-/deepseek-harness-desktop/package/upload-updates:
-  en: f48baa680e841b0d
-  zh: 25ded1aeaac6dad1
+  en: 11fcb97ddb9a99e8
+  zh: 3f12df6da54cef4e
 /deepseek-harness-desktop/package/unsigned-windows-test-installer:
-  en: cdf52c7070916cfa
-  zh: 93a275cd790f9607
-/deepseek-harness-desktop/package/windows-installer-interface:
-  en: 1fc1db8f54475c8f
-  zh: dd834ed206070396
-/deepseek-harness-desktop/package/windows-ev-signing:
+  en: 02f7b3c68f18a7f6
+  zh: 6f9f9f4866fd365b
+/deepseek-harness-desktop/windows-installer-interface:
+  en: 8b4408d24bb8c1d4
+  zh: 22eeb5f015995183
+/deepseek-harness-desktop/windows-installer-interface/windows-ev-signing:
   en: 64836513eb7eda6e
   zh: 6ebb9184a7aa51de
-/deepseek-harness-desktop/package/desktop-runtime-preparation:
+/deepseek-harness-desktop/windows-installer-interface/desktop-runtime-preparation:
   en: 57b98c3121e0b2be
   zh: ddf8d0df776b0ca0
 /deepseek-harness-desktop/updates:
-  en: fd606916df74c9a4
-  zh: 7829ccc26c5348b0
+  en: eec5ecc0dd66081d
+  zh: 06bda4dd3ffa26c7
 /deepseek-harness-desktop/updates/private-windows-and-macos-update-interface:
   en: ea8f7773e5221cda
   zh: 9b144aeb1a0a6bd4
@@ -81,17 +90,17 @@
   en: 2e57457c44c85b5f
   zh: 5b8510a3dc4c6c9d
 /deepseek-harness-desktop/updates/mandatory-update-policy:
-  en: 54596bef0706d305
-  zh: 48737302dcf3c939
+  en: 182a9c6705213e13
+  zh: 681762f83490f4c6
 /deepseek-harness-desktop/updates/local-updater-qualification:
-  en: bc50fd8a4d96c227
-  zh: fb0a6ce80c31cda6
+  en: 68ec2f8bd5763ea6
+  zh: 23b932dfe8503602
 /deepseek-harness-desktop/low-level-development-overrides:
-  en: 0b225f914142ef0b
-  zh: 9ffd07768d37824e
+  en: 8264b135871e8978
+  zh: 0939aafb1b2961fc
 /deepseek-harness-desktop/known-limitations:
-  en: 5b77213c86bbcfb6
-  zh: b34bf21773bb852b
+  en: b1eeadfefb338056
+  zh: 28683fbdf1e98685
 /deepseek-harness-desktop/dev-note:
   en: 8e26b460ba31f21b
   zh: fbcd0307b3867125

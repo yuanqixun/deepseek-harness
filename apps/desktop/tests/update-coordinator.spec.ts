@@ -93,9 +93,9 @@ describe('desktop update coordinator', () => {
     const f = fixture()
     await f.coordinator.check()
     await f.coordinator.download('1.1.0-rc.2')
-    f.beforeRestart.mockRejectedValueOnce(new DesktopUpdatePreparationError('stop-failed', zh.updateStopFailed, 'exit 0; shutdown acknowledged false'))
+    f.beforeRestart.mockRejectedValueOnce(new DesktopUpdatePreparationError(kind, zh.updateStopFailed, 'exit 0; shutdown acknowledged false'))
     expect(await f.coordinator.install('1.1.0-rc.2')).toEqual({ phase: 'error', version: '1.1.0-rc.2',
-      failedOperation: 'install', preparationFailure: 'stop-failed', message: zh.updateStopFailed,
+      failedOperation: 'install', preparationFailure: kind, message: zh.updateStopFailed,
       technicalDetails: 'exit 0; shutdown acknowledged false' })
     expect(f.quitAndInstall).not.toHaveBeenCalled()
     f.beforeRestart.mockResolvedValueOnce(false)
@@ -257,4 +257,19 @@ it.each([new DesktopUpdatePreparationError('stop-failed', 'private diagnostic'),
   await f.coordinator.download('1.1.0-rc.2')
   expect(f.downloadResult).toHaveBeenCalledExactlyOnceWith(false, error instanceof DesktopUpdatePreparationError ? 'stop-failed' : 'download_failed')
   expect(JSON.stringify(f.downloadResult.mock.calls)).not.toContain('private')
+})
+
+
+it('keeps a stable-version nightly installation on nightly and rejects prereleases on latest', async () => {
+  const nightly = fixture('nightly', '1.0.0')
+  expect(nightly.updater.channel).toBe('nightly')
+  expect(nightly.updater.allowPrerelease).toBe(true)
+  expect((await nightly.coordinator.check()).phase).toBe('available')
+  expect(nightly.updater.channel).toBe('nightly')
+  const latest = fixture('latest', '1.0.0')
+  expect(latest.updater.channel).toBe('latest')
+  expect(latest.updater.allowPrerelease).toBe(false)
+  expect(latest.updater.allowDowngrade).toBe(false)
+  expect((await latest.coordinator.check()).phase).toBe('error')
+  expect(latest.downloadUpdate).not.toHaveBeenCalled()
 })

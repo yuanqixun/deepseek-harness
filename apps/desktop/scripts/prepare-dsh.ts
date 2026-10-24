@@ -1,7 +1,9 @@
 /** Materialize the complete production runtime before publishing Desktop resources. */
 
+import { resolveMacOSSignatureCacheDirectory } from './macos-signature-cache-directory.mjs'
 import { packagingStep } from './packaging-step.mjs'
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join, relative, resolve } from 'node:path'
@@ -39,7 +41,7 @@ const APP_ROOT = resolve(import.meta.dirname, '..')
 const BUILD_PATHS = resolveDesktopTargetBuildPaths()
 const DSH_OUTPUT_ROOT = BUILD_PATHS.dsh
 const BUILD_ROOT = mkdtempSync(join(tmpdir(), 'dsh-desktop-runtime-'))
-const STORE_ROOT = join(BUILD_ROOT, 'store')
+const STORE_ROOT = BUILD_PATHS.pnpmStore
 const RUNTIME_ROOT = BUILD_PATHS.runtime
 const PNPM_BUILD_STATE = BUILD_PATHS.dshPnpm
 const PACKAGE_SET_ROOT = BUILD_PATHS.packageSet
@@ -66,6 +68,8 @@ function runPnpm(args: readonly string[]): Promise<void> {
       '--config.fetch-retries=5',
       '--fetch-timeout=120000',
       `--config.store-dir=${STORE_ROOT}`,
+      '--config.verify-store-integrity=true',
+      '--config.package-import-method=copy',
       '--config.enable-global-virtual-store=false',
       `--config.userconfig=${userConfig}`,
       command,
@@ -97,6 +101,7 @@ function runPnpm(args: readonly string[]): Promise<void> {
 
 async function main(): Promise<void> {
   try {
+    console.log(`desktop runtime: pnpm store ${STORE_ROOT}`)
     await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:reset', async () => {
       rmSync(DSH_OUTPUT_ROOT, { recursive: true, force: true })
       rmSync(PNPM_BUILD_STATE, { recursive: true, force: true })
@@ -111,14 +116,16 @@ async function main(): Promise<void> {
     })
     await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:lockfile', () => runPnpm(['install', '--lockfile-only']))
     verifyRuntimePatches(BUILD_ROOT, patches)
+    const lockfile = readFileSync(join(BUILD_ROOT, 'pnpm-lock.yaml'), 'utf8')
+    console.log(`desktop runtime: lockfile sha256 ${createHash('sha256').update(lockfile).digest('hex')}`)
     verifyDesktopCoreLockfile(
-      readFileSync(join(BUILD_ROOT, 'pnpm-lock.yaml'), 'utf8'),
+      lockfile,
       readDesktopCorePackageSet(BUILD_ROOT, release.version),
     )
     await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:install', () => runPnpm(['install', '--prod', '--frozen-lockfile', '--trust-lockfile']))
     const packageSet = readDesktopCorePackageSet(BUILD_ROOT, release.version)
     const targetName = resolveDesktopBuildTarget()
-    const target = { platform: process.platform, arch: desktopTargetPlatform(targetName).arch }
+    const target = desktopTargetPlatform(targetName)
     const modules = join(BUILD_ROOT, 'node_modules')
     const officeManifest = JSON.parse(readFileSync(join(modules, '@deepseek-ai/libreoffice-kit/package.json'), 'utf8'))
     const officeEngine = selectOfficeEngine(officeManifest, target)

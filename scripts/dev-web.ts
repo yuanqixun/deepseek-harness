@@ -2,7 +2,7 @@
  * The Web development loop: build once, serve through `dsh web`, and keep every
  * browser-side artifact rebuilt on source edits, in one terminal.
  *
- * Stages, in order: `pnpm run build` (skipped by `--skip-build`), three
+ * Stages, in order: `pnpm run build:artifacts` (skipped by `--skip-build`), three
  * long-lived watchers, then `dsh web` (skipped by `--no-serve`). The watchers
  * exist because the compile shell links built lib products rather than
  * sources: `tsc -b tsconfig.client.json --watch` emits `lib/types` (the tsdown
@@ -16,7 +16,7 @@
  * stat-polls the bundles it serves and broadcasts `rebuilt` frames itself, so
  * any process that rewrites `lib/client.js` files triggers reloads.
  *
- * MUST NOT run beside `pnpm run build`: both write the same `lib/` and
+ * MUST NOT run beside `pnpm run build` or `build:artifacts`: they write the same `lib/` and
  * `apps/web/dist/` trees. The build stage here finishes before any watcher starts.
  *
  * Usage: `pnpm run dev:web [--config-env <name>] [--skip-build] [--no-serve] [--poll[=ms]] [dsh web arguments]`.
@@ -484,12 +484,13 @@ function spawnStage(
 }
 
 /**
- * Run the complete repository build with the launch environment untouched:
+ * Build every repository artifact, without the aggregate test and script
+ * typechecks, with the launch environment untouched:
  * `scripts/build.ts` samples the public client values itself.
  * @returns the build's exit code, or null when a signal ended it.
  */
 async function runBuild(): Promise<number | null> {
-  const invocation = pnpmInvocation(['run', 'build'])
+  const invocation = pnpmInvocation(['run', 'build:artifacts'])
   const result = await execa(invocation.command, invocation.args, { cwd: repoRoot, stdio: 'inherit', reject: false })
   return result.exitCode ?? null
 }
@@ -547,7 +548,7 @@ if (isMain) {
   const buildExit = options.skipBuild ? 0 : await runBuild()
   if (shutdownRequested()) process.exit(await shutdown.promise)
   if (buildExit !== 0) {
-    console.error(`dev-web: pnpm run build exited (code ${String(buildExit)})`)
+    console.error(`dev-web: pnpm run build:artifacts exited (code ${String(buildExit)})`)
     process.exit(1)
   }
 

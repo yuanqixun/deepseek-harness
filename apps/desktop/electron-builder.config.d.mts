@@ -22,6 +22,7 @@ export interface DesktopElectronBuilderConfig {
     ...{ readonly from: string, readonly to: 'tray.ico' }[],
   ]
   readonly mac: {
+    readonly icon: string
     readonly extendInfo: {
       readonly CFBundleLocalizations: readonly string[]
       readonly NSMicrophoneUsageDescription: string
@@ -39,6 +40,7 @@ export interface DesktopElectronBuilderConfig {
     readonly writeUpdateInfo: boolean
   }
   readonly win: {
+    readonly icon: string
     readonly forceCodeSigning: boolean
     readonly signtoolOptions: {
       readonly publisherName: string | undefined

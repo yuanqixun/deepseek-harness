@@ -59,8 +59,8 @@ export class DesktopUpdateCoordinator {
     private readonly enabled: () => boolean = () => app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml')),
     private readonly currentVersion: () => string = () => app.getVersion(),
     private readonly downloadResult?: (success: boolean, reason?: string) => void,
-    private readonly preparePrivateCheck?: () => Promise<{ readonly version: string; readonly feedUrl: string } | undefined | null>,
     channel: 'nightly' | 'latest' = 'nightly',
+    private readonly preparePrivateCheck?: () => Promise<{ readonly version: string; readonly feedUrl: string } | undefined | null>,
   ) {
     if (updater === autoUpdater) {
       // electron-updater omits this internal transport property from its public declarations.

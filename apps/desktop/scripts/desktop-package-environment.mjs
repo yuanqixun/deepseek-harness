@@ -134,10 +134,7 @@ function readSettings(path, accepts) {
   if (settings.DSH_CONFIG_ENV_DIR?.trim()) {
     settings.DSH_CONFIG_ENV_DIR = resolve(dirname(path), settings.DSH_CONFIG_ENV_DIR.trim())
   }
-  return {
-    ...Object.fromEntries(Object.entries(environment).filter(([name]) => !AMBIENT_RELEASE_SETTING.test(name))),
-    ...settings,
-  }
+  return settings
 }
 
 function requireReadableFile(environment, name) {

@@ -7,9 +7,9 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { BundleInfo, ChangeResult, ManagementError, PluginEntryId, PluginInfo, PluginInstallRequestId } from '@deepseek-ai/dsh-api-remotes/client'
 import { RemoteError } from '@deepseek-ai/dsh-client-test-runtime'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PluginTab } from '../src/client/tab-ledger.ts'
 import type { ConfigLedger } from '../src/client/config-ledger.ts'
-import { createPluginAddActions, type PluginAddActions } from '../src/client/add-default-action.ts'
-import { offeredRegistries, packageView, PluginManagerController, rowKey, sortPackages } from '../src/client/manager-store.ts'
+import { installable, offeredRegistries, packageView, PluginManagerController, rowKey, sortPackages, updateCandidate } from '../src/client/manager-store.ts'
 
 const INCOMPATIBLE = { name: 'dsh-late', version: '2.0.0', runtimeVersion: '0.1.0', requirements: { '@deepseek-ai/dsh': '^0.2.0' } }
 const ROW_ENTRY = 'include:sidebar' as PluginEntryId
@@ -76,7 +76,9 @@ const NO_CONFIG: HostObservable<ConfigLedger> = {
   subscribe: () => () => {},
 }
 
-function bench(overrides: Partial<Record<string, ReturnType<typeof vi.fn>>> = {}, enabled = true, addActions?: PluginAddActions) {
+const NO_TABS: HostObservable<readonly PluginTab[]> = { getSnapshot: () => [], subscribe: () => () => {} }
+
+function bench(overrides: Partial<Record<string, ReturnType<typeof vi.fn>>> = {}, enabled = true) {
   const inventory = { list: overrides.inventory ?? vi.fn(() => Promise.resolve(ok({ entries: [], managementAvailable: true }))) }
   const plugins = {
     listBundles: vi.fn<() => Promise<ReturnType<typeof ok<BundleInfo[]>> | ReturnType<typeof refused>>>(
@@ -100,7 +102,7 @@ function bench(overrides: Partial<Record<string, ReturnType<typeof vi.fn>>> = {}
     configForms: { describe: () => ({ getSnapshot: () => ({ view: { namespaces: [] } }), subscribe: () => () => {} }), get: vi.fn((id: string) => `form:${id}`) },
     remote: { pluginManager: plugins, pluginInventory: inventory, pluginRegistryProbe: probe },
   } as never
-  const controller = new PluginManagerController(ctx, addActions)
+  const controller = new PluginManagerController(ctx)
   onTestFinished(() => { controller.dispose() })
   const face = controller.inject(NO_CONFIG, NO_TABS, text => typeof text === 'string' ? text : text.en)
   const state = () => controller.getSnapshot()
@@ -115,24 +117,6 @@ function bench(overrides: Partial<Record<string, ReturnType<typeof vi.fn>>> = {}
 it('hands a custom page the shared configuration form of its entry', () => {
   const { face } = bench()
   expect(face.configForm('bundle#row')).toBe('form:bundle#row' as never)
-})
-
-it('opens the registered default add action instead of the installer', () => {
-  const addActions = createPluginAddActions()
-  const openMarket = vi.fn()
-  addActions.register({ id: 'private-market', order: -100, onSelect: openMarket })
-  const { face, state, track } = bench({}, true, addActions)
-  face.openDefaultAddAction()
-  expect(openMarket).toHaveBeenCalledOnce()
-  expect(state().install.open).toBe(false)
-  expect(track).toHaveBeenCalledWith('plugin_add_button_click', {})
-})
-
-it('opens the existing installer when no default add action is registered', () => {
-  const { face, state, plugins } = bench()
-  face.openDefaultAddAction()
-  expect(state().install.open).toBe(true)
-  expect(plugins.registries).toHaveBeenCalledOnce()
 })
 
 describe('packageView', () => {

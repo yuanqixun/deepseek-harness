@@ -56,11 +56,10 @@ type ResolveText = PluginManagerFace['resolveText']
 
 type RowPhase = NonNullable<PackageRow['phase']>
 
-/** The primary action runs the preferred add flow; the adjacent menu exposes every add-plugin path. */
-function AddPluginMenu({ t, disabled, openDefaultAddAction, openInstall, renderSlot }: {
+/** The primary action installs; the adjacent menu offers every add-plugin path. */
+function AddPluginMenu({ t, disabled, openInstall, renderSlot }: {
   readonly t: Translate
   readonly disabled: boolean
-  readonly openDefaultAddAction: () => void
   readonly openInstall: () => void
   readonly renderSlot: RenderConfig
 }): ReactNode {
@@ -68,10 +67,12 @@ function AddPluginMenu({ t, disabled, openDefaultAddAction, openInstall, renderS
   const onDismiss = (): void => { setOpen(false) }
   return (
     <span className={css.addGroup} role="group" aria-label={t('addPlugin')}>
-      <Button variant="primary" size="sm" className={css.addPrimary} icon={<IconPlusOutlineRegular size={13} />}
-        disabled={disabled} onClick={() => { onDismiss(); openDefaultAddAction() }}>
-        {t('addPlugin')}
-      </Button>
+      <Tooltip label={t('addPlugin')} side="bottom" delayMs={500} focusDelayMs={500} portal disabled={disabled}>
+        <Button variant="primary" size="sm" className={css.addPrimary} icon={<IconPlusOutlineRegular size={13} />}
+          aria-label={t('addPlugin')} disabled={disabled} onClick={() => { onDismiss(); openInstall() }}>
+          <span className={css.toolbarLabel}>{t('addPlugin')}</span>
+        </Button>
+      </Tooltip>
       <Menu open={open} onClose={onDismiss} align="end" portal autoFocus listClassName={css.addMenu}
         anchor={(
           <Button variant="primary" size="sm" className={css.addMore}
@@ -83,13 +84,13 @@ function AddPluginMenu({ t, disabled, openDefaultAddAction, openInstall, renderS
             <IconChevronDownOutlineRegular size={12} aria-hidden="true" />
           </Button>
         )}>
-        {renderSlot('plugins.add.actions', { onDismiss })}
         <MenuItemButton icon={<IconDownloadOutlineRegular size={14} />} onSelect={() => { onDismiss(); openInstall() }}>
           <span className={css.addMenuItem}>
             <span>{t('installExisting')}</span>
             <span className={css.addMenuDescription}>{t('installExistingDescription')}</span>
           </span>
         </MenuItemButton>
+        {renderSlot('plugins.add.actions', { onDismiss })}
       </Menu>
     </span>
   )
@@ -1615,43 +1616,6 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
 
   return (
     <section className={css.page} data-plugin-panel aria-busy={state.status === 'loading' || refreshing}>
-      {showsMainList
-        ? (
-          <header className={css.pageHead} data-window-drag>
-            <div>
-              <h1 className={css.pageTitle}>{t('title')}</h1>
-              <div className={css.pageIntro}>
-                <span>{t('intro')}</span>
-                <Tooltip label={t('infoDescription')} side="bottom" delayMs={300} maxWidth={300} portal openOnClick>
-                  <Button variant="ghost" size="sm" className={css.infoButton} aria-label={t('infoLabel')}>
-                    <IconInfoOutlineRegular size={11} aria-hidden="true" />
-                  </Button>
-                </Tooltip>
-              </div>
-            </div>
-            <div className={css.toolbar}>
-              <Tooltip label={t('refresh')} delayMs={500} focusDelayMs={500} side="bottom" portal disabled={!loaded || refreshing}>
-                <button type="button" className={css.iconButton} aria-label={t('refresh')} aria-busy={refreshing} disabled={!loaded || refreshing} onClick={props.refresh}>
-                  <span className={css.iconWrap} aria-hidden="true">
-                    {refreshing ? <StateDot state="ongoing" size={18} /> : <IconRefreshOutlineRegular />}
-                  </span>
-                </button>
-              </Tooltip>
-              {state.install.requestId === undefined
-                ? <AddPluginMenu
-                  t={t}
-                  disabled={!loaded}
-                  openDefaultAddAction={props.openDefaultAddAction}
-                  openInstall={props.openInstall}
-                  renderSlot={renderSlot}
-                />
-                : <Button variant="primary" size="sm" className={css.addButton} icon={<IconPlusOutlineRegular size={13} />} disabled={!loaded} onClick={props.openInstall}>
-                  {t('installViewTask')}
-                </Button>}
-            </div>
-          </header>
-        )
-        : null}
       {showsMoreList ? (
         <header className={css.moreHead} data-window-drag>
           <Button size="sm" className={css.moreBack} aria-label={t('backToList')} onClick={() => { setView({ kind: 'list' }) }}>

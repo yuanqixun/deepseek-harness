@@ -1,6 +1,6 @@
 /** Private plugin bundles included by opted-in Desktop packages. */
 
-import { PROFILE_TEMPLATES } from '@deepseek-ai/dsh-app-boot'
+import { PROFILE_TEMPLATES } from '@deepseek-ai/dsh-official-bundles'
 
 /** Profile bundles that Desktop can seed when their packages are present in the runtime. */
 export const PREINSTALLED_PLUGIN_BUNDLES = [

@@ -394,6 +394,11 @@ export const ja = {
   aboutMenu: 'DeepSeek Harness について',
   aboutProduct: 'DeepSeek Harness',
   aboutVersion: 'バージョン V{version}',
+  aboutHistoryTitle: 'バージョン履歴',
+  aboutHistoryEmpty: 'バージョン履歴はありません。',
+  aboutHistoryChecking: 'バージョン履歴を確認中…',
+  aboutHistoryUnavailable: 'バージョン履歴を利用できません。更新を確認してください。',
+  aboutDownloadInstaller: '完全インストーラーをダウンロード',
   hideApplication: 'DeepSeek Harness を隠す',
   hideOtherApplications: 'ほかを隠す',
   showAllApplications: 'すべて表示',
@@ -529,6 +534,8 @@ export const ja = {
   mandatoryCopyFailed: 'リンクをコピーできませんでした。以下から選択してコピーしてください。',
   mandatoryAddress: 'ダウンロードリンク',
   mandatoryNotification: 'アプリに戻り、インストールと再起動を確認してください。',
+  updateFullInstallerAvailable: 'バージョン {version} の完全インストーラーがあります。ダウンロードして手動でインストールしてください。',
+  updateFullInstallerUnavailable: 'バージョン {version} の完全インストーラーがありますが、ダウンロードリンクを利用できません。管理者にお問い合わせください。',
 } satisfies Record<keyof typeof en, string>
 
 /** Spanish dictionary, checked against the English keys. */
@@ -566,6 +573,11 @@ export const es = {
   aboutMenu: 'Acerca de DeepSeek Harness',
   aboutProduct: 'DeepSeek Harness',
   aboutVersion: 'Versión V{version}',
+  aboutHistoryTitle: 'Historial de versiones',
+  aboutHistoryEmpty: 'No hay historial de versiones disponible.',
+  aboutHistoryChecking: 'Comprobando el historial de versiones…',
+  aboutHistoryUnavailable: 'El historial de versiones no está disponible. Intente buscar actualizaciones.',
+  aboutDownloadInstaller: 'Descargar el instalador completo',
   hideApplication: 'Ocultar DeepSeek Harness',
   hideOtherApplications: 'Ocultar otros',
   showAllApplications: 'Mostrar todo',
@@ -701,6 +713,8 @@ export const es = {
   mandatoryCopyFailed: 'No se pudo copiar el enlace. Selecciónelo y cópielo a continuación.',
   mandatoryAddress: 'Enlace de descarga',
   mandatoryNotification: 'Regrese a la aplicación para confirmar la instalación y reiniciar.',
+  updateFullInstallerAvailable: 'La versión {version} está disponible como instalador completo. Descárguelo e instálelo manualmente.',
+  updateFullInstallerUnavailable: 'La versión {version} está disponible como instalador completo, pero el enlace de descarga no está disponible. Contacte con su administrador.',
 } satisfies DesktopMessages
 
 /** French dictionary, checked against the English keys. */
@@ -738,6 +752,11 @@ export const fr = {
   aboutMenu: 'À propos de DeepSeek Harness',
   aboutProduct: 'DeepSeek Harness',
   aboutVersion: 'VersionV{version}',
+  aboutHistoryTitle: 'Historique des versions',
+  aboutHistoryEmpty: 'Aucun historique des versions n’est disponible.',
+  aboutHistoryChecking: 'Vérification de l’historique des versions…',
+  aboutHistoryUnavailable: 'L’historique des versions est indisponible. Réessayez de rechercher des mises à jour.',
+  aboutDownloadInstaller: 'Télécharger le programme d’installation complet',
   hideApplication: 'Masquer DeepSeek Harness',
   hideOtherApplications: 'Masquer les autres',
   showAllApplications: 'Afficher tout',
@@ -873,6 +892,8 @@ export const fr = {
   mandatoryCopyFailed: 'Impossible de copier le lien. Sélectionnez-le et copiez-le ci-dessous.',
   mandatoryAddress: 'Lien de téléchargement',
   mandatoryNotification: "Revenez à l'application pour confirmer l'installation et redémarrer.",
+  updateFullInstallerAvailable: 'La version {version} est disponible avec un programme d’installation complet. Téléchargez-le et installez-le manuellement.',
+  updateFullInstallerUnavailable: 'La version {version} est disponible avec un programme d’installation complet, mais son lien de téléchargement est indisponible. Contactez votre administrateur.',
 } satisfies DesktopMessages
 
 /** German dictionary, checked against the English keys. */
@@ -910,6 +931,11 @@ export const de = {
   aboutMenu: 'Über DeepSeek Harness',
   aboutProduct: 'DeepSeek Harness',
   aboutVersion: 'Version V{version}',
+  aboutHistoryTitle: 'Versionsverlauf',
+  aboutHistoryEmpty: 'Es ist kein Versionsverlauf verfügbar.',
+  aboutHistoryChecking: 'Versionsverlauf wird geprüft…',
+  aboutHistoryUnavailable: 'Der Versionsverlauf ist nicht verfügbar. Suchen Sie erneut nach Updates.',
+  aboutDownloadInstaller: 'Vollständiges Installationsprogramm herunterladen',
   hideApplication: 'DeepSeek Harness ausblenden',
   hideOtherApplications: 'Andere ausblenden',
   showAllApplications: 'Alle einblenden',
@@ -1045,6 +1071,8 @@ export const de = {
   mandatoryCopyFailed: 'Der Link konnte nicht kopiert werden. Wählen Sie es aus und kopieren Sie es unten.',
   mandatoryAddress: 'Download-Link',
   mandatoryNotification: 'Kehren Sie zur Anwendung zurück, um die Installation zu bestätigen und neu zu starten.',
+  updateFullInstallerAvailable: 'Version {version} ist als vollständiges Installationsprogramm verfügbar. Laden Sie es herunter und installieren Sie es manuell.',
+  updateFullInstallerUnavailable: 'Version {version} ist als vollständiges Installationsprogramm verfügbar, aber der Downloadlink ist nicht verfügbar. Wenden Sie sich an Ihren Administrator.',
 } satisfies DesktopMessages
 
 /** Russian dictionary, checked against the English keys. */
@@ -1082,6 +1110,11 @@ export const ru = {
   aboutMenu: 'О DeepSeek Harness',
   aboutProduct: 'DeepSeek Harness',
   aboutVersion: 'Версия V{version}',
+  aboutHistoryTitle: 'История версий',
+  aboutHistoryEmpty: 'История версий недоступна.',
+  aboutHistoryChecking: 'Проверка истории версий…',
+  aboutHistoryUnavailable: 'История версий недоступна. Попробуйте проверить наличие обновлений.',
+  aboutDownloadInstaller: 'Скачать полный установщик',
   hideApplication: 'Скрыть DeepSeek Harness',
   hideOtherApplications: 'Скрыть других',
   showAllApplications: 'Показать все',
@@ -1217,6 +1250,8 @@ export const ru = {
   mandatoryCopyFailed: 'Не удалось скопировать ссылку. Выделите и скопируйте его ниже.',
   mandatoryAddress: 'Ссылка для скачивания',
   mandatoryNotification: 'Вернитесь в приложение, чтобы подтвердить установку и перезапустить.',
+  updateFullInstallerAvailable: 'Версия {version} доступна в виде полного установщика. Скачайте и установите его вручную.',
+  updateFullInstallerUnavailable: 'Версия {version} доступна в виде полного установщика, но ссылка для скачивания недоступна. Обратитесь к администратору.',
 } satisfies DesktopMessages
 
 /** Portuguese dictionary, checked against the English keys. */
@@ -1254,6 +1289,11 @@ export const pt = {
   aboutMenu: 'Sobre DeepSeek Harness',
   aboutProduct: 'DeepSeek Harness',
   aboutVersion: 'Versão V{version}',
+  aboutHistoryTitle: 'Histórico de versões',
+  aboutHistoryEmpty: 'Não há histórico de versões disponível.',
+  aboutHistoryChecking: 'Verificando o histórico de versões…',
+  aboutHistoryUnavailable: 'O histórico de versões está indisponível. Tente verificar se há atualizações.',
+  aboutDownloadInstaller: 'Baixar o instalador completo',
   hideApplication: 'Ocultar DeepSeek Harness',
   hideOtherApplications: 'Ocultar outros',
   showAllApplications: 'Mostrar tudo',
@@ -1389,6 +1429,8 @@ export const pt = {
   mandatoryCopyFailed: 'Não foi possível copiar o link. Selecione e copie abaixo.',
   mandatoryAddress: 'Link de download',
   mandatoryNotification: 'Retorne ao aplicativo para confirmar a instalação e reinicie.',
+  updateFullInstallerAvailable: 'A versão {version} está disponível como instalador completo. Baixe e instale manualmente.',
+  updateFullInstallerUnavailable: 'A versão {version} está disponível como instalador completo, mas o link de download está indisponível. Entre em contato com o administrador.',
 } satisfies DesktopMessages
 
 const dictionaries = { en, zh, ja, es, fr, de, ru, pt }

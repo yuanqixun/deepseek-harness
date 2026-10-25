@@ -38,7 +38,8 @@ import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { LocalizedText, PluginLocalizedMeta } from '@deepseek-ai/dsh-package-manifest'
 import type { SettingsDescribeFace, ConfigForms } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { ConfigLedger } from './config-ledger.ts'
-import type { PluginAddActions } from './add-default-action.ts'
+import type { PluginTabInstall } from './slot-contract.ts'
+import type { PluginTab } from './tab-ledger.ts'
 import { shortName } from './presentation.ts'
 import { BundleDetailController, type BundleDetailsState } from './detail-store.ts'
 import type { LocaleSnapshot } from '@deepseek-ai/dsh-client-locale/client'
@@ -422,8 +423,13 @@ export interface PluginManagerFace {
   /** Read the Host again, then check every updatable package for newer versions. */
   refresh: () => void
   openInstall: () => void
-  /** Run the registered primary add action, or open the existing install dialog. */
-  openDefaultAddAction: () => void
+  /**
+   * Open the install dialog with a version the person confirmed elsewhere, such as a Discover entry, and start
+   * checking it; the dialog shows no spec form. A hidden installation reopens instead. The registry is asked first for
+   * this dialog only and never remembered.
+   * @param target - the exact spec, optional registry, and the name and version the dialog shows.
+   */
+  installFrom: (target: PluginTabInstall) => void
   /** Hide immediately, abort a check, or request cancellation while retaining the Host-owned installation. */
   closeInstall: () => void
   editInstallSpec: (text: string) => void
@@ -666,7 +672,6 @@ export class PluginManagerController {
    */
   constructor(
     private readonly ctx: ClientContext,
-    private readonly addActions: PluginAddActions = { register: () => () => {}, runDefault: (fallback) => { fallback(); return false } },
   ) {
     this.details = new BundleDetailController(ctx, () => document.baseURI)
     this.store = createSnapshotStore<PluginManagerState>({
@@ -715,21 +720,10 @@ export class PluginManagerController {
    * @param resolveText - render-time package text resolution supplied by the locale service.
    * @returns the tab's snapshot sources and its actions.
    */
-  inject(configLedger: HostObservable<ConfigLedger>, resolveText: PluginManagerFace['resolveText']): PluginManagerFace {
-    const openInstall = (): void => {
-      this.ctx.get('productAnalytics')?.track('plugin_add_button_click', {})
-      const install = this.getSnapshot().install
-      if (install.requestId === undefined) {
-        // A new dialog starts from the registry last used here and reads what the Host offers; a hidden install reopens as it is.
-        this.patch({ install: { ...IDLE_INSTALL, open: true, registry: this.registryMemory.getSnapshot() ?? OFFICIAL_REGISTRY } })
-        const read: RegistryRead = { choice: this.getSnapshot().install.registry }
-        this.registryRead = read
-        read.done = this.readRegistries(read).finally(() => { delete read.done })
-      } else {
-        this.patchInstall({ open: true })
-      }
-      void this.reconcileInstall()
-    }
+  inject(
+    configLedger: HostObservable<ConfigLedger>, pluginTabs: HostObservable<readonly PluginTab[]>, resolveText: PluginManagerFace['resolveText'],
+  ): PluginManagerFace {
+    const details = this.details
     return {
       resolveText,
       hooks: {
@@ -742,10 +736,16 @@ export class PluginManagerController {
       configForm: id => this.ctx.configForms.get(id),
       ensure: () => { if (this.getSnapshot().status === 'idle') void this.load() },
       refresh: () => { void this.refresh() },
-      openInstall,
-      openDefaultAddAction: () => {
-        const usedDefault = this.addActions.runDefault(openInstall)
-        if (usedDefault) this.ctx.get('productAnalytics')?.track('plugin_add_button_click', {})
+      openInstall: () => {
+        this.ctx.get('productAnalytics')?.track('plugin_add_button_click', {})
+        this.openDialog()
+      },
+      installFrom: ({ spec, registry, title, version }) => {
+        // A hidden installation reopens as it is; only one installation runs at a time.
+        if (!this.openDialog()) return
+        this.transientRegistry = registry !== undefined
+        this.patchInstall({ spec, confirmed: { title, version }, ...registry === undefined ? {} : { registry: { kind: 'custom', url: registry } } })
+        void this.runInstall()
       },
       closeInstall: () => {
         if (isInstallPending(this.getSnapshot().install.phase)) {

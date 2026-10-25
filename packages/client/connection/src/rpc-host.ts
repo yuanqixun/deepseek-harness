@@ -266,7 +266,7 @@ export class HostConnectionService extends Service implements HostConnectionHand
   ): () => Promise<void> {
     assertChannel(channel)
     owner = this.webContext ?? owner
-    const fetchHandler = rpcFetchHandler(channel, handler, this.operator)
+    const fetchHandler = rpcFetchHandler(channel, handler)
     const route: WebRoute = {
       kind: 'prefix',
       path: channel,

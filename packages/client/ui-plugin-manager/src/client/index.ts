@@ -30,8 +30,7 @@ import { PluginsPanelIcon } from './PluginsPanelIcon.tsx'
 import { configLedgerSource } from './config-ledger.ts'
 import { tabLedgerSource } from './tab-ledger.ts'
 import { PluginManagerController } from './manager-store.ts'
-import { createPluginAddActions } from './add-default-action.ts'
-import { en, zh, type PluginManagerLocaleKey } from './locales.ts'
+import { en, ja, es, fr, de, ru, pt, zh, type PluginManagerLocaleKey } from './locales.ts'
 import { createNavigationStore } from './navigation-store.ts'
 import type {} from './slot-contract.ts'
 
@@ -62,7 +61,6 @@ declare module '@deepseek-ai/cordis' {
 }
 
 export type { PluginManagerPageProps } from './PluginManagerPage.tsx'
-export type { PluginAddActions, PluginAddDefaultAction } from './add-default-action.ts'
 export type { ConfigLedger, OfficialItem } from './config-ledger.ts'
 export type { PluginManagerFace } from './manager-store.ts'
 export type { PluginManagerLocaleKey } from './locales.ts'
@@ -96,9 +94,7 @@ export const inject = ['slots', 'locale', 'remote', 'remote.pluginManager', 'rem
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-plugin-manager: dictionaries')
   const t = ctx.locale.bind(NS)
-  const addActions = createPluginAddActions()
-  ctx.effect(() => ctx.reflect.provide('pluginAddActions', addActions), 'ui-plugin-manager: default add action')
-  const controller = new PluginManagerController(ctx, addActions)
+  const controller = new PluginManagerController(ctx)
   ctx.effect(() => () => { controller.dispose() }, 'ui-plugin-manager: controller')
   ctx.provide('pluginChanges', { bundle: packageName => controller.observeChanges(packageName) })
   // The page is a global panel: it belongs to the profile, not to a Session,

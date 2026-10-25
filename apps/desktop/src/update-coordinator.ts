@@ -60,7 +60,7 @@ export class DesktopUpdateCoordinator {
     private readonly currentVersion: () => string = () => app.getVersion(),
     private readonly downloadResult?: (success: boolean, reason?: string) => void,
     private readonly preparePrivateCheck?: () => Promise<{ readonly version: string; readonly feedUrl: string } | undefined | null>,
-    private readonly channel: 'nightly' | 'latest' = 'nightly',
+    channel: 'nightly' | 'latest' = 'nightly',
   ) {
     if (updater === autoUpdater) {
       // electron-updater omits this internal transport property from its public declarations.

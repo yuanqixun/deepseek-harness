@@ -5,7 +5,7 @@ export interface DesktopElectronBuilderConfig {
   readonly appId: string
   readonly copyright: string
   readonly artifactName: string
-  readonly protocols: readonly [{ readonly name: string; readonly schemes: readonly ['dsh'] }]
+  readonly protocols: readonly [{ readonly name: 'DeepSeek Harness'; readonly schemes: readonly ['dsh'] }]
   readonly directories: {
     readonly output: string
   }
@@ -14,9 +14,7 @@ export interface DesktopElectronBuilderConfig {
     { readonly from: string, readonly to: 'dsh', readonly filter: readonly ['**/*'] },
     { readonly from: string, readonly to: 'dsh/node_modules', readonly filter: readonly ['**/*'] },
   ]
-  readonly extraMetadata: { readonly dshDesktopAppId: string; readonly dshDesktopBranding: {
-    readonly displayName: string; readonly iconSet: string; readonly artifactNameBase: string
-  } }
+  readonly extraMetadata: { readonly dshDesktopAppId: string }
   readonly asarUnpack: readonly string[]
   readonly extraResources: readonly [
     { readonly from: string, readonly to: 'runtime' },
@@ -24,8 +22,10 @@ export interface DesktopElectronBuilderConfig {
     ...{ readonly from: string, readonly to: 'tray.ico' }[],
   ]
   readonly mac: {
-    readonly icon: string
-    readonly extendInfo: { readonly NSMicrophoneUsageDescription: string }
+    readonly extendInfo: {
+      readonly CFBundleLocalizations: readonly string[]
+      readonly NSMicrophoneUsageDescription: string
+    }
     readonly entitlements: string
     readonly entitlementsInherit: string
     readonly identity: string | undefined
@@ -39,7 +39,6 @@ export interface DesktopElectronBuilderConfig {
     readonly writeUpdateInfo: boolean
   }
   readonly win: {
-    readonly icon: string
     readonly forceCodeSigning: boolean
     readonly signtoolOptions: {
       readonly publisherName: string | undefined

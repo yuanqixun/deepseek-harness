@@ -1,19 +1,14 @@
 /** Build one release target with matching Electron and dsh architecture. */
 
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { join, resolve } from 'node:path'
 import {
   desktopBuildRecordFilename,
   resolveDesktopAutoUpdateConfig,
 } from './desktop-auto-update-environment.mjs'
-import {
-  desktopReleasesRoot,
-  desktopTargetBuildPaths,
-  desktopTargetInternalArtifactsDirectory,
-  desktopTargetReleaseArtifactsDirectory,
-} from './desktop-build-paths.mjs'
+import { desktopArtifactOutput, desktopTargetBuildPaths } from './desktop-build-paths.mjs'
 import { packageMacOSArtifacts, type DesktopPrepackagedArtifact } from './package-macos.ts'
 import { loadDesktopPackageEnvironment, localMacOSPackageEnvironment, validateDesktopPackageEnvironment } from './desktop-package-environment.mjs'
 import { createPackagingRun, recordPackagingEvent } from './packaging-run.mjs'
@@ -30,11 +25,6 @@ import { suggestDesktopBuildVersion } from './desktop-build-version-discovery.ts
 import { desktopBuildCommitEnvironment, readDesktopBuildCommit, resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { requireDesktopToolchain } from './desktop-toolchain-preflight.ts'
 import { withMacOSNotarizationProxy } from './macos-notarization-proxy.ts'
-import { packagePrivateMarket, resolvePrivateMarketSource, resolveProAuthSource } from './private-market-package.ts'
-import { readPrivateMarketEnvironment } from '../../../scripts/config-environment.ts'
-import { readPrivateDesktopUpdates } from './private-desktop-update-environment.mjs'
-import { verifyPrivateDesktopUpdateArtifacts } from './private-desktop-update-artifacts.mjs'
-import { DEFAULT_DESKTOP_DISPLAY_NAME, DESKTOP_BRANDING_ENV, desktopBrandingFromEnvironment, readDesktopBranding, resolveDesktopIconSet } from './desktop-branding-environment.mjs'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const REPOSITORY_ROOT = resolve(APP_ROOT, '..', '..')
@@ -107,27 +97,18 @@ export function withoutWindowsSigningEnvironment(environment: NodeJS.ProcessEnv)
  * Select signing mode and strip unsigned-build credentials for packaging subprocesses.
  * @param environment - Target packaging environment.
  * @param unsigned - Whether to create a local artifact without release signing or notarization.
- * @param internalDmg - Whether to create an internal macOS disk image without release signing.
- * @returns Packaging environment without release credential inputs for local builds.
+ * @returns Packaging environment without certificate inputs for unsigned builds.
  */
-export function desktopElectronBuilderEnvironment(
-  environment: NodeJS.ProcessEnv, unsigned: boolean, internalDmg = false,
-): NodeJS.ProcessEnv {
-  const selected: NodeJS.ProcessEnv = {
-    ...environment,
-    DSH_DESKTOP_UNSIGNED: unsigned ? '1' : '0',
-    ...(internalDmg ? { DSH_DESKTOP_INTERNAL_DMG: '1' } : {}),
-  }
+export function desktopElectronBuilderEnvironment(environment: NodeJS.ProcessEnv, unsigned: boolean): NodeJS.ProcessEnv {
+  const selected: NodeJS.ProcessEnv = { ...environment, DSH_DESKTOP_UNSIGNED: unsigned ? '1' : '0' }
   // The bundled NSIS decoder cannot extract 7-Zip's automatic ARM64-filtered entries.
   if (environment.DSH_DESKTOP_TARGET_PLATFORM === 'win32') selected.ELECTRON_BUILDER_7Z_FILTER = 'BCJ'
-  if (!unsigned && !internalDmg) return selected
+  if (!unsigned) return selected
   return {
     ...Object.fromEntries(Object.entries(withoutWindowsSigningEnvironment(selected))
-      .filter(([name]) => !/^(?:APPLE_|(?:WIN_)?CSC_)/iu.test(name)
-        && (!name.startsWith('DSH_DESKTOP_MACOS_') || name === 'DSH_DESKTOP_MACOS_PACK_CONCURRENCY'))),
+      .filter(([name]) => !/^(?:(?:WIN_)?CSC_|APPLE_|DSH_DESKTOP_MACOS_(?:SIGNING_|TEAM_ID$))/iu.test(name))),
     CSC_IDENTITY_AUTO_DISCOVERY: 'false',
-    DSH_DESKTOP_UNSIGNED: unsigned ? '1' : '0',
-    ...(internalDmg ? { DSH_DESKTOP_INTERNAL_DMG: '1' } : {}),
+    DSH_DESKTOP_UNSIGNED: '1',
   }
 }
 
@@ -145,20 +126,6 @@ function isTargetName(value: string): value is DesktopPackageTargetName {
   return Object.hasOwn(TARGETS, value)
 }
 
-/** Reject private update builds outside Windows x64 and macOS arm64.
- * @param target - Validated packaging target.
- * @returns `undefined` when the target can use the private update protocol.
- */
-export function assertPrivateDesktopUpdateTarget(target: DesktopPackageTarget): void {
-  if (target.name !== 'win-x64' && target.name !== 'mac-arm64') {
-    throw new Error('desktop package: private desktop updates require win-x64 or mac-arm64')
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 function packageVersion(path: string, label: string): string {
   const manifest = JSON.parse(readFileSync(path, 'utf8')) as { version?: unknown }
   if (typeof manifest.version !== 'string' || manifest.version === '') {
@@ -167,48 +134,28 @@ function packageVersion(path: string, label: string): string {
   return manifest.version
 }
 
-async function writeReleaseRecord(
+function writeReleaseRecord(
   target: DesktopPackageTarget,
   environment: NodeJS.ProcessEnv,
   artifactsRoot: string,
-  privateDesktopUpdates: boolean,
-): Promise<void> {
+): void {
   const desktopVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   const dshVersion = packageVersion(join(REPOSITORY_ROOT, 'package.json'), 'dsh package')
+  if (desktopVersion !== dshVersion) {
+    throw new Error(`desktop package: desktop version ${desktopVersion} does not match dsh version ${dshVersion}`)
+  }
+  const buildVersion = resolveDesktopBuildVersion(environment, dshVersion)
   const packaged = resolveDesktopBuildCommit(environment)
-  const privateUpdates = environment.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG === undefined
-    ? undefined
-    : JSON.parse(environment.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG) as {
-      environment: string
-      distribution: string
-      checkUrl: string
-    }
-  const update = privateUpdates === undefined ? resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch) : undefined
-  const buildVersion = resolveDesktopBuildVersion(environment, desktopVersion)
-  const branding = desktopBrandingFromEnvironment(environment)
-  const updateArtifacts = privateDesktopUpdates
-    ? await verifyPrivateDesktopUpdateArtifacts(artifactsRoot, target, buildVersion, branding) : undefined
-  const marketRecord = join(desktopTargetBuildPaths(target.name).packedDsh, 'private-market-build.json')
+  const update = resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
   const recordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
   const temporaryPath = `${recordPath}.tmp`
   writeFileSync(temporaryPath, `${JSON.stringify({
-    schemaVersion: 2,
+    schemaVersion: 1,
     target: target.name,
     version: buildVersion,
-    dshVersion,
-    configEnvironment: environment.DSH_CONFIG_ENV?.trim() || undefined,
-    branding,
-    environment: update?.environment ?? privateUpdates?.environment,
-    ...(update === undefined ? {} : { publicUrl: update.publicUrl }),
-    ...(privateUpdates === undefined ? {} : {
-      privateDesktopUpdates: {
-        environment: privateUpdates.environment,
-        distribution: privateUpdates.distribution,
-        checkUrl: privateUpdates.checkUrl,
-      },
-    }),
-    ...(updateArtifacts === undefined ? {} : updateArtifacts),
-    ...(existsSync(marketRecord) ? { privateMarket: JSON.parse(readFileSync(marketRecord, 'utf8')) } : {}),
+    environment: update.environment,
+    channel: update.channel,
+    publicUrl: update.publicUrl,
     // Upload reads this to tag the commit a production release was packaged from.
     ...packaged === undefined ? {} : { commit: packaged.commit, dirty: packaged.dirty },
   }, null, 2)}\n`)
@@ -251,11 +198,8 @@ interface DesktopPackageInvocation {
   readonly directory: boolean
   readonly prepareOnly: boolean
   readonly unsigned: boolean
-  readonly internalDmg: boolean
-  readonly preinstallPrivatePlugins: boolean
+  readonly skipNotarization: boolean
   readonly check: boolean
-  /** Named deployment environment whose private market or Desktop update settings are selected. */
-  readonly configEnvironment: string | undefined
   /** Build identifier to publish under, when this build does not publish the product version. */
   readonly requestedBuildVersion: string | undefined
 }
@@ -287,19 +231,16 @@ export function parseDesktopPackageInvocation(
       dir: { type: 'boolean', default: false },
       'prepare-only': { type: 'boolean', default: false },
       unsigned: { type: 'boolean', default: false },
-      'internal-dmg': { type: 'boolean', default: false },
-      'preinstall-private-plugins': { type: 'boolean', default: false },
+      'skip-notarization': { type: 'boolean', default: false },
       check: { type: 'boolean', default: false },
       'build-version': { type: 'string' },
-      'config-env': { type: 'string' },
     },
   })
   if (positionals.length > 1) throw new Error('desktop package: expected at most one target')
   const name = positionals[0] ?? hostTargetName(hostPlatform, hostArch)
   if (values.unsigned && values['prepare-only']) throw new Error('desktop package: --unsigned cannot use --prepare-only')
-  if (values['internal-dmg'] && name !== 'mac-arm64') throw new Error('desktop package: --internal-dmg requires mac-arm64')
-  if (values['internal-dmg'] && (values.unsigned || values['prepare-only'] || values.dir)) {
-    throw new Error('desktop package: --internal-dmg cannot combine with --unsigned, --prepare-only, or --dir')
+  if (values['skip-notarization'] && (name === 'win-x64' || values.unsigned || values['prepare-only'])) {
+    throw new Error('desktop package: --skip-notarization requires a signed macOS build, without --prepare-only')
   }
   const requestedBuildVersion = values['build-version']?.trim()
   if (values['build-version'] !== undefined && (requestedBuildVersion === undefined || requestedBuildVersion === '')) {
@@ -310,10 +251,8 @@ export function parseDesktopPackageInvocation(
     directory: values.dir,
     prepareOnly: values['prepare-only'],
     unsigned: values.unsigned,
-    internalDmg: values['internal-dmg'],
-    preinstallPrivatePlugins: values['preinstall-private-plugins'],
+    skipNotarization: values['skip-notarization'],
     check: values.check,
-    configEnvironment: values['config-env'],
     requestedBuildVersion,
   }
 }
@@ -389,9 +328,13 @@ async function resolveRequestedBuildVersion(
   const requested = invocation.requestedBuildVersion
   if (requested === undefined) return productVersion
   if (requested !== AUTOMATIC_BUILD_VERSION) return validateDesktopBuildVersion(requested, productVersion)
+  const paths = desktopTargetBuildPaths(invocation.target.name, environment)
   return suggestDesktopBuildVersion({
-    productVersion, target: invocation.target.name, environment,
-    releasesRoot: desktopReleasesRoot(),
+    productVersion, target: invocation.target.name,
+    // Machine presets own packaging, not upload credentials; local auto numbering uses existing artifacts.
+    environment: environment.DSH_PACKAGING_PRESET === undefined ? environment : {},
+    // Unsigned builds land beside the signed output, so numbering has to read the directory this run writes.
+    artifactsRoot: desktopArtifactOutput(paths, invocation).directory,
   })
 }
 
@@ -402,64 +345,19 @@ async function main(): Promise<void> {
     process.stdout.write('desktop package: skipping notarization and stapling; internal debugging only, not qualified for distribution or update publishing\n')
   }
   const environment = target.platform === 'darwin' && invocation.unsigned
-      && invocation.configEnvironment === undefined && process.env.DSH_CONFIG_ENV === undefined
     ? localMacOSPackageEnvironment()
-    : loadDesktopPackageEnvironment(target.platform)
-  const configEnvironment = invocation.configEnvironment ?? (environment.DSH_CONFIG_ENV?.trim() || undefined)
-  if (configEnvironment !== undefined) environment.DSH_CONFIG_ENV = configEnvironment
+    : loadDesktopPackageEnvironment(target.platform, process.env, APP_ROOT, {
+      unsigned: invocation.unsigned, prepareOnly: invocation.prepareOnly,
+    })
   const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
-  let selectedPrivateDesktopUpdates: ReturnType<typeof readPrivateDesktopUpdates> | undefined
-  let selectedBranding = desktopBrandingFromEnvironment({})
-  let configuredPrivateMarket = false
-  if (configEnvironment !== undefined) {
-    const configRoot = environment.DSH_CONFIG_ENV_DIR
-    if (!/^[a-z0-9][a-z0-9-]*$/u.test(configEnvironment)) throw new Error('desktop package: invalid config environment name')
-    if (configRoot === undefined || configRoot === '') throw new Error('desktop package: set DSH_CONFIG_ENV_DIR to read a named environment')
-    let document: unknown
-    try { document = JSON.parse(readFileSync(join(configRoot, configEnvironment, 'config.json'), 'utf8')) }
-    catch (error) { throw new Error(`desktop package: cannot read selected config environment ${configEnvironment}`, { cause: error }) }
-    if (!isRecord(document) || document.schemaVersion !== 1 || document.environment !== configEnvironment) {
-      throw new Error('desktop package: selected config environment must match schemaVersion 1 and its name')
-    }
-    configuredPrivateMarket = isRecord(document.plugins) && 'privateMarket' in document.plugins
-    selectedBranding = readDesktopBranding(configRoot, configEnvironment)
-    resolveDesktopIconSet(join(APP_ROOT, 'resources', 'brand-sets'), selectedBranding.iconSet)
-    environment[DESKTOP_BRANDING_ENV] = JSON.stringify(selectedBranding)
-    if (isRecord(document.desktop) && 'updates' in document.desktop) {
-      assertPrivateDesktopUpdateTarget(target)
-      selectedPrivateDesktopUpdates = readPrivateDesktopUpdates(configRoot, configEnvironment)
-      environment.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG = JSON.stringify(selectedPrivateDesktopUpdates)
-    }
-    if (!configuredPrivateMarket && selectedPrivateDesktopUpdates === undefined && !invocation.preinstallPrivatePlugins) {
-      throw new Error('desktop package: selected config environment must configure plugins.privateMarket or desktop.updates')
-    }
-  }
-  // Resolve the selected artifact prefix before version discovery scans existing builds.
+  // Release settings come from the selected configuration files, so the version this run publishes is an
+  // argument; the environment variable below only carries it to the child processes that build.
   const buildVersion = await resolveRequestedBuildVersion(invocation, productVersion, environment)
   environment[DESKTOP_BUILD_VERSION_ENV] = buildVersion
   if (invocation.check) {
-    validateDesktopPackageEnvironment(environment, target, {
-      ...invocation, privateDesktopUpdates: selectedPrivateDesktopUpdates !== undefined,
-    })
-    if (configEnvironment !== undefined) {
-      if (configuredPrivateMarket) {
-        readPrivateMarketEnvironment(environment.DSH_CONFIG_ENV_DIR, configEnvironment)
-        const source = resolvePrivateMarketSource(REPOSITORY_ROOT, environment)
-        const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as { name?: unknown }
-        if (manifest.name !== '@deepseek-ai/dsh-private-market') throw new Error(`desktop package: invalid private market source ${source}`)
-      }
-    }
-    if (invocation.preinstallPrivatePlugins) {
-      for (const [source, packageName] of [
-        [resolvePrivateMarketSource(REPOSITORY_ROOT, environment), '@deepseek-ai/dsh-private-market'],
-        [resolveProAuthSource(REPOSITORY_ROOT, environment), 'dsh-pro-auth'],
-      ] as const) {
-        const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as { name?: unknown }
-        if (manifest.name !== packageName) throw new Error(`desktop package: invalid preinstalled plugin source ${source}`)
-      }
-    }
+    validateDesktopPackageEnvironment(environment, target, invocation)
     await requireDesktopToolchain(target.platform, environment)
-    process.stdout.write(`desktop package: ${target.name} would package ${buildVersion}; local configuration and toolchain valid, signing and notarization were not attempted\n`)
+    process.stdout.write(`desktop package: ${target.name} would publish ${buildVersion}; local configuration and toolchain valid, signing and notarization were not attempted\n`)
     return
   }
   process.stdout.write(`desktop package: ${target.name} publishes ${buildVersion}${buildVersion === productVersion ? '' : ` for product version ${productVersion}`}\n`)
@@ -467,11 +365,8 @@ async function main(): Promise<void> {
   Object.assign(environment, desktopBuildCommitEnvironment(packaged))
   const secrets = Object.entries(environment).filter(([name]) => /KEY|SECRET|TOKEN|PASSWORD|APPLE_ID/iu.test(name)).map(([, value]) => value ?? '')
   const run = createPackagingRun(join(APP_ROOT, '.desktop-build', 'packaging-runs'), {
-    target: target.name,
-    unsigned: invocation.unsigned,
-    internalDmg: invocation.internalDmg,
-    directory: invocation.directory,
-    prepareOnly: invocation.prepareOnly,
+    target: target.name, unsigned: invocation.unsigned, skipNotarization: invocation.skipNotarization,
+    directory: invocation.directory, prepareOnly: invocation.prepareOnly,
     version: buildVersion, productVersion, node: process.version,
     commit: packaged.commit,
     dirty: packaged.dirty,
@@ -481,24 +376,18 @@ async function main(): Promise<void> {
   process.env.DSH_DESKTOP_PACKAGING_RUN_DIR = run.directory
   let success = false
   try {
-    await packagingStep(run.directory, 'configuration', async () => {
-      validateDesktopPackageEnvironment(environment, target, {
-        ...invocation, privateDesktopUpdates: selectedPrivateDesktopUpdates !== undefined,
-      })
-    }, secrets)
+    await packagingStep(run.directory, 'configuration', async () => { validateDesktopPackageEnvironment(environment, target, invocation) }, secrets)
     await packagingStep(run.directory, 'toolchain', () => requireDesktopToolchain(target.platform, environment), secrets)
     if (target.platform === 'darwin') {
       const settings = resolveMacOSPackageSettings(environment)
       recordPackagingEvent(run.directory, { type: 'macos-settings', packConcurrency: settings.packConcurrency, zipCompressionLevel: settings.zipCompressionLevel,
         downloadProxyConfigured: settings.downloadProxy !== undefined,
         notarizationProxyConfigured: settings.notarizationProxy !== undefined })
-      await packagingStep(run.directory, 'macos-package', () => invocation.unsigned || invocation.internalDmg
-        ? packageTarget(invocation, environment, run, configuredPrivateMarket ? configEnvironment : undefined)
-        : withMacOSSigningKeychain(environment, signingEnvironment => packageTarget(invocation, signingEnvironment, run,
-          configuredPrivateMarket ? configEnvironment : undefined)), secrets)
+      await packagingStep(run.directory, 'macos-package', () => invocation.unsigned
+        ? packageTarget(invocation, environment, run)
+        : withMacOSSigningKeychain(environment, signingEnvironment => packageTarget(invocation, signingEnvironment, run)), secrets)
     } else {
-      await packagingStep(run.directory, 'windows-package', () => packageTarget(invocation, environment, run,
-        configuredPrivateMarket ? configEnvironment : undefined), secrets)
+      await packagingStep(run.directory, 'windows-package', () => packageTarget(invocation, environment, run), secrets)
     }
     success = true
   } catch (error) {
@@ -511,11 +400,10 @@ async function main(): Promise<void> {
     run.finish(success)
   }
   if (success && target.platform === 'darwin' && !invocation.directory && !invocation.prepareOnly) {
-    const paths = desktopTargetBuildPaths(target.name)
-    const filename = `${selectedBranding.artifactNameBase}-${buildVersion}-mac-${target.arch}${invocation.unsigned ? '-unsigned' : invocation.internalDmg ? '-internal' : ''}.dmg`
-    console.log(`DMG: ${join(invocation.unsigned ? paths.unsignedArtifacts
-      : invocation.internalDmg ? desktopTargetInternalArtifactsDirectory(target.name, buildVersion)
-        : desktopTargetReleaseArtifactsDirectory(target.name, buildVersion), filename)}`)
+    const paths = desktopTargetBuildPaths(target.name, environment)
+    const output = desktopArtifactOutput(paths, invocation)
+    const filename = `deepseek-harness-${buildVersion}-mac-${target.arch}${output.suffix}.dmg`
+    console.log(`DMG: ${join(output.directory, filename)}`)
   }
 }
 
@@ -524,44 +412,29 @@ async function main(): Promise<void> {
  * @param invocation Validated host, target and packaging mode.
  * @param environment File-owned release configuration.
  * @param run Persistent stage supervisor; required for signed Windows packaging and enabled for all release commands.
- * @param configuredMarketEnvironment Selected environment name when it configures the private market.
  * @returns Resolves after preparation or complete packaging; any failed stage prevents a release record.
  */
 export async function packageTarget(
   invocation: DesktopPackageInvocation,
   environment: NodeJS.ProcessEnv,
   run: ReturnType<typeof createPackagingRun> | undefined,
-  configuredMarketEnvironment?: string,
 ): Promise<void> {
   const { target } = invocation
-  const branding = desktopBrandingFromEnvironment(environment)
   const execute = (args: readonly string[], env: NodeJS.ProcessEnv, cwd: string = APP_ROOT) => runPnpm(args, env, cwd, run)
   const journal = target.platform === 'darwin' ? process.env.DSH_DESKTOP_PACKAGING_RUN_DIR : undefined
   const proxyEvent = (status: string) => { if (journal) recordPackagingEvent(journal, { type: 'notarization-proxy', status }) }
   const mac = target.platform === 'darwin' ? resolveMacOSPackageSettings(environment) : undefined
-  const packArguments = ['--concurrency', String(mac?.packConcurrency ?? 4)]
+  const packConcurrency = mac?.packConcurrency ?? resolveWindowsPackageSettings(environment).packConcurrency
+  const packArguments = ['--concurrency', String(packConcurrency)]
   const buildPaths = desktopTargetBuildPaths(target.name, environment)
-  const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
-  const buildVersion = resolveDesktopBuildVersion(environment, productVersion)
-  const unsignedArtifacts = target.platform === 'win32'
-    ? desktopTargetInternalArtifactsDirectory(target.name, buildVersion) : buildPaths.unsignedArtifacts
-  const artifactsRoot = invocation.unsigned ? unsignedArtifacts
-    : invocation.internalDmg ? desktopTargetInternalArtifactsDirectory(target.name, buildVersion)
-      : invocation.skipNotarization ? buildPaths.unnotarizedArtifacts
-        : desktopTargetReleaseArtifactsDirectory(target.name, buildVersion)
-  const releaseRecordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
-  if (!invocation.prepareOnly && !invocation.unsigned && !invocation.internalDmg && !invocation.skipNotarization) {
+  const releaseRecordPath = join(buildPaths.artifacts, desktopBuildRecordFilename(target.name))
+  if (!invocation.prepareOnly && !invocation.unsigned && !invocation.skipNotarization) {
     rmSync(releaseRecordPath, { force: true })
     rmSync(`${releaseRecordPath}.tmp`, { force: true })
   }
+  const artifactsRoot = desktopArtifactOutput(buildPaths, invocation).directory
   const buildEnv = withoutWindowsSigningEnvironment(withoutDesktopUploadCredentials(
     desktopElectronBuilderEnvironment(environment, invocation.unsigned)))
-  delete buildEnv.DSH_CLIENT_BRAND_NAME
-  if (branding.displayName !== DEFAULT_DESKTOP_DISPLAY_NAME) buildEnv.DSH_CLIENT_BRAND_NAME = branding.displayName
-  const iconSet = resolveDesktopIconSet(join(APP_ROOT, 'resources', 'brand-sets'), branding.iconSet)
-  const sidebarMarkPath = iconSet['sidebar-mark.svg']
-  if (sidebarMarkPath === undefined) throw new Error('desktop package: selected icon set has no sidebar-mark.svg')
-  buildEnv.DSH_CLIENT_BRAND_MARK = `data:image/svg+xml;base64,${readFileSync(sidebarMarkPath).toString('base64')}`
   const targetEnv: NodeJS.ProcessEnv = {
     ...buildEnv,
     DSH_DESKTOP_MACOS_SKIP_NOTARIZATION: invocation.skipNotarization ? '1' : '0',
@@ -569,7 +442,10 @@ export async function packageTarget(
     DSH_DESKTOP_TARGET_ARCH: target.arch,
   }
   const downloadEnv = macOSDownloadEnvironment(targetEnv, mac?.downloadProxy)
-  const electronBuilderEnv = desktopElectronBuilderEnvironment(downloadEnv, invocation.unsigned, invocation.internalDmg)
+  const electronBuilderEnv = desktopElectronBuilderEnvironment(downloadEnv, invocation.unsigned)
+  if (target.platform === 'win32') {
+    electronBuilderEnv.ELECTRON_BUILDER_COMPRESSION_LEVEL = String(resolveWindowsPackageSettings(environment).compressionLevel)
+  }
   for (const name of WINDOWS_SIGNING_ENV_NAMES) {
     if (!invocation.unsigned && environment[name] !== undefined) electronBuilderEnv[name] = environment[name]
   }
@@ -602,55 +478,58 @@ export async function packageTarget(
         { cwd: APP_ROOT, env: electronBuilderEnv, timeoutMs: 60_000 })
     })
   }
-  await execute(['run', 'build:official'], buildEnv, REPOSITORY_ROOT)
-  await execute(['run', 'release:pack', '--family', 'dsh', '--out', buildPaths.packedDsh, ...packArguments], buildEnv, REPOSITORY_ROOT)
-  if (invocation.preinstallPrivatePlugins || configuredMarketEnvironment !== undefined) {
-    const source = resolvePrivateMarketSource(REPOSITORY_ROOT, environment)
-    const authSource = resolveProAuthSource(REPOSITORY_ROOT, environment)
-    await execute(['run', 'build'], buildEnv, source)
-    if (invocation.preinstallPrivatePlugins) await execute(['run', 'build'], buildEnv, authSource)
-    const marketRecord = await packagePrivateMarket({
-      repositoryRoot: REPOSITORY_ROOT,
-      source,
-      ...(invocation.preinstallPrivatePlugins ? { authSource } : {}),
-      configRoot: environment.DSH_CONFIG_ENV_DIR,
-      ...(configuredMarketEnvironment !== undefined
-        ? { environment: configuredMarketEnvironment }
-        : {}),
-      output: buildPaths.packedDsh,
-      runPnpm: (args, cwd) => execute(args, buildEnv, cwd),
-    })
-    if (run !== undefined) recordPackagingEvent(run.directory, { type: 'private-market', ...marketRecord })
+  await execute(invocation.unsigned ? ['run', 'build', '--profile', 'local'] : ['run', 'build:official'], buildEnv, REPOSITORY_ROOT)
+  let preparationFailure: { error: unknown } | undefined
+  const executePreparation = async (args: readonly string[], env: NodeJS.ProcessEnv, cwd?: string): Promise<void> => {
+    if (preparationFailure !== undefined) throw preparationFailure.error
+    try { await execute(args, env, cwd) }
+    catch (error) { preparationFailure ??= { error }; throw error }
   }
-  await execute([
-    '--dir',
-    'apps/desktop-host',
-    'pack',
-    '--pack-destination',
-    buildPaths.packedDsh,
-  ], buildEnv, REPOSITORY_ROOT)
-  await execute(['run', 'release:pack', '--family', 'vendor', '--out', buildPaths.packedVendor, ...packArguments], buildEnv, REPOSITORY_ROOT)
-  rmSync(buildPaths.packedLandlock, { recursive: true, force: true })
-  mkdirSync(buildPaths.packedLandlock, { recursive: true })
-  await execute(['--dir', 'native/system', 'run', 'build:ts'], buildEnv, REPOSITORY_ROOT)
-  await execute([
-    '--dir',
-    'native/system/packages/entry',
-    'pack',
-    '--pack-destination',
-    buildPaths.packedLandlock,
-  ], buildEnv, REPOSITORY_ROOT)
-  await execute(['run', 'prepare:runtime', ...(signPrimaryRuntime ? ['--defer-primary-runtime-smoke'] : [])], downloadEnv)
+  const pack = async (): Promise<void> => {
+    await executePreparation([
+      ...(invocation.unsigned
+        ? ['exec', 'tsx', 'apps/desktop/scripts/pack-local-packages.ts']
+        : ['run', 'release:pack', '--family', 'dsh']),
+      '--out', buildPaths.packedDsh, ...packArguments,
+    ], buildEnv, REPOSITORY_ROOT)
+    await executePreparation([
+      '--dir',
+      'apps/desktop-host',
+      'pack',
+      '--pack-destination',
+      buildPaths.packedDsh,
+    ], buildEnv, REPOSITORY_ROOT)
+    await executePreparation(['run', 'release:pack', '--family', 'vendor', '--out', buildPaths.packedVendor, ...packArguments], buildEnv, REPOSITORY_ROOT)
+    rmSync(buildPaths.packedLandlock, { recursive: true, force: true })
+    mkdirSync(buildPaths.packedLandlock, { recursive: true })
+    await executePreparation(['--dir', 'native/system', 'run', 'build:ts'], buildEnv, REPOSITORY_ROOT)
+    await executePreparation([
+      '--dir',
+      'native/system/packages/entry',
+      'pack',
+      '--pack-destination',
+      buildPaths.packedLandlock,
+    ], buildEnv, REPOSITORY_ROOT)
+  }
+  const prepareRuntime = () => executePreparation(
+    ['run', 'prepare:runtime', ...(signPrimaryRuntime ? ['--defer-primary-runtime-smoke'] : [])], downloadEnv)
+  if (target.platform === 'win32') {
+    const results = await Promise.allSettled([pack(), prepareRuntime()])
+    for (const result of results) if (result.status === 'rejected') throw result.reason
+  } else {
+    await pack()
+    await prepareRuntime()
+  }
   if (signPrimaryRuntime) await execute(['run', 'sign:primary-runtime'], electronBuilderEnv)
   await execute(['run', 'prepare:packages'], targetEnv)
-  await execute(['run', 'prepare:dsh', ...(signPrimaryRuntime ? ['--defer-runtime-smoke'] : [])],
-    invocation.internalDmg ? electronBuilderEnv : downloadEnv)
+  await execute(['run', 'prepare:dsh', ...(signPrimaryRuntime ? ['--defer-runtime-smoke'] : [])], downloadEnv)
   if (signPrimaryRuntime) await execute(['run', 'sign:primary-runtime', '--dsh'], electronBuilderEnv)
   if (invocation.prepareOnly) return
-  if (invocation.internalDmg) {
-    await execute(desktopElectronBuilderArguments(target, false), electronBuilderEnv)
-    await execute(['exec', 'tsx', 'scripts/smoke-packaged-runtime.ts', '--internal-dmg'], electronBuilderEnv)
-  } else if (target.platform === 'darwin' && !invocation.unsigned && !invocation.directory) {
+  const buildMacArtifact = (artifact: DesktopPrepackagedArtifact) => execute(
+    desktopElectronBuilderArguments(target, false, artifact), artifact.format === 'zip'
+      ? { ...electronBuilderEnv, ELECTRON_BUILDER_COMPRESSION_LEVEL: String(mac?.zipCompressionLevel) }
+      : electronBuilderEnv)
+  if (target.platform === 'darwin' && !invocation.unsigned && !invocation.skipNotarization && !invocation.directory) {
     await execute([
       ...desktopElectronBuilderArguments(target, true),
       '--config.mac.notarize=false',
@@ -660,13 +539,13 @@ export async function packageTarget(
       arch: target.arch,
       // electron-builder named these artifacts after the published version, so locating them uses the same identifier.
       version: resolveDesktopBuildVersion(environment, packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')),
-      artifactsRoot,
+      artifactsRoot: buildPaths.artifacts,
       environment: electronBuilderEnv,
     }, buildMacArtifact), undefined, undefined, proxyEvent)
   } else if (target.platform === 'darwin' && !invocation.unsigned && !invocation.skipNotarization) {
     await execute([...desktopElectronBuilderArguments(target, true), '--config.mac.notarize=false'], electronBuilderEnv)
     await execute(['exec', 'tsx', 'scripts/smoke-packaged-runtime.ts'], targetEnv)
-    const appPath = join(artifactsRoot, target.arch === 'arm64' ? 'mac-arm64' : 'mac', `${branding.displayName}.app`)
+    const appPath = join(buildPaths.artifacts, target.arch === 'arm64' ? 'mac-arm64' : 'mac', 'DeepSeek Harness.app')
     await withMacOSNotarizationProxy(mac?.notarizationProxy,
       () => notarizeMacOS({ appPath, ...resolveMacOSNotarizationEnvironment(environment) }), undefined, undefined, proxyEvent)
   } else {
@@ -682,12 +561,10 @@ export async function packageTarget(
     await execute(['exec', 'tsx', 'scripts/smoke-packaged-runtime.ts',
       ...(invocation.unsigned ? ['--unsigned'] : []), ...(invocation.skipNotarization ? ['--skip-notarization'] : [])], targetEnv)
   }
-  if (!invocation.directory && !invocation.unsigned && !invocation.internalDmg) {
-    await writeReleaseRecord(target, electronBuilderEnv, artifactsRoot,
-      electronBuilderEnv.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG !== undefined)
+  if (!invocation.directory && !invocation.unsigned && !invocation.skipNotarization) {
+    writeReleaseRecord(target, electronBuilderEnv, buildPaths.artifacts)
   }
-  if (journal) recordPackagingEvent(journal, { type: 'artifacts',
-    directory: artifactsRoot })
+  if (journal) recordPackagingEvent(journal, { type: 'artifacts', directory: artifactsRoot })
 }
 
 if (process.argv[1] !== undefined && import.meta.filename === resolve(process.argv[1])) await main()

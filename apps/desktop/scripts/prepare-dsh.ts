@@ -9,7 +9,8 @@ import { tmpdir } from 'node:os'
 import { delimiter, join, relative, resolve } from 'node:path'
 import { desktopNodeEnvironment } from '../src/node-environment.ts'
 import { createRuntimeProjectMetadata } from '../src/project-manager.ts'
-import type { DesktopRelease } from '../src/release.ts'
+import { DESKTOP_HOST_PROTOCOL_VERSION } from '../src/host-protocol.ts'
+import { parseDesktopRelease, type DesktopRelease } from '../src/release.ts'
 import {
   DESKTOP_HOST_PACKAGE,
   DESKTOP_HOST_RUNTIME_FILES,
@@ -22,7 +23,7 @@ import { smokePrimaryRuntime } from './prepare-primary-runtime.ts'
 import { smokePreparedRuntime } from './smoke-prepared-runtime.ts'
 import { prepareRuntimeManifests } from './prepare-runtime-manifests.ts'
 import { prepareRuntimePatches, verifyRuntimePatches } from './prepare-runtime-patches.ts'
-import { writeDesktopRuntimeAsync, verifyDesktopRuntime } from '../src/runtime-tree.ts'
+import { writeDesktopRuntime, writeDesktopRuntimeAsync, verifyDesktopRuntime } from '../src/runtime-tree.ts'
 import {
   resolveDesktopAppId,
   resolveMacOSSigningEnvironment,
@@ -34,8 +35,6 @@ import {
 import { desktopTargetPlatform, resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
 import { desktopRuntimeFileExclusion } from './runtime-file-policy.ts'
 import { selectOfficeEngine } from '../../../scripts/libreoffice-packages.mjs'
-import { desktopProfileBundles } from '../src/preinstalled-plugin-bundles.ts'
-import { readDesktopRuntimeRelease } from './desktop-runtime-release.ts'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const BUILD_PATHS = resolveDesktopTargetBuildPaths()
@@ -48,8 +47,26 @@ const PACKAGE_SET_ROOT = BUILD_PATHS.packageSet
 const NODE = join(BUILD_PATHS.electron, process.platform === 'win32' ? 'electron.exe' : 'Electron.app/Contents/MacOS/Electron')
 const PNPM = join(RUNTIME_ROOT, 'primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.mjs')
 
+function manifestVersion(path: string, subject: string): string {
+  const manifest = JSON.parse(readFileSync(path, 'utf8')) as { version?: unknown }
+  if (typeof manifest.version !== 'string') throw new Error(`desktop runtime: ${subject} has no version`)
+  return manifest.version
+}
+
 function desktopRelease(): DesktopRelease {
-  return readDesktopRuntimeRelease(resolve(APP_ROOT, '..', '..'), RUNTIME_ROOT)
+  const version = manifestVersion(join(APP_ROOT, 'package.json'), 'desktop package')
+  const dshVersion = manifestVersion(resolve(APP_ROOT, '..', '..', 'package.json'), 'root dsh package')
+  if (version !== dshVersion) {
+    throw new Error(`desktop runtime: Electron ${version} must bind the same version of @deepseek-ai/dsh, found ${dshVersion}`)
+  }
+  const runtime = JSON.parse(readFileSync(join(RUNTIME_ROOT, 'versions.json'), 'utf8')) as Record<string, unknown>
+  return parseDesktopRelease({
+    schemaVersion: 1,
+    version,
+    hostProtocolVersion: DESKTOP_HOST_PROTOCOL_VERSION,
+    nodeVersion: runtime.node,
+    pnpmVersion: runtime.pnpm,
+  })
 }
 
 function runPnpm(args: readonly string[]): Promise<void> {
@@ -65,8 +82,6 @@ function runPnpm(args: readonly string[]): Promise<void> {
       '--expose-internals',
       PNPM,
       `--config.registry=${registry}`,
-      '--config.fetch-retries=5',
-      '--fetch-timeout=120000',
       `--config.store-dir=${STORE_ROOT}`,
       '--config.verify-store-integrity=true',
       '--config.package-import-method=copy',
@@ -139,7 +154,6 @@ async function main(): Promise<void> {
     writeFileSync(join(DSH_OUTPUT_ROOT, 'package.json'), `${JSON.stringify({
       name: '@deepseek-ai/dsh-desktop-runtime', private: true, version: release.version, type: 'module',
       dependencies: Object.fromEntries(packageSet.packages.map(entry => [entry.name, entry.version])),
-      dsh: { profile: { bundles: desktopProfileBundles(packageSet.packages.map(entry => entry.name)) } },
     }, undefined, 2)}\n`)
     for (const file of DESKTOP_HOST_RUNTIME_FILES) {
       if (!existsSync(join(DSH_OUTPUT_ROOT, 'node_modules', DESKTOP_HOST_PACKAGE, file))) {
@@ -149,14 +163,17 @@ async function main(): Promise<void> {
     if (!existsSync(join(DSH_OUTPUT_ROOT, 'node_modules', '@deepseek-ai', `libreoffice-kit-${officeEngine}`, 'prebuilds.json'))) {
       throw new Error(`desktop runtime: missing required LibreOffice engine ${officeEngine}`)
     }
-    if (process.platform === 'darwin' && process.env.DSH_DESKTOP_INTERNAL_DMG !== '1'
-      && process.env.DSH_DESKTOP_UNSIGNED !== '1') {
-      await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'sign:dsh-native', () => signMacOSRuntime(DSH_OUTPUT_ROOT, resolveDesktopAppId(process.env), resolveMacOSSigningEnvironment(process.env), target.arch, join(BUILD_PATHS.root, 'signature-cache')))
-      await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'sign:primary-native', () => signMacOSRuntime(join(RUNTIME_ROOT, 'primary-runtime'), resolveDesktopAppId(process.env), resolveMacOSSigningEnvironment(process.env), target.arch, join(BUILD_PATHS.root, 'signature-cache')))
+    if (process.platform === 'darwin' && process.env.DSH_DESKTOP_UNSIGNED !== '1') {
+      const cacheDirectory = resolveMacOSSignatureCacheDirectory(process.env, BUILD_PATHS.root)
+      await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'sign:dsh-native', () => signMacOSRuntime(DSH_OUTPUT_ROOT, resolveDesktopAppId(process.env), resolveMacOSSigningEnvironment(process.env), target.arch, cacheDirectory))
+      await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'sign:primary-native', () => signMacOSRuntime(join(RUNTIME_ROOT, 'primary-runtime'), resolveDesktopAppId(process.env), resolveMacOSSigningEnvironment(process.env), target.arch, cacheDirectory, 'primary'))
     }
     await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:manifests', () => prepareRuntimeManifests(DSH_OUTPUT_ROOT))
     await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:primary-smoke', async () => smokePrimaryRuntime(join(RUNTIME_ROOT, 'primary-runtime')))
-    await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:write-descriptor', () => writeDesktopRuntimeAsync(DSH_OUTPUT_ROOT, release, packageSet.packages.map(entry => entry.name), target))
+    await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:write-descriptor', async () => {
+      const writeRuntime = target.platform === 'win32' ? writeDesktopRuntimeAsync : writeDesktopRuntime
+      return writeRuntime(DSH_OUTPUT_ROOT, release, packageSet.packages.map(entry => entry.name), target)
+    })
     const descriptor = await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:verify-before-smoke', () => verifyDesktopRuntime(DSH_OUTPUT_ROOT, release.version, target))
     if (!process.argv.includes('--defer-runtime-smoke')) {
       await packagingStep(process.env.DSH_DESKTOP_PACKAGING_RUN_DIR, 'runtime:smoke', () => smokePreparedRuntime(DSH_OUTPUT_ROOT, NODE, RUNTIME_ROOT, descriptor))

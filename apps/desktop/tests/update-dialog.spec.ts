@@ -103,35 +103,10 @@ it('attaches within its owner and resizes below the Windows caption without a na
 
 it('updates a background result in the same view without activating its owner', async () => {
   const f = setup()
-  const pending = dialogs!.show(f.parent as unknown as BrowserWindow, {
-    message: '未能安全停止任务', technicalDetails: 'exit 0; shutdown acknowledged false',
-  })
-  expect(f.invoke(UPDATE_DIALOG_IPC.status)).toMatchObject({ detail: '',
-    technicalDetails: 'exit 0; shutdown acknowledged false', technicalDetailsLabel: '查看技术详情' })
-  dialogs!.cancel()
-  await pending
-})
-
-it('passes release history to its owned renderer and preserves an empty-history message', async () => {
-  const f = setup()
-  const pending = dialogs!.show(f.parent as unknown as BrowserWindow, {
-    message: 'DeepSeek Harness', detail: 'Version 1.0.0', buttons: ['Check updates', 'Close'], cancelId: 1,
-    releaseHistory: { title: 'Version history', empty: 'No version history is available.', downloadInstaller: 'Download full installer', entries: [
-      { version: '1.2.3', releaseNotes: 'Stability improvements.' },
-    ] },
-  })
-  expect(f.invoke(UPDATE_DIALOG_IPC.status)).toMatchObject({ releaseHistory: {
-    title: 'Version history', empty: 'No version history is available.',
-    entries: [{ version: '1.2.3', releaseNotes: 'Stability improvements.' }],
-  } })
-  dialogs!.cancel()
-  await pending
-})
-
-it('replaces content without releasing the backdrop and rejects a response from the previous prompt', async () => {
-  const f = setup()
-  const abort = new AbortController()
-  const first = f.show(abort.signal)
+  f.parent.isFocused.mockReturnValue(false)
+  const first = f.show()
+  await Promise.resolve()
+  const view = fixture.views[0]!
   const old = f.invoke(UPDATE_DIALOG_IPC.status) as { revision: number }
   const next = f.show(undefined, { message: '已是最新版本' })
   expect((await first).response).toBe(1)

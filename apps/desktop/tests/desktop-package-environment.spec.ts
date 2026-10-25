@@ -171,7 +171,6 @@ describe('Desktop local packaging configuration', () => {
       const parent = {
         PATH: 'build-tools', DSH_DESKTOP_APP_ID: 'com.stale.desktop',
         DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: '{"origin":"https://stale.example.com"}',
-        DSH_DESKTOP_PRIVATE_UPDATE_CONFIG: '{"environment":"stale"}',
         dsh_desktop_mandatory_update_config: 'stale-policy',
         DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://stale.example.com',
         dsh_desktop_mandatory_update_prod_origin: 'https://stale.example.com',
@@ -315,15 +314,6 @@ describe('Desktop local packaging configuration', () => {
         validateDesktopPackageEnvironment({ ...RELEASE, ...MAC_IDENTITY, APPLE_KEYCHAIN_PROFILE: 'release', APPLE_KEYCHAIN: directory }, MACOS)
       }).toThrow(/APPLE_KEYCHAIN/u)
     })
-  })
-
-  it('accepts an internal macOS disk image without update, signing, or notarization settings', () => {
-    expect(() => {
-      validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: RELEASE.DSH_DESKTOP_APP_ID }, MACOS, { internalDmg: true })
-    }).not.toThrow()
-    expect(() => {
-      validateDesktopPackageEnvironment({ DSH_DESKTOP_APP_ID: RELEASE.DSH_DESKTOP_APP_ID }, WINDOWS, { internalDmg: true })
-    }).toThrow(/requires mac-arm64/u)
   })
 })
 

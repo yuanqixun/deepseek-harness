@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  assertPrivateDesktopUpdateTarget,
   desktopElectronBuilderArguments,
   desktopElectronBuilderEnvironment,
   parseDesktopPackageInvocation,
@@ -59,22 +58,6 @@ describe('desktop package target', () => {
       .toThrow(/--build-version requires a value/u)
   })
 
-  it('consumes a named private-market build environment', () => {
-    expect(parseDesktopPackageInvocation(['mac-arm64', '--config-env', 'hxfl'], 'darwin', 'arm64').configEnvironment)
-      .toBe('hxfl')
-    expect(parseDesktopPackageInvocation(['mac-arm64', '--config-env=hxfl'], 'darwin', 'arm64').configEnvironment)
-      .toBe('hxfl')
-    expect(parseDesktopPackageInvocation(['mac-arm64'], 'darwin', 'arm64').configEnvironment).toBeUndefined()
-    expect(() => parseDesktopPackageInvocation(['mac-arm64', '--config-env'], 'darwin', 'arm64'))
-      .toThrow(/config-env.*argument missing/u)
-  })
-
-  it('limits private updates to Windows x64 and macOS arm64', () => {
-    expect(() => assertPrivateDesktopUpdateTarget(resolveDesktopPackageTarget('mac-arm64', 'darwin', 'arm64'))).not.toThrow()
-    expect(() => assertPrivateDesktopUpdateTarget(resolveDesktopPackageTarget('win-x64', 'win32', 'x64'))).not.toThrow()
-    expect(() => assertPrivateDesktopUpdateTarget(resolveDesktopPackageTarget('mac-x64', 'darwin', 'arm64'))).toThrow(/win-x64 or mac-arm64/u)
-  })
-
   it('keeps electron-builder publishing disabled for the separate validated upload', () => {
     const target = resolveDesktopPackageTarget('mac-arm64', 'darwin', 'arm64')
     expect(desktopElectronBuilderArguments(target, false)).toEqual([
@@ -104,12 +87,6 @@ describe('desktop package target', () => {
       .toThrow(/cannot use --prepare-only/u)
   })
 
-  it('accepts only a standalone internal macOS arm64 disk image', () => {
-    expect(parseDesktopPackageInvocation(['mac-arm64', '--internal-dmg'], 'darwin', 'arm64')).toMatchObject({ internalDmg: true })
-    expect(() => parseDesktopPackageInvocation(['mac-x64', '--internal-dmg'], 'darwin', 'arm64')).toThrow(/requires mac-arm64/u)
-    expect(() => parseDesktopPackageInvocation(['mac-arm64', '--internal-dmg', '--dir'], 'darwin', 'arm64')).toThrow(/cannot combine/u)
-  })
-
   it('removes ambient certificate inputs for unsigned builds and overrides an inherited signing mode', () => {
     const environment = {
       DSH_DESKTOP_APP_ID: 'com.example.desktop',
@@ -132,14 +109,6 @@ describe('desktop package target', () => {
       DSH_DESKTOP_UNSIGNED: '1',
     })
     expect(desktopElectronBuilderEnvironment(environment, false)).toEqual({ ...environment, DSH_DESKTOP_UNSIGNED: '0' })
-  })
-
-  it('removes macOS signing inputs for internal disk images', () => {
-    expect(desktopElectronBuilderEnvironment({
-      DSH_DESKTOP_MACOS_SIGNING_IDENTITY: 'Example (TEAMID1234)', APPLE_API_KEY: 'secret.p8', CSC_LINK: 'secret.p12',
-    }, false, true)).toEqual({
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false', DSH_DESKTOP_UNSIGNED: '0', DSH_DESKTOP_INTERNAL_DMG: '1',
-    })
   })
 
   it.each([false, true])('pins the Windows archive filter for the NSIS decoder (unsigned: %s)', (unsigned) => {

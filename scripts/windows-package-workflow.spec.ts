@@ -1,5 +1,7 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { parse, resolve } from 'node:path'
 import yaml from 'js-yaml'
 import { expect, it } from 'vitest'
 
@@ -103,13 +105,11 @@ it('validates before building and passes the same mode and version to checks and
 
 it('retains failure diagnostics and uploads only the selected successful installer', () => {
   const uploads = job.steps.filter(step => step.uses?.startsWith('actions/upload-artifact@'))
-  const logs = uploads.find(step => step.if === "always() && steps.checkout.outcome == 'success'")!
-  expect(logs.with).toMatchObject({ path: 'apps/desktop/.desktop-build/packaging-runs/', 'include-hidden-files': true })
-  const installer = uploads.find(step => step !== logs)!
-  expect(installer.if).toBeUndefined()
-  expect(installer.with).toMatchObject({
-    path: 'releases/${{ steps.settings.outputs.version }}/windows/x64/internal/*.exe',
-    'include-hidden-files': true, 'if-no-files-found': 'error',
+  expect(uploads).toHaveLength(3)
+  expect(uploads[0]!.if).toBe("always() && steps.checkout.outcome == 'success'")
+  expect(uploads[0]!.with).toMatchObject({
+    path: '${{ steps.build_workspace.outputs.directory || github.workspace }}/apps/desktop/.desktop-build/packaging-runs/',
+    'include-hidden-files': true,
   })
   for (const mode of ['unsigned', 'signed']) {
     const upload = uploads.find(step => step.if === `success() && inputs.signing == '${mode}'`)!

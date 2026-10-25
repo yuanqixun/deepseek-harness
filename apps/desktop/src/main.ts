@@ -705,6 +705,7 @@ async function main(): Promise<void> {
       if (privateUpdates === undefined) void track('desktop_upgrade_download_result', { is_success: success, ...reason === undefined ? {} : { error_reason: reason } })
     },
     async () => privateUpdates === undefined ? null : privateUpdates.prepare(electronUpdater.autoUpdater),
+    updateChannel,
   )
 
   const updateSchedule = new DesktopUpdateSchedule(updates, resolveDesktopUpdateScheduleConfig(process.env))

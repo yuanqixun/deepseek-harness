@@ -47,10 +47,10 @@ export class DesktopUpdateCoordinator {
    * @param updater - Process-owned Electron updater, replaceable at the network/platform test boundary.
    * @param enabled - Whether this process has a packaged update source.
    * @param currentVersion - Actual installed application version.
-   * @param channel - Installed package channel; omitted test/local callers retain nightly.
    * @param downloadResult - Once per completed download attempt, including platform preparation failures.
    * @param preparePrivateCheck - Optional distribution-owned check; `null` keeps the packaged generic feed.
    * `undefined` means the private service selected no release.
+   * @param channel - Installed package channel; omitted test/local callers retain nightly.
    */
   constructor(
     private readonly publish: (state: DesktopUpdateState) => DesktopUpdateState,
@@ -60,6 +60,7 @@ export class DesktopUpdateCoordinator {
     private readonly currentVersion: () => string = () => app.getVersion(),
     private readonly downloadResult?: (success: boolean, reason?: string) => void,
     private readonly preparePrivateCheck?: () => Promise<{ readonly version: string; readonly feedUrl: string } | undefined | null>,
+    private readonly channel: 'nightly' | 'latest' = 'nightly',
   ) {
     if (updater === autoUpdater) {
       // electron-updater omits this internal transport property from its public declarations.

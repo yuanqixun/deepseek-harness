@@ -2,8 +2,8 @@ import type { ProductEventMap, ProductEvent } from '@deepseek-ai/dsh-client-prod
 import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
 
+import { existsSync, readFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -76,7 +76,31 @@ let shuttingDown = false
  */
 let skipQuitConfirmation = false
 let windowsLanguage: string | undefined
-const desktopDisplayName = app.isPackaged ? app.getName() : 'DeepSeek Harness'
+const desktopDisplayName = readDesktopDisplayName()
+
+function readDesktopDisplayName(): string {
+  if (!app.isPackaged) return 'DeepSeek Harness'
+  let manifest: unknown
+  try {
+    manifest = JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'))
+  }
+  catch (error) {
+    throw new Error('desktop startup: cannot read packaged application branding', { cause: error })
+  }
+  if (typeof manifest !== 'object' || manifest === null || Array.isArray(manifest)) {
+    throw new Error('desktop startup: packaged application manifest must be an object')
+  }
+  const branding = Reflect.get(manifest, 'branding')
+  if (typeof branding === 'object' && branding !== null && !Array.isArray(branding)) {
+    const displayName = Reflect.get(branding, 'displayName')
+    if (typeof displayName === 'string' && displayName.trim() !== '') return displayName
+  }
+  const productName = Reflect.get(manifest, 'productName')
+  if (typeof productName === 'string' && productName.trim() !== '') return productName
+  const packageName = Reflect.get(manifest, 'name')
+  return typeof packageName === 'string' && !packageName.startsWith('@deepseek-ai/')
+    ? packageName : 'DeepSeek Harness'
+}
 /**
  * Whether the backend has reached ready: false until the first ready, back to
  * false when a restart returns it to starting, frozen during shutdown so a

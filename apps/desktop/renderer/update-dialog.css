@@ -20,10 +20,10 @@ p { margin: 0; font-size: 14px; line-height: 22px; white-space: pre-wrap; overfl
 #release-history-entries li { padding-top: 10px; border-top: 1px solid rgb(15 17 21 / 10%); }
 #release-history-entries p { font-size: 13px; line-height: 20px; }
 .installer-download { min-height: 36px; margin-top: 8px; padding: 6px 12px; font-size: 13px; }
-#actions { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; position: sticky; bottom: 0; background: #fff; }
+#actions { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; position: sticky; bottom: 0; background: var(--dsw-alias-bg-layer-1); }
 button { min-height: 44px; padding: 9px 16px; border: 0; border-radius: 12px; font-family: inherit; font-size: 14px; font-weight: 500; line-height: 22px; cursor: pointer; }
-.primary { background: #0f1115; color: #fff; }
-.secondary { background: #f5f5f5; color: inherit; }
+.primary { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+.secondary { background: var(--dsw-alias-button-elevated-fill); color: var(--dsw-alias-label-primary); }
 .close { display: grid; place-items: center; flex: none; width: 28px; min-height: 28px; padding: 7px; border-radius: 50%; background: transparent; }
 .close::before { content: ""; width: 14px; height: 14px; background: currentColor; mask: url("update-close.svg") center / contain no-repeat; }
 

@@ -40,7 +40,7 @@ function requireEnvironmentValue(env, name) {
 /**
  * Resolve the npm registry used to materialize the bundled runtime and its external dependencies.
  * @param {NodeJS.ProcessEnv} env - Packaging environment.
- * @returns {string} HTTPS registry URL; the public registry unless a local mirror is configured.
+ * @returns {string} HTTPS registry URL; npmjs by default unless another registry is configured.
  */
 export function resolveNpmRegistry(env) {
   const configured = env[NPM_REGISTRY_ENV]?.trim() ?? ''

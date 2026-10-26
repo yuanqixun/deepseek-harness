@@ -24,11 +24,17 @@ import { resolveDesktopAutoUpdateConfig } from './desktop-auto-update-environmen
 import { resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { resolveDesktopBuildVersion } from './desktop-build-version.mjs'
 import { resolveDesktopPolicyEnvironment } from './desktop-policy-environment.mjs'
-import { desktopArtifactOutput, desktopTargetBuildPaths, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
+import {
+  desktopArtifactOutput,
+  desktopTargetBuildPaths,
+  desktopTargetInternalArtifactsDirectory,
+  resolveDesktopBuildTarget,
+} from './desktop-build-paths.mjs'
 import { installWindowsDirectoryInstaller } from './windows-directory-installer.mjs'
 import { preserveWindowsRuntimeSignature, signWindowsCode } from './windows-runtime-signature.mjs'
 import { prepareWindowsAsarUnpack, verifyWindowsAsarUnpack } from './windows-asar-unpack.mjs'
 import { recordPackagingEvent } from './packaging-run.mjs'
+import { desktopBrandingFromEnvironment, resolveDesktopIconSet } from './desktop-branding-environment.mjs'
 import {
   resolveMacOSAppUpdateFeed,
   verifyMacOSAppUpdateConfig,
@@ -59,19 +65,26 @@ export function createElectronBuilderConfig(
     throw new Error('desktop package: DSH_DESKTOP_UNSIGNED must be 0 or 1')
   }
   const unsigned = env.DSH_DESKTOP_UNSIGNED === '1'
+  if (env.DSH_DESKTOP_INTERNAL_DMG !== undefined && !['0', '1'].includes(env.DSH_DESKTOP_INTERNAL_DMG)) {
+    throw new Error('desktop package: DSH_DESKTOP_INTERNAL_DMG must be 0 or 1')
+  }
+  const internalDmg = env.DSH_DESKTOP_INTERNAL_DMG === '1'
+  const withoutReleaseSigning = unsigned || internalDmg
   const skipNotarization = env.DSH_DESKTOP_MACOS_SKIP_NOTARIZATION === '1'
   if (env.DSH_DESKTOP_MACOS_SKIP_NOTARIZATION !== undefined && !['0', '1'].includes(env.DSH_DESKTOP_MACOS_SKIP_NOTARIZATION)) {
     throw new Error('desktop package: DSH_DESKTOP_MACOS_SKIP_NOTARIZATION must be 0 or 1')
   }
-  if (skipNotarization && (unsigned || resolvedPlatform !== 'darwin')) throw new Error('Skipping notarization requires a signed macOS build')
+  if (skipNotarization && (withoutReleaseSigning || resolvedPlatform !== 'darwin')) throw new Error('Skipping notarization requires a signed macOS build')
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = resolvedPlatform === 'win32'
-  const policy = packagesMacOS && unsigned ? undefined : resolveDesktopPolicyEnvironment(env)
+  const policy = packagesMacOS && withoutReleaseSigning ? undefined : resolveDesktopPolicyEnvironment(env)
   if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()
-  const macOSSigning = packagesMacOS && !unsigned ? resolveMacOSSigningEnvironment(env) : undefined
-  if (packagesMacOS && !unsigned && !skipNotarization) resolveMacOSNotarizationEnvironment(env)
-  const buildPaths = desktopTargetBuildPaths(resolveDesktopBuildTarget(env, hostPlatform, hostArch), env)
-  const output = desktopArtifactOutput(buildPaths, { unsigned, skipNotarization })
+  const macOSSigning = packagesMacOS && !withoutReleaseSigning ? resolveMacOSSigningEnvironment(env) : undefined
+  if (packagesMacOS && !withoutReleaseSigning && !skipNotarization) resolveMacOSNotarizationEnvironment(env)
+  const target = resolveDesktopBuildTarget(env, hostPlatform, hostArch)
+  const buildPaths = desktopTargetBuildPaths(target, env)
+  const branding = desktopBrandingFromEnvironment(env)
+  const icons = resolveDesktopIconSet(fileURLToPath(new URL('../resources/brand-sets', import.meta.url)), branding.iconSet)
   let primaryRuntimeDestination
   let dshDestination
   let windowsCode = []
@@ -96,12 +109,16 @@ export function createElectronBuilderConfig(
   if (windowsSigner !== undefined) {
     installWindowsNsisBootstrapSigner({ sign: windowsSigner })
   }
-  const update = unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
+  const update = withoutReleaseSigning ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
   if (preparedRuntime !== undefined) buildPaths.dsh = preparedRuntime
   // electron-builder merges extraMetadata into the packaged manifest, so a build version here reaches
   // the artifact names, the update feed, and the installed app.getVersion() the updater compares against.
   const productVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')).version
+  const dshVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../../../package.json', import.meta.url)), 'utf8')).version
   const buildVersion = resolveDesktopBuildVersion(env, productVersion)
+  const output = internalDmg
+    ? { directory: desktopTargetInternalArtifactsDirectory(target, buildVersion), suffix: '-internal' }
+    : desktopArtifactOutput(buildPaths, { unsigned, skipNotarization })
   if (update?.channel === 'latest' && buildVersion.includes('-')) throw new Error('desktop package: latest requires a stable version')
   const packaged = resolveDesktopBuildCommit(env)
   return {
@@ -110,15 +127,16 @@ export function createElectronBuilderConfig(
     extraMetadata: {
       dshDesktopAppId: appId,
       dshDesktopUpdateChannel: update?.channel ?? 'nightly',
+      dshDesktopBranding: branding,
       ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },
     },
-    productName: 'DeepSeek Harness',
+    productName: branding.displayName,
     // The default copyright uses author.name; this line names the product instead.
     copyright: `Copyright © ${new Date().getFullYear()} \${productName}`,
     // Unsigned builds carry their own suffix so a shared file can never pass for a release artifact.
-    artifactName: `deepseek-harness-\${version}-\${os}-\${arch}${output.suffix}.\${ext}`,
+    artifactName: `${branding.artifactNameBase}-\${version}-\${os}-\${arch}${output.suffix}.\${ext}`,
     directories: { output: output.directory },
     asar: true,
     electronDist: buildPaths.electron,
@@ -156,12 +174,12 @@ export function createElectronBuilderConfig(
     asarUnpack: unpack,
     extraResources: [
       { from: buildPaths.runtime, to: 'runtime' },
-      { from: fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)), to: 'icon.png' },
+      { from: icons['icon-windows.png'], to: 'icon.png' },
       // Windows tray bitmaps; macOS keeps the Dock and ships no menu bar icon.
-      ...(packagesWindows ? [{ from: fileURLToPath(new URL('../resources/tray-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
+      ...(packagesWindows ? [{ from: icons['tray-windows.ico'], to: 'tray.ico' }] : []),
     ],
     mac: {
-      icon: fileURLToPath(new URL('../resources/icon-macos.png', import.meta.url)),
+      icon: icons['icon-macos.png'],
       category: 'public.app-category.developer-tools',
       // macOS matches the application locale against this bundle, not Electron Framework resources.
       extendInfo: {
@@ -169,19 +187,19 @@ export function createElectronBuilderConfig(
         NSMicrophoneUsageDescription: 'DeepSeek Harness uses your microphone to transcribe speech into message drafts.',
       },
       // Ad-hoc signing keeps the modified Electron executable runnable without a Developer ID.
-      identity: unsigned ? '-' : macOSSigning?.signingIdentity,
-      forceCodeSigning: !unsigned,
+      identity: withoutReleaseSigning ? '-' : macOSSigning?.signingIdentity,
+      forceCodeSigning: !withoutReleaseSigning,
       hardenedRuntime: true,
       entitlements: fileURLToPath(new URL('./macos-entitlements.plist', import.meta.url)),
       entitlementsInherit: fileURLToPath(new URL('./macos-entitlements.plist', import.meta.url)),
       // Prepared runtime files retain their signatures; PAK resources are sealed by their enclosing bundle.
       signIgnore: ['/Contents/Resources/app\\.asar\\.unpacked/dsh(?:/|$)', '/Contents/Resources/runtime/primary-runtime(?:/|$)', '\\.pak$'],
-      notarize: !unsigned && !skipNotarization,
-      target: unsigned ? ['dmg'] : ['dmg', 'zip'],
+      notarize: !withoutReleaseSigning && !skipNotarization,
+      target: withoutReleaseSigning ? ['dmg'] : ['dmg', 'zip'],
     },
     dmg: {
       format: 'ULMO',
-      sign: !unsigned,
+      sign: !withoutReleaseSigning,
       writeUpdateInfo: false,
     },
     beforePack: async context => {
@@ -205,10 +223,9 @@ export function createElectronBuilderConfig(
         await writeMacOSAppUpdateConfig(resourcesDir, resolveMacOSAppUpdateFeed(context.packager.config.publish),
           context.packager.appInfo.updaterCacheDirName)
       }
-      // The bundled runtime declares whichever version prepared it: the product version for an ordinary
-      // release, and a rewritten one for installed-update qualification.
+      // Desktop and DSH have independent versions; qualification rewrites only its private runtime.
       await verifyDesktopRuntime(buildPaths.dsh,
-        preparedRuntimeVersion ?? productVersion, { platform: resolvedPlatform, arch: resolvedArch })
+        preparedRuntimeVersion ?? dshVersion, { platform: resolvedPlatform, arch: resolvedArch })
       // Unsigned Windows builds skip electron-builder's afterSign hook.
       if (packagesWindows && unsigned) await verifyWindowsAsarUnpack(buildPaths.dsh, resourcesDir, windowsCode)
     },
@@ -221,7 +238,7 @@ export function createElectronBuilderConfig(
         })
         await verifyWindowsAsarUnpack(buildPaths.dsh, context.packager.getResourcesDir(context.appOutDir), windowsCode)
       }
-      if (context.electronPlatformName !== 'darwin' || unsigned) return
+      if (context.electronPlatformName !== 'darwin' || withoutReleaseSigning) return
       const appPath = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`)
       if (update !== undefined) {
         await verifyMacOSAppUpdateConfig(appPath, resolveMacOSAppUpdateFeed(context.packager.config.publish),
@@ -230,7 +247,7 @@ export function createElectronBuilderConfig(
       verifyMacOSSignatureAfterSign(context, macOSSigning ?? resolveMacOSSigningEnvironment(env))
     },
     artifactBuildCompleted: artifact => {
-      if (unsigned || !artifact.file.endsWith('.dmg')) return
+      if (withoutReleaseSigning || !artifact.file.endsWith('.dmg')) return
       if (skipNotarization) {
         verifyMacOSDiskImageSignature(artifact.file, macOSSigning ?? resolveMacOSSigningEnvironment(env))
         return
@@ -242,7 +259,7 @@ export function createElectronBuilderConfig(
       )
     },
     win: {
-      icon: fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)),
+      icon: icons['icon-windows.png'],
       forceCodeSigning: !unsigned,
       signtoolOptions: {
         sign: windowsSigner,

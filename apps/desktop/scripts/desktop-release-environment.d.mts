@@ -52,7 +52,7 @@ export function resolveDesktopAppId(env: NodeJS.ProcessEnv): string
 /**
  * Resolve the npm registry used to materialize the bundled runtime and its external dependencies.
  * @param env - Packaging environment.
- * @returns Registry origin; the public registry unless a local mirror is configured.
+ * @returns Registry URL; npmjs by default unless another registry is configured.
  */
 export function resolveNpmRegistry(env: NodeJS.ProcessEnv): string
 

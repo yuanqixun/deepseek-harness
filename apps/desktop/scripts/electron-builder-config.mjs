@@ -118,6 +118,8 @@ export function createElectronBuilderConfig(
   const buildVersion = resolveDesktopBuildVersion(env, productVersion)
   const output = internalDmg
     ? { directory: desktopTargetInternalArtifactsDirectory(target, buildVersion), suffix: '-internal' }
+    : unsigned && packagesWindows
+      ? { directory: desktopTargetInternalArtifactsDirectory(target, buildVersion), suffix: '-unsigned' }
     : desktopArtifactOutput(buildPaths, { unsigned, skipNotarization })
   if (update?.channel === 'latest' && buildVersion.includes('-')) throw new Error('desktop package: latest requires a stable version')
   const packaged = resolveDesktopBuildCommit(env)

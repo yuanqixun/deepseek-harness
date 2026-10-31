@@ -29,6 +29,7 @@ import { PluginRefreshToast, type PluginRefreshToastFace } from './PluginRefresh
 import { PluginsPanelIcon } from './PluginsPanelIcon.tsx'
 import { configLedgerSource } from './config-ledger.ts'
 import { tabLedgerSource } from './tab-ledger.ts'
+import { createPluginAddActions } from './add-default-action.ts'
 import { PluginManagerController } from './manager-store.ts'
 import { en, ja, es, fr, de, ru, pt, zh, type PluginManagerLocaleKey } from './locales.ts'
 import { createNavigationStore } from './navigation-store.ts'
@@ -94,6 +95,8 @@ export const inject = ['slots', 'locale', 'remote', 'remote.pluginManager', 'rem
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-plugin-manager: dictionaries')
   const t = ctx.locale.bind(NS)
+  const pluginAddActions = createPluginAddActions()
+  ctx.provide('pluginAddActions', pluginAddActions)
   const controller = new PluginManagerController(ctx)
   ctx.effect(() => () => { controller.dispose() }, 'ui-plugin-manager: controller')
   ctx.provide('pluginChanges', { bundle: packageName => controller.observeChanges(packageName) })
@@ -134,7 +137,11 @@ export function apply(ctx: ClientContext): void {
         key: PANEL_ID,
         locale: NS,
         store,
-        inject: () => ({ ...face, createHeaderRef: createPluginHeaderRef }),
+        inject: () => ({
+          ...face,
+          createHeaderRef: createPluginHeaderRef,
+          runDefaultAddAction: () => { pluginAddActions.runDefault(face.openInstall) },
+        }),
         children: {
           'plugins.add.actions': { kind: 'list', scope: 'root' },
           'plugins.tab': { kind: 'list', scope: 'root' },

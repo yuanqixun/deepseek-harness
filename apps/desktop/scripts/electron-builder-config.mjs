@@ -57,6 +57,11 @@ export function createElectronBuilderConfig(
   preparedRuntime = undefined,
   preparedRuntimeVersion = undefined,
 ) {
+  let desktopRuntimeConfig = undefined
+  if (env.DSH_DESKTOP_RUNTIME_CONFIG !== undefined) {
+    try { desktopRuntimeConfig = JSON.parse(env.DSH_DESKTOP_RUNTIME_CONFIG) }
+    catch (error) { throw new Error('desktop package: invalid DSH_DESKTOP_RUNTIME_CONFIG', { cause: error }) }
+  }
   const appId = resolveDesktopAppId(env)
   const targetPlatform = env.DSH_DESKTOP_TARGET_PLATFORM
   const resolvedPlatform = targetPlatform ?? hostPlatform
@@ -130,6 +135,8 @@ export function createElectronBuilderConfig(
       dshDesktopAppId: appId,
       dshDesktopUpdateChannel: update?.channel ?? 'nightly',
       dshDesktopBranding: branding,
+      dshDesktopAuthProvider: env.DSH_DESKTOP_AUTH_PROVIDER ?? 'deepseek-official',
+      ...(desktopRuntimeConfig === undefined ? {} : { dshDesktopRuntimeConfig: desktopRuntimeConfig }),
       ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },

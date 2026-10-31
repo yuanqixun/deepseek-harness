@@ -30,7 +30,7 @@ import { desktopBuildCommitEnvironment, readDesktopBuildCommit, resolveDesktopBu
 import { requireDesktopToolchain } from './desktop-toolchain-preflight.ts'
 import { withMacOSNotarizationProxy } from './macos-notarization-proxy.ts'
 import { packagePrivateMarket, resolvePrivateMarketSource, resolveProAuthSource } from './private-market-package.ts'
-import { readPrivateMarketEnvironment } from '../../../scripts/config-environment.ts'
+import { readDesktopRuntimeEnvironment, readPrivateMarketEnvironment } from '../../../scripts/config-environment.ts'
 import { readPrivateDesktopUpdates } from './private-desktop-update-environment.mjs'
 import { verifyPrivateDesktopUpdateArtifacts } from './private-desktop-update-artifacts.mjs'
 import { DEFAULT_DESKTOP_DISPLAY_NAME, DESKTOP_BRANDING_ENV, desktopBrandingFromEnvironment, readDesktopBranding, resolveDesktopIconSet } from './desktop-branding-environment.mjs'
@@ -419,7 +419,11 @@ async function main(): Promise<void> {
   const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   let selectedPrivateDesktopUpdates: ReturnType<typeof readPrivateDesktopUpdates> | undefined
   let selectedBranding = desktopBrandingFromEnvironment({})
+  let selectedAuthProvider: 'deepseek-official' | 'dsh-pro-auth' = 'deepseek-official'
+  let selectedRuntimeConfig: ReturnType<typeof readDesktopRuntimeEnvironment> | undefined
   let configuredPrivateMarket = false
+  environment.DSH_DESKTOP_AUTH_PROVIDER = selectedAuthProvider
+  delete environment.DSH_DESKTOP_RUNTIME_CONFIG
   if (configEnvironment !== undefined) {
     const configRoot = environment.DSH_CONFIG_ENV_DIR
     if (!/^[a-z0-9][a-z0-9-]*$/u.test(configEnvironment)) throw new Error('desktop package: invalid config environment name')
@@ -431,6 +435,10 @@ async function main(): Promise<void> {
       throw new Error('desktop package: selected config environment must match schemaVersion 1 and its name')
     }
     configuredPrivateMarket = isRecord(document.plugins) && 'privateMarket' in document.plugins
+    selectedRuntimeConfig = readDesktopRuntimeEnvironment(configRoot, configEnvironment)
+    selectedAuthProvider = selectedRuntimeConfig.authProvider
+    environment.DSH_DESKTOP_AUTH_PROVIDER = selectedAuthProvider
+    environment.DSH_DESKTOP_RUNTIME_CONFIG = JSON.stringify(selectedRuntimeConfig)
     selectedBranding = readDesktopBranding(configRoot, configEnvironment)
     resolveDesktopIconSet(join(APP_ROOT, 'resources', 'brand-sets'), selectedBranding.iconSet)
     environment[DESKTOP_BRANDING_ENV] = JSON.stringify(selectedBranding)
@@ -439,10 +447,12 @@ async function main(): Promise<void> {
       selectedPrivateDesktopUpdates = readPrivateDesktopUpdates(configRoot, configEnvironment)
       environment.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG = JSON.stringify(selectedPrivateDesktopUpdates)
     }
-    if (!configuredPrivateMarket && selectedPrivateDesktopUpdates === undefined && !invocation.preinstallPrivatePlugins) {
+    if (!configuredPrivateMarket && selectedPrivateDesktopUpdates === undefined && !invocation.preinstallPrivatePlugins
+      && selectedAuthProvider !== 'dsh-pro-auth') {
       throw new Error('desktop package: selected config environment must configure plugins.privateMarket or desktop.updates')
     }
   }
+  process.stdout.write(`desktop package: native welcome sign-in provider is ${selectedAuthProvider}\n`)
   // Resolve the selected artifact prefix before version discovery scans existing builds.
   const buildVersion = await resolveRequestedBuildVersion(invocation, productVersion, environment)
   environment[DESKTOP_BUILD_VERSION_ENV] = buildVersion
@@ -458,7 +468,7 @@ async function main(): Promise<void> {
         if (manifest.name !== '@deepseek-ai/dsh-private-market') throw new Error(`desktop package: invalid private market source ${source}`)
       }
     }
-    if (invocation.preinstallPrivatePlugins) {
+    if (invocation.preinstallPrivatePlugins || selectedAuthProvider === 'dsh-pro-auth') {
       for (const [source, packageName] of [
         [resolvePrivateMarketSource(REPOSITORY_ROOT, environment), '@deepseek-ai/dsh-private-market'],
         [resolveProAuthSource(REPOSITORY_ROOT, environment), 'dsh-pro-auth'],
@@ -502,12 +512,13 @@ async function main(): Promise<void> {
         downloadProxyConfigured: settings.downloadProxy !== undefined,
         notarizationProxyConfigured: settings.notarizationProxy !== undefined })
       await packagingStep(run.directory, 'macos-package', () => invocation.unsigned || invocation.internalDmg
-        ? packageTarget(invocation, environment, run, configuredPrivateMarket ? configEnvironment : undefined)
+        ? packageTarget(invocation, environment, run, configuredPrivateMarket ? configEnvironment : undefined,
+          selectedAuthProvider === 'dsh-pro-auth')
         : withMacOSSigningKeychain(environment, signingEnvironment => packageTarget(invocation, signingEnvironment, run,
-          configuredPrivateMarket ? configEnvironment : undefined)), secrets)
+          configuredPrivateMarket ? configEnvironment : undefined, selectedAuthProvider === 'dsh-pro-auth')), secrets)
     } else {
       await packagingStep(run.directory, 'windows-package', () => packageTarget(invocation, environment, run,
-        configuredPrivateMarket ? configEnvironment : undefined), secrets)
+        configuredPrivateMarket ? configEnvironment : undefined, selectedAuthProvider === 'dsh-pro-auth'), secrets)
     }
     success = true
   } catch (error) {
@@ -534,6 +545,7 @@ async function main(): Promise<void> {
  * @param environment File-owned release configuration.
  * @param run Persistent stage supervisor; required for signed Windows packaging and enabled for all release commands.
  * @param configuredMarketEnvironment Selected environment name when it configures the private market.
+ * @param includeProAuth Whether the local CAS bundle must be included in the packaged runtime.
  * @returns Resolves after preparation or complete packaging; any failed stage prevents a release record.
  */
 export async function packageTarget(
@@ -541,6 +553,7 @@ export async function packageTarget(
   environment: NodeJS.ProcessEnv,
   run: ReturnType<typeof createPackagingRun> | undefined,
   configuredMarketEnvironment?: string,
+  includeProAuth = invocation.preinstallPrivatePlugins,
 ): Promise<void> {
   const { target } = invocation
   const branding = desktopBrandingFromEnvironment(environment)
@@ -613,15 +626,15 @@ export async function packageTarget(
   }
   await execute(['run', 'build:official'], buildEnv, REPOSITORY_ROOT)
   await execute(['run', 'release:pack', '--family', 'dsh', '--out', buildPaths.packedDsh, ...packArguments], buildEnv, REPOSITORY_ROOT)
-  if (invocation.preinstallPrivatePlugins || configuredMarketEnvironment !== undefined) {
+  if (invocation.preinstallPrivatePlugins || configuredMarketEnvironment !== undefined || includeProAuth) {
     const source = resolvePrivateMarketSource(REPOSITORY_ROOT, environment)
     const authSource = resolveProAuthSource(REPOSITORY_ROOT, environment)
     await execute(['run', 'build'], buildEnv, source)
-    if (invocation.preinstallPrivatePlugins) await execute(['run', 'build'], buildEnv, authSource)
+    if (includeProAuth) await execute(['run', 'build'], buildEnv, authSource)
     const marketRecord = await packagePrivateMarket({
       repositoryRoot: REPOSITORY_ROOT,
       source,
-      ...(invocation.preinstallPrivatePlugins ? { authSource } : {}),
+      ...(includeProAuth ? { authSource } : {}),
       configRoot: environment.DSH_CONFIG_ENV_DIR,
       ...(configuredMarketEnvironment !== undefined
         ? { environment: configuredMarketEnvironment }

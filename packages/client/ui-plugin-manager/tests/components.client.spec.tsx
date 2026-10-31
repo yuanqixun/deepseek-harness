@@ -118,6 +118,7 @@ function renderTab(
     ensure: vi.fn(),
     refresh: vi.fn(),
     openInstall: vi.fn(),
+    runDefaultAddAction: vi.fn(),
     installFrom: vi.fn(),
     closeInstall: vi.fn(),
     editInstallSpec: vi.fn(),
@@ -150,6 +151,7 @@ function renderTab(
     detailImage: vi.fn((name: string, document: string, destination: string, _fromNpm: boolean) =>
       `https://dsh.example/api/plugin-manager/detail-file?bundle=${name}&document=${document}&path=${destination}`),
   }
+  actions.runDefaultAddAction.mockImplementation(() => { actions.openInstall() })
   const unusedStandardHook = (): never => { throw new Error('Plugin manager fixture does not provide global state') }
   const standard = {
     usePanelInfo: unusedStandardHook,
@@ -459,6 +461,7 @@ describe('PluginManagerPage', () => {
     fireEvent.pointerDown(add, { pointerType: 'mouse', button: 0 })
     fireEvent.pointerUp(add, { pointerType: 'mouse', button: 0 })
     fireEvent.click(add)
+    expect(actions.runDefaultAddAction).toHaveBeenCalledOnce()
     expect(actions.openInstall).toHaveBeenCalledOnce()
     expect(screen.queryByRole('menu')).toBeNull()
     actions.openInstall.mockClear()

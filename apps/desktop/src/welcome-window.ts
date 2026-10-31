@@ -1,11 +1,10 @@
-import type { SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
 /** Native welcome window and its presentation-only renderer. */
 
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, ipcMain, type BrowserWindowConstructorOptions, type IpcMainInvokeEvent } from 'electron'
 import type { DesktopLocale } from './locale.ts'
-import { WELCOME_IPC, type WelcomeOperations } from './welcome-api.ts'
+import { WELCOME_IPC, type WelcomeAuthProvider, type WelcomeOperations } from './welcome-api.ts'
 
 /**
  * Resolve the fixed-size welcome window's native material and controls.
@@ -13,7 +12,11 @@ import { WELCOME_IPC, type WelcomeOperations } from './welcome-api.ts'
  * @param locale - shell-owned localized copy.
  * @returns sandboxed window options with a locale-only preload.
  */
-export function welcomeWindowOptions(platform: NodeJS.Platform, locale: DesktopLocale): BrowserWindowConstructorOptions {
+export function welcomeWindowOptions(
+  platform: NodeJS.Platform,
+  locale: DesktopLocale,
+  authProvider: WelcomeAuthProvider = 'deepseek-official',
+): BrowserWindowConstructorOptions {
   return {
     width: 600,
     height: 700,
@@ -38,7 +41,10 @@ export function welcomeWindowOptions(platform: NodeJS.Platform, locale: DesktopL
     } as const : {}),
     webPreferences: {
       preload: fileURLToPath(new URL('./preload-welcome.cjs', import.meta.url)),
-      additionalArguments: [`--dsh-welcome-locale=${locale.id}`, `--dsh-welcome-name=${locale.messages.welcomeBrand}`],
+      additionalArguments: [
+        `--dsh-welcome-locale=${locale.id}`, `--dsh-welcome-name=${locale.messages.welcomeBrand}`,
+        `--dsh-welcome-auth-provider=${authProvider}`,
+      ],
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -56,8 +62,12 @@ let disposeActiveHandlers: (() => void) | undefined
  * @param operations - credential write and this-launch-only skip actions.
  * @returns the visible window; a failed load destroys it before rejecting.
  */
-export async function openWelcomeWindow(locale: DesktopLocale, operations: WelcomeOperations): Promise<BrowserWindow> {
-  const options = welcomeWindowOptions(process.platform, locale)
+export async function openWelcomeWindow(
+  locale: DesktopLocale,
+  operations: WelcomeOperations,
+  authProvider: WelcomeAuthProvider = 'deepseek-official',
+): Promise<BrowserWindow> {
+  const options = welcomeWindowOptions(process.platform, locale, authProvider)
   const window = new BrowserWindow(options)
   disposeActiveHandlers?.()
   let active = true
@@ -106,12 +116,12 @@ export async function openWelcomeWindow(locale: DesktopLocale, operations: Welco
   ipcMain.handle(WELCOME_IPC.cancel, async (event, id: unknown) => {
     assertSender(event)
     if (typeof id !== 'string') throw new Error('desktop welcome: invalid attempt')
-    return operations.cancelSignIn(id as SignInAttemptId)
+    return operations.cancelSignIn(id)
   })
   ipcMain.handle(WELCOME_IPC.copyLink, async (event, id: unknown) => {
     assertSender(event)
     if (typeof id !== 'string') throw new Error('desktop welcome: invalid attempt')
-    return operations.copySignInLink(id as SignInAttemptId)
+    return operations.copySignInLink(id)
   })
   window.once('closed', disposeHandlers)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

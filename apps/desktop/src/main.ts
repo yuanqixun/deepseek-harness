@@ -67,6 +67,17 @@ import { DesktopBackgroundNotice } from './background-notice.ts'
 import { PrivateDesktopUpdateClient, resolvePrivateDesktopUpdateConfig } from './private-desktop-updates.ts'
 import electronUpdater from 'electron-updater'
 
+interface DesktopRuntimeConfig {
+  readonly authProvider: 'deepseek-official' | 'dsh-pro-auth'
+  readonly dshProAuth?: {
+    readonly aicodeApiOrigin: string
+    readonly autoLlmKeyEnabled: boolean
+    readonly llmKeyEnvironment: string
+    readonly modelApiKeyEnv: string
+  }
+  readonly llmPiAiProviders?: Record<string, unknown>
+}
+
 let focusPrimaryWindow = (): void => {}
 let stopForRecovery = async (): Promise<void> => {}
 let shuttingDown = false
@@ -77,6 +88,8 @@ let shuttingDown = false
 let skipQuitConfirmation = false
 let windowsLanguage: string | undefined
 const desktopDisplayName = readDesktopDisplayName()
+const desktopRuntimeConfig = readDesktopRuntimeConfig()
+const desktopAuthProvider = desktopRuntimeConfig.authProvider
 
 function readDesktopDisplayName(): string {
   if (!app.isPackaged) return 'DeepSeek Harness'
@@ -95,11 +108,74 @@ function readDesktopDisplayName(): string {
     const displayName = Reflect.get(branding, 'displayName')
     if (typeof displayName === 'string' && displayName.trim() !== '') return displayName
   }
+  const desktopBranding = Reflect.get(manifest, 'dshDesktopBranding')
+  if (typeof desktopBranding === 'object' && desktopBranding !== null && !Array.isArray(desktopBranding)) {
+    const displayName = Reflect.get(desktopBranding, 'displayName')
+    if (typeof displayName === 'string' && displayName.trim() !== '') return displayName
+  }
   const productName = Reflect.get(manifest, 'productName')
   if (typeof productName === 'string' && productName.trim() !== '') return productName
   const packageName = Reflect.get(manifest, 'name')
   return typeof packageName === 'string' && !packageName.startsWith('@deepseek-ai/')
     ? packageName : 'DeepSeek Harness'
+}
+
+function readDesktopRuntimeConfig(): DesktopRuntimeConfig {
+  let value: unknown
+  let fallbackProvider: unknown
+  if (!app.isPackaged) {
+    fallbackProvider = process.env.DSH_DESKTOP_AUTH_PROVIDER
+    if (process.env.DSH_DESKTOP_RUNTIME_CONFIG !== undefined) {
+      try { value = JSON.parse(process.env.DSH_DESKTOP_RUNTIME_CONFIG) }
+      catch (error) { throw new Error('desktop startup: invalid DSH_DESKTOP_RUNTIME_CONFIG', { cause: error }) }
+    }
+  } else {
+    let manifest: unknown
+    try { manifest = JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')) }
+    catch (error) { throw new Error('desktop startup: cannot read packaged sign-in configuration', { cause: error }) }
+    if (!isRecord(manifest)) throw new Error('desktop startup: packaged application manifest must be an object')
+    fallbackProvider = manifest.dshDesktopAuthProvider
+    value = manifest.dshDesktopRuntimeConfig
+  }
+  if (value === undefined) {
+    const authProvider = fallbackProvider === undefined ? 'deepseek-official' : fallbackProvider
+    if (authProvider !== 'deepseek-official' && authProvider !== 'dsh-pro-auth') {
+      throw new Error('desktop startup: packaged application has an unsupported sign-in provider')
+    }
+    if (authProvider === 'dsh-pro-auth') {
+      throw new Error('desktop startup: dsh-pro-auth requires packaged environment settings; rebuild with --config-env')
+    }
+    return { authProvider }
+  }
+  if (!isRecord(value) || (value.authProvider !== 'deepseek-official' && value.authProvider !== 'dsh-pro-auth')) {
+    throw new Error('desktop startup: packaged application has invalid desktop runtime configuration')
+  }
+  const dshProAuth = value.dshProAuth
+  if (dshProAuth !== undefined && !isDesktopProAuthConfig(dshProAuth)) {
+    throw new Error('desktop startup: packaged application has invalid Aicode sign-in configuration')
+  }
+  const providers = value.llmPiAiProviders
+  if (providers !== undefined && !isRecord(providers)) {
+    throw new Error('desktop startup: packaged application has invalid model provider configuration')
+  }
+  if (isRecord(providers) && Object.values(providers).some(provider => isRecord(provider) && 'apiKey' in provider)) {
+    throw new Error('desktop startup: packaged model provider configuration cannot contain API keys')
+  }
+  return {
+    authProvider: value.authProvider,
+    ...(dshProAuth === undefined ? {} : { dshProAuth }),
+    ...(isRecord(providers) ? { llmPiAiProviders: providers } : {}),
+  }
+}
+
+function isDesktopProAuthConfig(value: unknown): value is NonNullable<DesktopRuntimeConfig['dshProAuth']> {
+  return isRecord(value) && typeof value.aicodeApiOrigin === 'string'
+    && typeof value.autoLlmKeyEnabled === 'boolean' && typeof value.llmKeyEnvironment === 'string'
+    && typeof value.modelApiKeyEnv === 'string'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 /**
  * Whether the backend has reached ready: false until the first ready, back to
@@ -374,7 +450,18 @@ async function main(): Promise<void> {
     return result.environment
   })
   let hostEnvironment: NodeJS.ProcessEnv = process.env
-  const prepareHostEnvironment = async (): Promise<void> => { hostEnvironment = await loginShell }
+  const prepareHostEnvironment = async (): Promise<void> => {
+    hostEnvironment = { ...await loginShell }
+    const aicode = desktopRuntimeConfig.dshProAuth
+    if (aicode !== undefined) {
+      hostEnvironment.DSH_AICODE_API_ORIGIN = aicode.aicodeApiOrigin
+      hostEnvironment.DSH_AICODE_AUTO_LLM_KEY = String(aicode.autoLlmKeyEnabled)
+      hostEnvironment.DSH_LLM_KEY_ENVIRONMENT = aicode.llmKeyEnvironment
+      hostEnvironment.DSH_MODEL_API_KEY_ENV = aicode.modelApiKeyEnv
+    }
+    const providers = desktopRuntimeConfig.llmPiAiProviders
+    if (providers !== undefined) hostEnvironment.DSH_LLM_PI_AI_PROVIDERS = JSON.stringify(providers)
+  }
   let quitting = false
   let startup: Promise<void> | undefined
   let workspaceRecovery: Promise<void> | undefined
@@ -534,7 +621,7 @@ async function main(): Promise<void> {
         hostUrl = ready.url
         if (ready.injections === undefined) throw new Error('Desktop Host did not provide boot injections')
         injections = ready.injections
-        welcomeBackend = await connectDesktopWelcome(ready.url, (input, init) => net.fetch(input, init), async () => (await session.defaultSession.cookies.get({ url: ready.url })).map(cookie => `${cookie.name}=${cookie.value}`).join('; '))
+        welcomeBackend = await connectDesktopWelcome(ready.url, (input, init) => net.fetch(input, init), async () => (await session.defaultSession.cookies.get({ url: ready.url })).map(cookie => `${cookie.name}=${cookie.value}`).join('; '), desktopAuthProvider)
         analyticsEnabled = await welcomeBackend.analyticsEnabled().catch(() => false)
         if (!reportedLaunch) { reportedLaunch = true; void track('desktop_app_launch', {}) }
         stopAccount?.()
@@ -551,7 +638,7 @@ async function main(): Promise<void> {
             returnedAttempt = attempt.id
             focusPrimaryWindow()
           }
-          if (state.status === 'credential-stored' && attempt?.phase === 'succeeded' && welcomeWindow !== undefined) void enterWorkspace({ activate: false }).catch(() => undefined)
+          if (state.status === 'credential-stored' && previousAccountStatus !== 'credential-stored' && welcomeWindow !== undefined) void enterWorkspace({ activate: false }).catch(() => undefined)
           if (previousAccountStatus === 'credential-stored' && state.status === 'signed-out') {
             void readWelcomeState().then(async (value) => {
               if (needsWelcome(value) && !quitting) {
@@ -1298,7 +1385,7 @@ async function main(): Promise<void> {
           return { ok: true }
         },
         skip: enterWorkspace,
-      })
+      }, desktopAuthProvider)
       const window = welcomeWindow
       window.once('closed', () => {
         void welcomeBackend?.account.state().then((state) => {
@@ -1326,7 +1413,7 @@ async function main(): Promise<void> {
     locale = resolveDesktopStartupLocale(state.localePreference, systemLanguages, desktopDisplayName)
     windowsLanguage = locale.id
     refreshApplicationMenu()
-    if (!enteredWorkspace && needsWelcome({ loggedIn: state.loggedIn, hasApiKey: state.hasApiKey })) {
+    if (!enteredWorkspace && needsWelcome({ loggedIn: state.loggedIn, hasApiKey: state.hasApiKey, authProvider: state.authProvider })) {
       // A later login must retain its own activation policy instead of replaying startup focus.
       raiseAfterUpdate = false
       await showWelcome()

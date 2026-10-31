@@ -2,10 +2,14 @@
 import { randomUUID } from 'node:crypto'
 import WebSocket from 'ws'
 import { parseRemoteStreamServerMessage, REMOTE_STREAM_MUX_PATH } from '@deepseek-ai/dsh-api-gateway/stream-protocol'
-import type { AccountClientMetadata, AccountView, SignInAttemptId } from '@deepseek-ai/dsh-deepseek-account/types'
+import type { AccountClientMetadata, AccountView } from '@deepseek-ai/dsh-deepseek-account/types'
+import type { WelcomeSignInAttempt, WelcomeSignInState } from './welcome-api.ts'
 
 /** Authenticated unary caller shared with native onboarding. */
-export type AccountInvoke = (request: { namespace: string; method: string; args: Record<string, unknown> }) => Promise<unknown>
+export type AccountInvoke = (request:
+  | { namespace: string; method: string; args: Record<string, unknown> }
+  | { channel: '/dsh-pro-auth'; method: string; args: Record<string, unknown> },
+) => Promise<unknown>
 
 /** Decode the UI-safe state received across HTTP or WebSocket. @param value - wire value. @returns account projection. */
 export function accountView(value: unknown): AccountView {
@@ -56,13 +60,13 @@ function validateBrowserDestination(value: string): void {
 /** Native account operations and explicitly owned stream lifetime. */
 export interface DesktopAccountBackend {
   /** @returns current account snapshot. */
-  state(): Promise<AccountView>
+  state(): Promise<WelcomeSignInState>
   /** @param client - this window's identity and current language. @returns new or already-running login attempt. */
-  start(client: AccountClientMetadata): Promise<AccountView>
+  start(client?: AccountClientMetadata): Promise<WelcomeSignInState>
   /** @param id - attempt to cancel. @returns cancellation or completed commit state. */
-  cancel(id: SignInAttemptId): Promise<AccountView>
-  /** @param client - this window's identity. @returns state after local sign-out. */
-  signOut(client: AccountClientMetadata): Promise<AccountView>
+  cancel(id: string): Promise<WelcomeSignInState>
+  /** @param client - this window's identity and current language. @returns signed-out state. */
+  signOut(client: AccountClientMetadata): Promise<WelcomeSignInState>
   /**
    * @param listener - state recipient.
    * @param failed - stream failure recipient.
@@ -71,7 +75,7 @@ export interface DesktopAccountBackend {
    * @returns stream disposer.
    */
   watch(
-    listener: (state: AccountView) => void, failed: () => void, expired: () => void,
+    listener: (state: WelcomeSignInState) => void, failed: () => void, expired: () => void,
     onAnalyticsEnabledChanged?: (enabled: boolean) => void,
   ): () => void
 }
@@ -84,12 +88,20 @@ export interface DesktopAccountBackend {
  * @returns account operations; watch callers own their subscriptions.
  */
 export function desktopAccountBackend(origin: string, invoke: AccountInvoke, cookies: () => Promise<string>): DesktopAccountBackend {
-  const call = async (method: string, args: Record<string, unknown> = {}): Promise<AccountView> =>
-    accountView(await invoke({ namespace: 'account', method, args }))
+  const project = (state: AccountView): WelcomeSignInState => ({ status: state.status,
+    attempt: state.attempt === null ? null : {
+      id: state.attempt.id,
+      phase: state.attempt.phase,
+      ...state.attempt.authorizeUrl === undefined ? {} : { authorizeUrl: state.attempt.authorizeUrl },
+      ...state.attempt.expiresAt === undefined ? {} : { expiresAt: state.attempt.expiresAt },
+    } })
+  const call = async (method: string, args: Record<string, unknown> = {}): Promise<WelcomeSignInState> =>
+    project(accountView(await invoke({ namespace: 'account', method, args })))
   return {
     state: () => call('getState'),
     start: client => call('startSignIn', { client, callbackOrigin: new URL(origin).origin, loginSource: 'desktop' }),
-    cancel: attemptId => call('cancelSignIn', { attemptId }), signOut: client => call('signOut', { client }),
+    cancel: attemptId => call('cancelSignIn', { attemptId }),
+    signOut: client => call('signOut', { client }),
     watch(listener, failed, expired, onAnalyticsEnabledChanged) {
       let closed = false
       let socket: WebSocket | undefined
@@ -119,7 +131,7 @@ export function desktopAccountBackend(origin: string, invoke: AccountInvoke, coo
               }
               if (frame.streamId === expiryStreamId && frame.type === 'item' && frame.value === 'session-expired') { expired(); return }
               if (frame.streamId !== streamId) throw new Error('desktop account: unexpected stream')
-              if (frame.type === 'item') listener(accountView(frame.value))
+              if (frame.type === 'item') listener(project(accountView(frame.value)))
               else socket?.close()
             } catch { socket?.close() }
           })
@@ -131,4 +143,106 @@ export function desktopAccountBackend(origin: string, invoke: AccountInvoke, coo
       return () => { closed = true; onAnalyticsEnabledChanged?.(false); clearTimeout(retry); socket?.close() }
     },
   }
+}
+
+interface CasAuthStatus {
+  readonly phase: 'unauthenticated' | 'authenticating' | 'authenticated'
+  readonly expiresAt?: number
+}
+
+/** Connect native welcome sign-in to the preinstalled DSH CAS plugin RPC. */
+export function desktopProAuthBackend(invoke: AccountInvoke): DesktopAccountBackend {
+  let attemptId: string | undefined
+  let loginUrl: string | undefined
+  const parseStatus = (value: unknown): CasAuthStatus => {
+    if (!isRecord(value) || (value.phase !== 'unauthenticated'
+      && value.phase !== 'authenticating' && value.phase !== 'authenticated')) {
+      throw new Error('企业登录服务返回了无效状态。')
+    }
+    const expiresAt = value.expiresAt
+    if (expiresAt !== undefined && (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt))) {
+      throw new Error('企业登录服务返回了无效登录期限。')
+    }
+    if (value.phase === 'authenticating' && typeof expiresAt !== 'number') {
+      throw new Error('企业登录服务返回了无效登录期限。')
+    }
+    return { phase: value.phase, ...(typeof expiresAt === 'number' ? { expiresAt } : {}) }
+  }
+  const readStatus = async (): Promise<CasAuthStatus> => parseStatus(
+    await invoke({ channel: '/dsh-pro-auth', method: 'status', args: {} }),
+  )
+  const project = (status: CasAuthStatus, phase?: WelcomeSignInAttempt['phase']): WelcomeSignInState => {
+    if (status.phase === 'authenticated') {
+      attemptId = undefined
+      loginUrl = undefined
+      return { status: 'credential-stored', attempt: null }
+    }
+    if (status.phase === 'authenticating') {
+      attemptId ??= randomUUID()
+      return {
+        status: 'signed-out',
+        attempt: {
+          id: attemptId,
+          phase: loginUrl === undefined ? 'initializing' : 'waiting-browser',
+          ...(loginUrl === undefined ? {} : { authorizeUrl: loginUrl }),
+          ...(status.expiresAt === undefined ? {} : { expiresAt: status.expiresAt }),
+        },
+      }
+    }
+    if (attemptId !== undefined && phase !== undefined) return { status: 'signed-out', attempt: { id: attemptId, phase } }
+    return { status: 'signed-out', attempt: null }
+  }
+  const state = async (): Promise<WelcomeSignInState> => project(await readStatus(), 'failed')
+  const start = async (): Promise<WelcomeSignInState> => {
+    const value = await invoke({ channel: '/dsh-pro-auth', method: 'start', args: {} })
+    if (!isRecord(value) || !('status' in value)
+      || (value.loginUrl !== undefined && typeof value.loginUrl !== 'string')) {
+      throw new Error('企业登录服务返回了无效登录结果。')
+    }
+    if (typeof value.loginUrl === 'string') validateBrowserDestination(value.loginUrl)
+    loginUrl = typeof value.loginUrl === 'string' ? value.loginUrl : undefined
+    attemptId ??= randomUUID()
+    return project(parseStatus(value.status))
+  }
+  return {
+    state,
+    start,
+    async signOut() {
+      await invoke({ channel: '/dsh-pro-auth', method: 'logout', args: {} })
+      attemptId = undefined
+      loginUrl = undefined
+      return state()
+    },
+    async cancel(id) {
+      if (attemptId === undefined || id !== attemptId) return state()
+      await invoke({ channel: '/dsh-pro-auth', method: 'cancel', args: {} })
+      loginUrl = undefined
+      const cancelledId = attemptId
+      attemptId = undefined
+      const current = await readStatus()
+      return current.phase === 'unauthenticated'
+        ? { status: 'signed-out', attempt: { id: cancelledId, phase: 'cancelled' } }
+        : project(current)
+    },
+    watch(listener, failed) {
+      let closed = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const poll = async (): Promise<void> => {
+        try {
+          const snapshot = await state()
+          if (!closed) listener(snapshot)
+        } catch {
+          if (!closed) failed()
+        } finally {
+          if (!closed) timer = setTimeout(() => { void poll() }, 1000)
+        }
+      }
+      void poll()
+      return () => { closed = true; clearTimeout(timer) }
+    },
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

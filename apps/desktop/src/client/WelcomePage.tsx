@@ -3,8 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Toast } from '@deepseek-ai/dsh-client-ui-primitives/src/Toast.tsx'
 import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives/src/StateDot.tsx'
-import type { AccountView } from '@deepseek-ai/dsh-deepseek-account/types'
-import type { WelcomeApi } from '../welcome-api.ts'
+import type { WelcomeApi, WelcomeSignInState } from '../welcome-api.ts'
 
 type Page = 'entry' | 'key' | 'account'
 
@@ -20,8 +19,8 @@ export function Welcome({ api }: { api: WelcomeApi }) {
   const [page, setPage] = useState<Page>('entry')
   const pageRef = useRef<Page>('entry')
   const visiblePage = useRef<Page>('entry')
-  const [attempt, setAttempt] = useState<AccountView['attempt']>(null)
-  const attemptRef = useRef<AccountView['attempt']>(null)
+  const [attempt, setAttempt] = useState<WelcomeSignInState['attempt']>(null)
+  const attemptRef = useRef<WelcomeSignInState['attempt']>(null)
   const [starting, setStarting] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [copyFeedback, setCopyFeedback] = useState<{ status: 'idle' | 'busy' | 'copied' | 'failed' }>({ status: 'idle' })
@@ -40,7 +39,7 @@ export function Welcome({ api }: { api: WelcomeApi }) {
     pageRef.current = next
     setPage(next)
   }
-  function showAccount(state: AccountView) {
+  function showAccount(state: WelcomeSignInState) {
     if (pageRef.current === 'key' || (state.attempt === null && pageRef.current === 'entry')) return
     attemptRef.current = state.attempt
     setAttempt(state.attempt)
@@ -203,14 +202,14 @@ export function Welcome({ api }: { api: WelcomeApi }) {
           <StateDot state="ongoing" size={16} className="welcome-loading" />
         </button>
         <button id="auth-retry" className="primary" type="button" hidden={!failed} onClick={() => { void api.analytics?.('auth_page_click', { button_name: 'sign_in' }); void start() }}>{m.welcomeAuthRetry}</button>
-        <button id="auth-api-key" className="secondary" type="button" hidden={!failed} onClick={() => { void api.analytics?.('auth_page_click', { button_name: 'api-key' }); navigate('key') }}>{m.welcomeApiKey}</button>
+        <button id="auth-api-key" className="secondary" type="button" hidden={!failed || api.authProvider === 'dsh-pro-auth'} onClick={() => { void api.analytics?.('auth_page_click', { button_name: 'api-key' }); navigate('key') }}>{m.welcomeApiKey}</button>
         <button id="auth-cancel" className="secondary" type="button" hidden={failed}
           disabled={cancelling || phase === 'committing' || phase === 'succeeded' || (phase === 'initializing' && !attempt?.id)}
           onClick={() => { void cancel() }}>{m.welcomeAuthCancel}</button>
       </div>
       <div id="entry-actions" className="actions" hidden={page !== 'entry'}>
-        <button id="sign-in" className="primary" type="button" onClick={() => { void api.analytics?.('auth_page_click', { button_name: 'sign_in' }); void start() }}>{m.welcomeSignIn}</button>
-        <button ref={keyButton} id="api-key" className="secondary" type="button" onClick={() => { void api.analytics?.('auth_page_click', { button_name: 'api-key' }); navigate('key') }}>{m.welcomeApiKey}</button>
+        <button id="sign-in" className="primary" type="button" onClick={() => { void api.analytics?.('auth_page_click', { button_name: 'sign_in' }); void start() }}>{api.authProvider === 'dsh-pro-auth' ? m.welcomeSignInSso : m.welcomeSignIn}</button>
+        <button ref={keyButton} id="api-key" className="secondary" type="button" hidden={api.authProvider === 'dsh-pro-auth'} onClick={() => { void api.analytics?.('auth_page_click', { button_name: 'api-key' }); navigate('key') }}>{m.welcomeApiKey}</button>
       </div>
       <div id="key-actions" className="actions" hidden={page !== 'key'}>
         <button id="save-key" className="primary" type="submit" form="key-form" disabled={busy || draft.trim() === ''}>{m.welcomeKeySave}</button>

@@ -184,13 +184,16 @@ export function createPluginProfile(projectDir: string, bundles: readonly string
 function runtimeProfileBundles(runtimeRoot: string): string[] {
   const manifest = JSON.parse(readFileSync(join(runtimeRoot, 'package.json'), 'utf8')) as {
     dsh?: { profile?: { bundles?: unknown } }
+    dependencies?: Record<string, string>
   }
   const bundles = manifest.dsh?.profile?.bundles
-  if (bundles === undefined) return [...WEB_PROFILE.bundles]
+  const availablePackages = Object.keys(manifest.dependencies ?? {})
+  if (bundles === undefined) return desktopProfileBundles(availablePackages)
   if (!Array.isArray(bundles) || !bundles.every(bundle => typeof bundle === 'string')) {
     throw new Error('desktop project: bundled dsh package has invalid default profile bundles')
   }
-  return desktopProfileBundles(bundles)
+  return [...bundles, ...PREINSTALLED_PLUGIN_BUNDLES.filter(name =>
+    availablePackages.includes(name) && !bundles.includes(name))]
 }
 
 function seedPreinstalledBundles(profileDir: string, defaults: readonly string[]): void {

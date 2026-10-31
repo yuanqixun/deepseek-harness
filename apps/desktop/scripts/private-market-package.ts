@@ -159,6 +159,7 @@ export async function packagePrivateMarket(options: {
         { id: 'plugin-manager', config: { registry: settings.registryUrl } },
         { insert: [{ id: 'private-market', name: PRIVATE_MARKET, config: {
           catalogUrl: settings.catalogUrl,
+          tenantId: settings.tenantId ?? '',
           catalogCredentialRef: settings.catalogCredentialRef ?? '',
         } }] },
       ]

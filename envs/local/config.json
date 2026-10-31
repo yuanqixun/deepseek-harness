@@ -4,10 +4,32 @@
   "plugins": {
     "privateMarket": {
       "catalogUrl": "http://localhost:48080/app-api/v1/plugins",
+      "tenantId": "1",
       "registryUrl": "https://hxflnexus.superbpm.com/repository/npm-group/"
+    },
+    "dsh-pro-auth": {
+      "aicodeApiOrigin": "http://127.0.0.1:48080",
+      "autoLlmKeyEnabled": true,
+      "llmKeyEnvironment": "local",
+      "modelApiKeyEnv": "local"
+    }
+  },
+  "llm-pi-ai": {
+    "providers": {
+      "local": {
+        "displayName": "local",
+        "apiKeyEnv": "local",
+        "api": "openai-completions",
+        "baseURL": "http://localhost:8080/v1",
+        "models": [
+          { "id": "hxfl-lite" },
+          { "id": "hxfl-pro" }
+        ]
+      }
     }
   },
   "desktop": {
+    "authProvider": "dsh-pro-auth",
     "branding": {
       "displayName": "金租办公",
       "iconSet": "hxfl"

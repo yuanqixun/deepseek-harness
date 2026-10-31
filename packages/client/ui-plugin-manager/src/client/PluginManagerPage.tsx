@@ -47,7 +47,10 @@ export type PluginManagerPageProps =
     | 'plugins.add.actions' | 'plugins.tab'
     | 'plugins.detail.actions' | 'plugins.detail.badge' | 'plugins.detail.section'
   >
-  & InjectFace<PluginManagerFace & PluginHeaderLayoutFace>
+  & InjectFace<PluginManagerFace & PluginHeaderLayoutFace & {
+    /** Run the highest-priority add action or open the existing installer. */
+    runDefaultAddAction: () => void
+  }>
   & PropsStore<ReturnType<typeof createNavigationStore>>
 
 /** The page's slot renderer, narrowed to the configuration slots. */
@@ -57,10 +60,11 @@ type ResolveText = PluginManagerFace['resolveText']
 type RowPhase = NonNullable<PackageRow['phase']>
 
 /** The primary action installs; the adjacent menu offers every add-plugin path. */
-function AddPluginMenu({ t, disabled, openInstall, renderSlot }: {
+function AddPluginMenu({ t, disabled, openInstall, runDefaultAddAction, renderSlot }: {
   readonly t: Translate
   readonly disabled: boolean
   readonly openInstall: () => void
+  readonly runDefaultAddAction: () => void
   readonly renderSlot: RenderConfig
 }): ReactNode {
   const [open, setOpen] = useState(false)
@@ -69,7 +73,7 @@ function AddPluginMenu({ t, disabled, openInstall, renderSlot }: {
     <span className={css.addGroup} role="group" aria-label={t('addPlugin')}>
       <Tooltip label={t('addPlugin')} side="bottom" delayMs={500} focusDelayMs={500} portal disabled={disabled}>
         <Button variant="primary" size="sm" className={css.addPrimary} icon={<IconPlusOutlineRegular size={13} />}
-          aria-label={t('addPlugin')} disabled={disabled} onClick={() => { onDismiss(); openInstall() }}>
+          aria-label={t('addPlugin')} disabled={disabled} onClick={() => { onDismiss(); runDefaultAddAction() }}>
           <span className={css.toolbarLabel}>{t('addPlugin')}</span>
         </Button>
       </Tooltip>
@@ -1654,7 +1658,8 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
                     </Button>
                   </Tooltip>
                   {state.install.requestId === undefined
-                    ? <AddPluginMenu t={t} disabled={!loaded} openInstall={props.openInstall} renderSlot={renderSlot} />
+                    ? <AddPluginMenu t={t} disabled={!loaded} openInstall={props.openInstall}
+                      runDefaultAddAction={props.runDefaultAddAction} renderSlot={renderSlot} />
                     : (
                       <Tooltip label={t('installViewTask')} side="bottom" delayMs={500} focusDelayMs={500} portal disabled={!loaded}>
                         <Button variant="primary" size="sm" className={css.addButton} icon={<IconPlusOutlineRegular size={13} />}

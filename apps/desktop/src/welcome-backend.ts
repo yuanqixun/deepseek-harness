@@ -2,7 +2,8 @@ import type { ProductEvent } from '@deepseek-ai/dsh-client-product-analytics/typ
 /** Native welcome operations using the shared Web authentication and RPC APIs. */
 
 import { randomUUID } from 'node:crypto'
-import { desktopAccountBackend, type DesktopAccountBackend } from './account-backend.ts'
+import { desktopAccountBackend, desktopProAuthBackend, type AccountInvoke, type DesktopAccountBackend } from './account-backend.ts'
+import type { WelcomeAuthProvider } from './welcome-api.ts'
 
 /** Metadata needed before the native entry or workspace becomes visible. */
 export interface WelcomeState {
@@ -10,10 +11,12 @@ export interface WelcomeState {
   readonly hasApiKey: boolean
   readonly writable: boolean
   readonly localePreference: string | null
+  readonly authProvider: WelcomeAuthProvider
 }
 
 /** Narrow operations available to the native welcome flow. */
 export interface DesktopWelcomeBackend {
+  readonly authProvider: WelcomeAuthProvider
   /** @returns the current Host policy; every read observes live configuration. */
   analyticsEnabled(): Promise<boolean>
   readonly account: DesktopAccountBackend
@@ -44,21 +47,23 @@ export async function connectDesktopWelcome(
   authenticatedUrl: string,
   send: (input: string, init?: RequestInit) => Promise<Response>,
   cookies: () => Promise<string> = () => Promise.resolve(''),
+  authProvider: WelcomeAuthProvider = 'deepseek-official',
 ): Promise<DesktopWelcomeBackend> {
   const origin = new URL(authenticatedUrl).origin
   const authenticated = await send(authenticatedUrl, { credentials: 'include' })
   await authenticated.body?.cancel()
   if (!authenticated.ok) throw new Error('desktop welcome: Web authentication failed')
   const invoke = async (
-    request: { namespace: string; method: string; args: Record<string, unknown> },
+    request: Parameters<AccountInvoke>[0],
     signal?: AbortSignal,
   ): Promise<unknown> => {
     const rpcId = randomUUID()
-    const method = `${request.namespace}/${request.method}`
-    const response = await send(new URL(`/api/${method}`, origin).href, {
+    const endpoint = 'channel' in request ? request.method : `${request.namespace}/${request.method}`
+    const route = 'channel' in request ? `${request.channel}/${endpoint}` : `/api/${endpoint}`
+    const response = await send(new URL(route, origin).href, {
       method: 'POST', credentials: 'include', redirect: 'error', ...(signal === undefined ? {} : { signal }),
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ type: 'client-request', rpcId, method, payload: { args: request.args } }),
+      body: JSON.stringify({ type: 'client-request', rpcId, method: endpoint, payload: { args: request.args } }),
     })
     if (!response.ok) throw new Error('desktop welcome: Web request failed')
     const envelope: unknown = await response.json()
@@ -68,7 +73,9 @@ export async function connectDesktopWelcome(
     }
     return envelope.result.value
   }
-  const account = desktopAccountBackend(origin, invoke, cookies)
+  const account = authProvider === 'dsh-pro-auth'
+    ? desktopProAuthBackend(invoke)
+    : desktopAccountBackend(origin, invoke, cookies)
   const settingsAndReference = async () => {
     const settings = await invoke({ namespace: 'settings', method: 'describe', args: {} })
     if (!record(settings) || !Array.isArray(settings.namespaces)) throw new Error('desktop welcome: missing settings namespaces')
@@ -118,9 +125,11 @@ export async function connectDesktopWelcome(
       hasApiKey: Object.values(states).some(value => record(value) && value.configured === true),
       writable: ref !== undefined && record(states[ref]) && states[ref].writable === true,
       localePreference: localePreference(namespaces),
+      authProvider,
     }
   }
   return {
+    authProvider,
     account,
     read,
     async analyticsEnabled() {

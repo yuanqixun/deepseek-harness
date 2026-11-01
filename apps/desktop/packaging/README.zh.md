@@ -269,6 +269,8 @@ Windows dotenv 或机器 preset 中的 `DSH_DESKTOP_WINDOWS_COMPRESSION_LEVEL` �
 
 NSIS 在安装阶段清理临时解压目录，完成后才显示完成页或自动启动应用。已安装的生产依赖保持为普通文件；启动时不会再次解压。安装仍会写入完整的应用目录树。
 
+Windows 安装包会在 `resources/` 中携带 Python 3.14.10 64 位完整安装器和安装助手。助手以静默方式运行 Python 安装器，使用 `InstallAllUsers=0`、`Include_pip=1`，并将 DSH 安装目录设为 `TargetDir`；之后检查 `python.exe` 和 pip，再把安装目录及其 `Scripts` 加入当前用户 PATH。Python 安装或 PATH 写入失败会使 DSH 安装失败。卸载时调用 Python 自带卸载程序，并且只移除这两条由安装器管理的 PATH 项。本地 `build-win64.ps1` 从同级 `offline` 目录读取 `python-3.14.10-amd64.exe`；直接运行 Windows 打包流程时使用 `DSH_DESKTOP_PYTHON_INSTALLER`，或使用相同的同级默认路径。Windows Actions 工作流会从 Python.org 下载并校验同一份固定版本的安装器。Python 3.14 的完整安装器已被官方标记为弃用，Python 3.16 起不再提供；后续版本应迁移到 Python install manager。
+
 <a id="desktop-runtime-preparation"></a>
 
 ## Desktop 运行时准备

@@ -88,6 +88,10 @@ ManifestDPIAware true
 !macroend
 
 !macro customUnInstall
+  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$INSTDIR\resources\python-runtime-installer.ps1" -Operation uninstall -Installer "$INSTDIR\resources\python-installer.exe" -Destination "$INSTDIR\python-3.14.10"' $0
+  ${If} $0 != 0
+    DetailPrint "Python PATH cleanup failed with exit code $0"
+  ${EndIf}
   Call un.CleanData
 !macroend
 
@@ -238,6 +242,11 @@ ManifestDPIAware true
   ${EndIf}
   !insertmacro InstallerPublishStage 4
   !insertmacro dshFinishDirectories
+  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$INSTDIR\resources\python-runtime-installer.ps1" -Operation install -Installer "$INSTDIR\resources\python-installer.exe" -Destination "$INSTDIR\python-3.14.10"' $1
+  ${If} $1 != 0
+    SetErrors
+    StrCpy $0 1
+  ${EndIf}
   ; Standard uninstall-entry metadata read by inventory tools; the upstream template records it only under its private key.
   WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" InstallLocation "$INSTDIR"
   ${If} $0 == 1

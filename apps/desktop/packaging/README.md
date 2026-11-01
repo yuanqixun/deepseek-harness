@@ -269,6 +269,8 @@ Windows packaging fixes the 7-Zip filter to `BCJ` for compatibility with the bun
 
 NSIS removes its temporary extraction tree during installation, before the completion page or an automatic launch. The installed production packages remain ordinary files; startup does not extract them again. Installation still writes the complete application tree.
 
+Windows installers carry the Python 3.14.10 64-bit full installer and a helper under `resources/`. The helper runs the Python installer quietly with `InstallAllUsers=0`, `Include_pip=1`, and the DSH installation directory as `TargetDir`; it verifies `python.exe` and pip, then prepends the install directory and `Scripts` to the current user's PATH. It fails DSH installation if Python setup or PATH publication fails. Uninstall invokes Python's own uninstaller and removes only these managed PATH entries. The local `build-win64.ps1` wrapper reads `python-3.14.10-amd64.exe` from the sibling `offline` directory; direct Windows packaging uses `DSH_DESKTOP_PYTHON_INSTALLER` or the same sibling default. The Windows Actions workflow downloads the same pinned installer from Python.org. Python 3.14's full installer is deprecated in favor of Python install manager and is not produced starting with Python 3.16.
+
 <a id="desktop-runtime-preparation"></a>
 
 ## Desktop runtime preparation

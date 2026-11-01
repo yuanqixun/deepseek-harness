@@ -48,7 +48,35 @@ if (-not [string]::IsNullOrWhiteSpace($ConfigEnvironment)) {
 $packageScript = if ($Sign) { 'package:desktop:win:x64' } else { 'package:desktop:win:x64:unsigned' }
 $pnpmArguments = @('run', $packageScript, '--') + $packageArguments
 Remove-Item Env:ELECTRON_CUSTOM_DIR -ErrorAction SilentlyContinue
-& pnpm @pnpmArguments
+$pythonInstaller = Join-Path (Split-Path -Parent $repositoryRoot) 'offline/python-3.14.10-amd64.exe'
+if (-not (Test-Path -LiteralPath $pythonInstaller -PathType Leaf)) {
+  Fail "Missing bundled Python installer: $pythonInstaller"
+}
+$pythonInstallerHash = (Get-FileHash -LiteralPath $pythonInstaller -Algorithm SHA256).Hash
+if ($pythonInstallerHash -ne '92480239264744FE0386A1BD8275786FEFA126E3129E56A68E22B52C73329965') {
+  Fail "Python installer has unexpected SHA-256: $pythonInstallerHash"
+}
+$previousPythonInstaller = $env:DSH_DESKTOP_PYTHON_INSTALLER
+$env:DSH_DESKTOP_PYTHON_INSTALLER = $pythonInstaller
+$previousPluginRegistry = $env:DSH_DESKTOP_PREINSTALLED_PLUGIN_REGISTRY
+$env:DSH_DESKTOP_PREINSTALLED_PLUGIN_REGISTRY = 'https://hxflnexus.superbpm.com/repository/npm-group/'
+try {
+  & pnpm @pnpmArguments
+}
+finally {
+  if ($null -eq $previousPythonInstaller) {
+    Remove-Item Env:DSH_DESKTOP_PYTHON_INSTALLER -ErrorAction SilentlyContinue
+  }
+  else {
+    $env:DSH_DESKTOP_PYTHON_INSTALLER = $previousPythonInstaller
+  }
+  if ($null -eq $previousPluginRegistry) {
+    Remove-Item Env:DSH_DESKTOP_PREINSTALLED_PLUGIN_REGISTRY -ErrorAction SilentlyContinue
+  }
+  else {
+    $env:DSH_DESKTOP_PREINSTALLED_PLUGIN_REGISTRY = $previousPluginRegistry
+  }
+}
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }

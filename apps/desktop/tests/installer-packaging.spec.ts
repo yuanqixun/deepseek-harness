@@ -117,9 +117,9 @@ describe('installer preparation preserves application dependencies', () => {
     expect(config).toMatchObject({ appId: 'com.example.installer', productName: branding.displayName,
       artifactName: '金租办公-${version}-${os}-${arch}-unsigned.${ext}',
       protocols: [{ schemes: ['dsh'] }], extraMetadata: { dshDesktopBranding: branding } })
-    expect(config.win.icon).toContain('/brand-sets/dsh/icon-windows.png')
-    expect(config.mac.icon).toContain('/brand-sets/dsh/icon-macos.png')
-    expect(config.extraResources.find(resource => resource.to === 'tray.ico')?.from).toContain('/brand-sets/dsh/tray-windows.ico')
+    expect(config.win.icon.replaceAll('\\', '/')).toContain('/brand-sets/dsh/icon-windows.png')
+    expect(config.mac.icon.replaceAll('\\', '/')).toContain('/brand-sets/dsh/icon-macos.png')
+    expect(config.extraResources.find(resource => resource.to === 'tray.ico')?.from.replaceAll('\\', '/')).toContain('/brand-sets/dsh/tray-windows.ico')
   })
 
   it('packages every preload entry point the shell loads', async () => {

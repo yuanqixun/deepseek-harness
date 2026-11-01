@@ -3,12 +3,12 @@
   "environment": "local",
   "plugins": {
     "privateMarket": {
-      "catalogUrl": "http://localhost:48080/app-api/v1/plugins",
+      "catalogUrl": "http://192.168.3.10:48080/app-api/v1/plugins",
       "tenantId": "1",
       "registryUrl": "https://hxflnexus.superbpm.com/repository/npm-group/"
     },
     "dsh-pro-auth": {
-      "aicodeApiOrigin": "http://127.0.0.1:48080",
+      "aicodeApiOrigin": "http://192.168.3.10:48080",
       "autoLlmKeyEnabled": true,
       "llmKeyEnvironment": "local",
       "modelApiKeyEnv": "local"
@@ -36,9 +36,9 @@
     },
     "updates": {
       "distribution": "dshwork",
-      "checkUrl": "http://localhost:48080/app-api/v1/desktop/updates/check",
+      "checkUrl": "http://192.168.3.10:48080/app-api/v1/desktop/updates/check",
       "channel": "stable",
-      "feedOrigins": ["http://localhost:48080"]
+      "feedOrigins": ["http://192.168.3.10:48080"]
     }
   }
 }

@@ -173,11 +173,10 @@ function readProAuthConfig(value: Record<string, unknown>, environment: string):
     throw new Error('config-env: plugins.dsh-pro-auth requires aicodeApiOrigin, autoLlmKeyEnabled, llmKeyEnvironment, and modelApiKeyEnv')
   }
   const origin = aicodeApiOrigin === '' ? undefined : new URL(aicodeApiOrigin)
-  const loopbackHttp = origin?.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname)
-  const secureHttps = origin?.protocol === 'https:' && origin.hostname !== ''
-  if (origin !== undefined && (!loopbackHttp && !secureHttps || origin.username !== '' || origin.password !== ''
+  const httpOrHttps = origin?.protocol === 'http:' || origin?.protocol === 'https:'
+  if (origin !== undefined && (!httpOrHttps || origin.username !== '' || origin.password !== ''
     || origin.pathname !== '/' || origin.search !== '' || origin.hash !== '')) {
-    throw new Error('config-env: plugins.dsh-pro-auth.aicodeApiOrigin must be an HTTPS origin or loopback HTTP origin')
+    throw new Error('config-env: plugins.dsh-pro-auth.aicodeApiOrigin must be an HTTP or HTTPS origin without credentials, path, query, or fragment')
   }
   if (autoLlmKeyEnabled && (origin === undefined || !/^[a-z][a-z0-9-]*$/u.test(llmKeyEnvironment)
     || llmKeyEnvironment !== environment || !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(modelApiKeyEnv))) {

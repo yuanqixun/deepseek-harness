@@ -161,6 +161,11 @@ describe('maintained repository reference policy', () => {
     expect(scanRepositoryReferences(fixture.root)).toEqual([])
   })
 
+  it('does not treat lockfile artifact sizes as abbreviated commit identifiers', () => {
+    const artifactSize = String(6_344_383)
+    expect(findRepositoryReferences('python/sdk/uv.lock', `size = ${artifactSize}`, new Set([artifactSize]))).toEqual([])
+  })
+
   it('excludes only ignored new files, vendored sources, frozen notes, and deleted files', (test) => {
     const fixture = repository(test)
     fixture.write('.gitignore', 'ignored.md\ntracked-ignore.md\n')

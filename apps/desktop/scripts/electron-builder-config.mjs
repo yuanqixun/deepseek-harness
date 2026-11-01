@@ -1,6 +1,6 @@
 import { readInstallerLocales, renderInstallerStrings } from './installer-locales.mjs'
 import { officePackageDirectories } from '../../../scripts/libreoffice-packages.mjs'
-import { X509Certificate } from 'node:crypto'
+import { createHash, X509Certificate } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
@@ -88,6 +88,8 @@ export function createElectronBuilderConfig(
   if (packagesMacOS && !withoutReleaseSigning && !skipNotarization) resolveMacOSNotarizationEnvironment(env)
   const target = resolveDesktopBuildTarget(env, hostPlatform, hostArch)
   const buildPaths = desktopTargetBuildPaths(target, env)
+  const windowsPythonInstaller = env.DSH_DESKTOP_PYTHON_INSTALLER
+    ?? fileURLToPath(new URL('../../../../offline/python-3.14.10-amd64.exe', import.meta.url))
   const branding = desktopBrandingFromEnvironment(env)
   const icons = resolveDesktopIconSet(fileURLToPath(new URL('../resources/brand-sets', import.meta.url)), branding.iconSet)
   let primaryRuntimeDestination
@@ -158,6 +160,11 @@ export function createElectronBuilderConfig(
         env: scrubWindowsSigningEnvironment(env), windowsHide: true,
       })
       await writeFile(join(buildPaths.root, 'installer-ui', 'strings.nsh'), renderInstallerStrings(readInstallerLocales()), 'utf8')
+      const pythonInstaller = readFileSync(windowsPythonInstaller)
+      const pythonInstallerHash = createHash('sha256').update(pythonInstaller).digest('hex').toUpperCase()
+      if (pythonInstallerHash !== '92480239264744FE0386A1BD8275786FEFA126E3129E56A68E22B52C73329965') {
+        throw new Error(`desktop package: Python 3.14.10 installer has unexpected SHA-256: ${pythonInstallerHash}`)
+      }
       if (windowsSigner !== undefined) {
         await windowsSigner({ path: join(buildPaths.root, 'installer-ui', 'window-frame.dll'), hash: 'sha256', isNest: false })
       }
@@ -186,6 +193,10 @@ export function createElectronBuilderConfig(
       { from: icons['icon-windows.png'], to: 'icon.png' },
       // Windows tray bitmaps; macOS keeps the Dock and ships no menu bar icon.
       ...(packagesWindows ? [{ from: icons['tray-windows.ico'], to: 'tray.ico' }] : []),
+      ...(packagesWindows ? [
+        { from: windowsPythonInstaller, to: 'python-installer.exe' },
+        { from: fileURLToPath(new URL('./python-runtime-installer.ps1', import.meta.url)), to: 'python-runtime-installer.ps1' },
+      ] : []),
     ],
     mac: {
       icon: icons['icon-macos.png'],

@@ -29,7 +29,7 @@ import { suggestDesktopBuildVersion } from './desktop-build-version-discovery.ts
 import { desktopBuildCommitEnvironment, readDesktopBuildCommit, resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { requireDesktopToolchain } from './desktop-toolchain-preflight.ts'
 import { withMacOSNotarizationProxy } from './macos-notarization-proxy.ts'
-import { packagePrivateMarket, resolvePrivateMarketSource, resolveProAuthSource } from './private-market-package.ts'
+import { packagePrivateMarket } from './private-market-package.ts'
 import { readDesktopRuntimeEnvironment, readPrivateMarketEnvironment } from '../../../scripts/config-environment.ts'
 import { readPrivateDesktopUpdates } from './private-desktop-update-environment.mjs'
 import { verifyPrivateDesktopUpdateArtifacts } from './private-desktop-update-artifacts.mjs'
@@ -463,18 +463,6 @@ async function main(): Promise<void> {
     if (configEnvironment !== undefined) {
       if (configuredPrivateMarket) {
         readPrivateMarketEnvironment(environment.DSH_CONFIG_ENV_DIR, configEnvironment)
-        const source = resolvePrivateMarketSource(REPOSITORY_ROOT, environment)
-        const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as { name?: unknown }
-        if (manifest.name !== '@deepseek-ai/dsh-private-market') throw new Error(`desktop package: invalid private market source ${source}`)
-      }
-    }
-    if (invocation.preinstallPrivatePlugins || selectedAuthProvider === 'dsh-pro-auth') {
-      for (const [source, packageName] of [
-        [resolvePrivateMarketSource(REPOSITORY_ROOT, environment), '@deepseek-ai/dsh-private-market'],
-        [resolveProAuthSource(REPOSITORY_ROOT, environment), 'dsh-pro-auth'],
-      ] as const) {
-        const manifest = JSON.parse(readFileSync(join(source, 'package.json'), 'utf8')) as { name?: unknown }
-        if (manifest.name !== packageName) throw new Error(`desktop package: invalid preinstalled plugin source ${source}`)
       }
     }
     await requireDesktopToolchain(target.platform, environment)
@@ -627,14 +615,11 @@ export async function packageTarget(
   await execute(['run', 'build:official'], buildEnv, REPOSITORY_ROOT)
   await execute(['run', 'release:pack', '--family', 'dsh', '--out', buildPaths.packedDsh, ...packArguments], buildEnv, REPOSITORY_ROOT)
   if (invocation.preinstallPrivatePlugins || configuredMarketEnvironment !== undefined || includeProAuth) {
-    const source = resolvePrivateMarketSource(REPOSITORY_ROOT, environment)
-    const authSource = resolveProAuthSource(REPOSITORY_ROOT, environment)
-    await execute(['run', 'build'], buildEnv, source)
-    if (includeProAuth) await execute(['run', 'build'], buildEnv, authSource)
     const marketRecord = await packagePrivateMarket({
       repositoryRoot: REPOSITORY_ROOT,
-      source,
-      ...(includeProAuth ? { authSource } : {}),
+      ...(environment.DSH_DESKTOP_PREINSTALLED_PLUGIN_REGISTRY === undefined
+        ? {} : { registryUrl: environment.DSH_DESKTOP_PREINSTALLED_PLUGIN_REGISTRY }),
+      includeProAuth: invocation.preinstallPrivatePlugins || includeProAuth,
       configRoot: environment.DSH_CONFIG_ENV_DIR,
       ...(configuredMarketEnvironment !== undefined
         ? { environment: configuredMarketEnvironment }

@@ -2,14 +2,17 @@
 
 import { createHash } from 'node:crypto'
 import { cpSync, existsSync, globSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { basename, join, resolve } from 'node:path'
+import { basename, join } from 'node:path'
 import { satisfies } from 'semver'
 import { readPrivateMarketEnvironment } from '../../../scripts/config-environment.ts'
 
 const PRIVATE_MARKET = '@deepseek-ai/dsh-private-market'
 const PRO_AUTH = 'dsh-pro-auth'
+const MINIMUM_PRO_AUTH_VERSION = '0.1.2'
 const DSH_CLI = '@deepseek-ai/dsh'
+const DEFAULT_PLUGIN_REGISTRY = 'https://hxflnexus.superbpm.com/repository/npm-group/'
 
 /** Immutable identity written to the Desktop packaging record. */
 export interface PrivateMarketPackageRecord {
@@ -79,6 +82,13 @@ export function assertPrivateMarketPeerCompatibility(
   }
 }
 
+/** Reject an auth bundle older than the Desktop Aicode Key integration. */
+function assertProAuthMinimumVersion(version: string): void {
+  if (!satisfies(version, `>=${MINIMUM_PRO_AUTH_VERSION}`)) {
+    throw new Error(`private plugin packaging: ${PRO_AUTH}@${version} is too old; HXFL Nexus must provide ${MINIMUM_PRO_AUTH_VERSION} or later`)
+  }
+}
+
 function workspaceVersions(repositoryRoot: string): Map<string, string> {
   const versions = new Map<string, string>()
   for (const path of globSync(['packages/*/*/package.json', 'vendor/*/package.json', 'native/*/package.json', 'apps/*/package.json'], { cwd: repositoryRoot })) {
@@ -105,29 +115,16 @@ function oneTarball(directory: string): string {
  */
 export async function packagePrivateMarket(options: {
   readonly repositoryRoot: string
-  readonly source: string
-  readonly authSource?: string
+  readonly registryUrl?: string
+  readonly includeProAuth?: boolean
   readonly configRoot: string | undefined
   readonly environment?: string
   readonly output: string
   readonly runPnpm: (args: readonly string[], cwd: string) => Promise<void>
 }): Promise<PrivateMarketPackageRecord> {
-  const { repositoryRoot, source, output, environment } = options
+  const { repositoryRoot, output, environment } = options
   const settings = environment === undefined ? undefined : readPrivateMarketEnvironment(options.configRoot, environment)
-  const pluginManifestPath = join(source, 'package.json')
-  const pluginManifest = JSON.parse(readFileSync(pluginManifestPath, 'utf8')) as Record<string, unknown>
-  if (pluginManifest.name !== PRIVATE_MARKET || typeof pluginManifest.version !== 'string') {
-    throw new Error(`private market packaging: invalid plugin package at ${source}`)
-  }
-  const declaration = typeof pluginManifest.dsh === 'object' && pluginManifest.dsh !== null
-    ? pluginManifest.dsh as Record<string, unknown> : {}
-  const bundle = typeof declaration.bundle === 'object' && declaration.bundle !== null
-    ? declaration.bundle as Record<string, unknown> : {}
-  const client = typeof declaration.client === 'object' && declaration.client !== null
-    ? declaration.client as Record<string, unknown> : {}
-  if (bundle.patch !== './cordis.patch.yml' || client.platform !== 'web') {
-    throw new Error(`private market packaging: ${source} must declare its bundle patch and Web Client`)
-  }
+  const registryUrl = options.registryUrl ?? settings?.registryUrl ?? DEFAULT_PLUGIN_REGISTRY
   const cliManifestPath = join(repositoryRoot, 'apps/cli/package.json')
   const cliManifest = JSON.parse(readFileSync(cliManifestPath, 'utf8')) as Record<string, unknown>
   if (cliManifest.name !== DSH_CLI) throw new Error('private market packaging: unexpected DSH CLI package')
@@ -135,6 +132,7 @@ export async function packagePrivateMarket(options: {
   const stage = mkdtempSync(join(tmpdir(), 'dsh-private-market-pack-'))
   const pluginStage = join(stage, 'plugin')
   const cliStage = join(stage, 'cli')
+  const marketDownload = join(stage, 'market-download')
   const pluginOutput = join(stage, 'plugin-output')
   const authStage = join(stage, 'pro-auth')
   const authOutput = join(stage, 'pro-auth-output')
@@ -143,16 +141,18 @@ export async function packagePrivateMarket(options: {
   mkdirSync(authOutput)
   mkdirSync(cliOutput)
   try {
-    const excludedPackagePath = /(?:^|[/\\])(?:\.git|node_modules|src|tests|scripts|openspec|\.agents)(?:[/\\]|$)/u
-    cpSync(source, pluginStage, {
-      recursive: true,
-      filter: path => !excludedPackagePath.test(path),
-    })
+    const market = await downloadRegistryPackage(PRIVATE_MARKET, registryUrl, marketDownload)
+    extractPackage(market.tarball, pluginStage)
+    const pluginManifest = readPackageManifest(pluginStage, PRIVATE_MARKET)
     const versions = workspaceVersions(repositoryRoot)
-    const standalonePluginManifest = JSON.parse(readFileSync(pluginManifestPath, 'utf8')) as Record<string, unknown>
-    assertPrivateMarketPeerCompatibility(standalonePluginManifest, versions)
-    resolveWorkspaceRanges(standalonePluginManifest, versions)
-    writeFileSync(join(pluginStage, 'package.json'), `${JSON.stringify(standalonePluginManifest, null, 2)}\n`)
+    assertPrivateMarketPeerCompatibility(pluginManifest, versions)
+    const declaration = typeof pluginManifest.dsh === 'object' && pluginManifest.dsh !== null
+      ? pluginManifest.dsh as Record<string, unknown> : {}
+    const bundle = typeof declaration.bundle === 'object' && declaration.bundle !== null ? declaration.bundle as Record<string, unknown> : {}
+    const client = typeof declaration.client === 'object' && declaration.client !== null ? declaration.client as Record<string, unknown> : {}
+    if (bundle.patch !== './cordis.patch.yml' || client.platform !== 'web') {
+      throw new Error(`private market packaging: published ${PRIVATE_MARKET}@${market.version} has an unsupported bundle declaration`)
+    }
     const patch = settings === undefined
       ? [{ insert: [{ id: 'private-market', name: PRIVATE_MARKET, config: { catalogUrl: '', catalogCredentialRef: '' } }] }]
       : [
@@ -163,22 +163,32 @@ export async function packagePrivateMarket(options: {
           catalogCredentialRef: settings.catalogCredentialRef ?? '',
         } }] },
       ]
-    writeFileSync(join(pluginStage, 'cordis.patch.yml'), `${JSON.stringify(patch, null, 2)}\n`)
     const requiredOutputs = ['lib/index.js', 'lib/client.js', 'lib/typert.host.js', 'lib/typert.remote-client.js']
     const missingOutput = requiredOutputs.find(file => !existsSync(join(pluginStage, file)))
     if (missingOutput !== undefined) {
       throw new Error(`private market packaging: required Host, Remote, or Client output is missing: ${missingOutput}`)
     }
+    writeFileSync(join(pluginStage, 'cordis.patch.yml'), `${JSON.stringify(patch, null, 2)}\n`)
     await options.runPnpm(['pack', '--pack-destination', pluginOutput], pluginStage)
-    const pluginTarball = oneTarball(pluginOutput)
+    const pluginTarball = readdirSync(pluginOutput).filter(file => file.endsWith('.tgz')).map(file => join(pluginOutput, file)).find(file => file !== market.tarball)
+    if (pluginTarball === undefined) throw new Error('private market packaging: customized registry package tarball was not created')
 
-    const proAuthRecord = options.authSource === undefined
-      ? undefined
-      : await packProAuth(options.authSource, authStage, authOutput, versions, options.runPnpm)
+    const proAuthRecord = options.includeProAuth
+      ? await downloadRegistryPackage(PRO_AUTH, registryUrl, authOutput)
+      : undefined
+    if (proAuthRecord !== undefined) {
+      assertProAuthMinimumVersion(proAuthRecord.version)
+      extractPackage(proAuthRecord.tarball, authStage)
+      const authManifest = readPackageManifest(authStage, PRO_AUTH)
+      assertPrivateMarketPeerCompatibility(authManifest, versions)
+      const authRequired = ['lib/index.js', 'lib/client.js', 'cordis.patch.yml']
+      const missingAuthOutput = authRequired.find(file => !existsSync(join(authStage, file)))
+      if (missingAuthOutput !== undefined) throw new Error(`private plugin packaging: published ${PRO_AUTH}@${proAuthRecord.version} omits ${missingAuthOutput}`)
+    }
 
     mkdirSync(cliStage)
     cpSync(join(repositoryRoot, 'apps/cli/lib'), join(cliStage, 'lib'), { recursive: true })
-    const manifest = privateMarketCliManifest(cliManifest, versions, pluginManifest.version,
+    const manifest = privateMarketCliManifest(cliManifest, versions, market.version,
       proAuthRecord === undefined ? [] : [{ name: PRO_AUTH, version: proAuthRecord.version }])
     writeFileSync(join(cliStage, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
     await options.runPnpm(['pack', '--pack-destination', cliOutput], cliStage)
@@ -200,10 +210,10 @@ export async function packagePrivateMarket(options: {
       ...(environment === undefined ? {} : { environment }),
       ...(settings === undefined ? {} : { configDigest: settings.digest }),
       package: PRIVATE_MARKET,
-      version: pluginManifest.version,
+      version: market.version,
       integrity: packageIntegrity(pluginDestination),
       preinstalledPlugins: [
-        { package: PRIVATE_MARKET, version: pluginManifest.version, integrity: packageIntegrity(pluginDestination) },
+        { package: PRIVATE_MARKET, version: market.version, integrity: packageIntegrity(pluginDestination) },
         ...(proAuthRecord === undefined ? [] : [
           { package: PRO_AUTH, version: proAuthRecord.version, integrity: packageIntegrity(join(output, basename(proAuthRecord.tarball))) },
         ]),
@@ -216,40 +226,59 @@ export async function packagePrivateMarket(options: {
   }
 }
 
-async function packProAuth(
-  source: string,
-  stage: string,
-  output: string,
-  versions: ReadonlyMap<string, string>,
-  runPnpm: (args: readonly string[], cwd: string) => Promise<void>,
-): Promise<{ readonly tarball: string; readonly version: string }> {
-  const manifestPath = join(source, 'package.json')
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>
-  if (manifest.name !== PRO_AUTH || typeof manifest.version !== 'string') {
-    throw new Error(`private plugin packaging: invalid ${PRO_AUTH} package at ${source}`)
+interface RegistryPackage { readonly tarball: string; readonly version: string; readonly integrity: string }
+
+async function downloadRegistryPackage(name: string, registry: string, output: string): Promise<RegistryPackage> {
+  const metadataName = name.startsWith('@') ? name.replace('/', '%2f') : name
+  const metadataUrl = new URL(metadataName, registry.endsWith('/') ? registry : `${registry}/`)
+  const metadataResponse = await fetch(metadataUrl)
+  if (!metadataResponse.ok) throw new Error(`private plugin packaging: registry metadata request failed for ${name} (${metadataResponse.status})`)
+  const metadata: unknown = await metadataResponse.json()
+  if (!isRecord(metadata) || metadata.name !== name || !isRecord(metadata['dist-tags'])) {
+    throw new Error(`private plugin packaging: invalid registry metadata for ${name}`)
   }
-  const declaration = typeof manifest.dsh === 'object' && manifest.dsh !== null ? manifest.dsh as Record<string, unknown> : {}
-  const bundle = typeof declaration.bundle === 'object' && declaration.bundle !== null ? declaration.bundle as Record<string, unknown> : {}
-  if (bundle.patch !== './cordis.patch.yml') throw new Error(`private plugin packaging: ${source} must declare its bundle patch`)
-  const excludedPackagePath = /(?:^|[/\\])(?:\.git|node_modules|src|tests|scripts|openspec|\.agents)(?:[/\\]|$)/u
-  cpSync(source, stage, { recursive: true, filter: path => !excludedPackagePath.test(path) })
-  const standalone = structuredClone(manifest)
-  assertPrivateMarketPeerCompatibility(standalone, versions)
-  resolveWorkspaceRanges(standalone, versions)
-  writeFileSync(join(stage, 'package.json'), `${JSON.stringify(standalone, null, 2)}\n`)
-  const required = ['lib/index.js', 'lib/client.js', 'cordis.patch.yml']
-  const missing = required.find(file => !existsSync(join(stage, file)))
-  if (missing !== undefined) throw new Error(`private plugin packaging: required ${PRO_AUTH} output is missing: ${missing}`)
-  await runPnpm(['pack', '--pack-destination', output], stage)
-  return { tarball: oneTarball(output), version: manifest.version }
+  const version = metadata['dist-tags'].latest
+  if (typeof version !== 'string' || !isRecord(metadata.versions) || !isRecord(metadata.versions[version])) {
+    throw new Error(`private plugin packaging: registry has no latest version for ${name}`)
+  }
+  const publishedVersion = metadata.versions[version]
+  if (!isRecord(publishedVersion)) throw new Error(`private plugin packaging: invalid registry version metadata for ${name}@${version}`)
+  const dist = publishedVersion.dist
+  if (!isRecord(dist) || typeof dist.tarball !== 'string' || typeof dist.integrity !== 'string') {
+    throw new Error(`private plugin packaging: registry metadata has no integrity for ${name}@${version}`)
+  }
+  const response = await fetch(dist.tarball)
+  if (!response.ok) throw new Error(`private plugin packaging: package download failed for ${name}@${version} (${response.status})`)
+  const bytes = Buffer.from(await response.arrayBuffer())
+  const actualIntegrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`
+  if (actualIntegrity !== dist.integrity) throw new Error(`private plugin packaging: integrity mismatch for ${name}@${version}`)
+  mkdirSync(output, { recursive: true })
+  const tarball = join(output, `${name.replace('@', '').replace('/', '-')}-${version}.tgz`)
+  writeFileSync(tarball, bytes, { flag: 'wx' })
+  return { tarball, version, integrity: actualIntegrity }
 }
 
-/** Resolve the local sibling checkout or explicit build override. */
-export function resolvePrivateMarketSource(repositoryRoot: string, environment: NodeJS.ProcessEnv): string {
-  return resolve(environment.DSH_PRIVATE_MARKET_SOURCE ?? join(repositoryRoot, '..', 'deepseek-harness-plugins', 'dsh-private-market'))
+function extractPackage(tarball: string, destination: string): void {
+  mkdirSync(destination, { recursive: true })
+  execFileSync('tar', ['-xzf', tarball, '-C', destination], { stdio: 'inherit' })
+  const packageRoot = join(destination, 'package')
+  if (!existsSync(join(packageRoot, 'package.json'))) throw new Error(`private plugin packaging: invalid package archive ${tarball}`)
+  const extracted = join(destination, 'extracted')
+  cpSync(packageRoot, extracted, { recursive: true })
+  rmSync(packageRoot, { recursive: true, force: true })
+  // Keep the caller's staging directory as the package root expected by pnpm pack.
+  for (const entry of readdirSync(extracted)) cpSync(join(extracted, entry), join(destination, entry), { recursive: true })
+  rmSync(extracted, { recursive: true, force: true })
 }
 
-/** Resolve the sibling source for the Desktop CAS login bundle. */
-export function resolveProAuthSource(repositoryRoot: string, environment: NodeJS.ProcessEnv): string {
-  return resolve(environment.DSH_PRO_AUTH_SOURCE ?? join(repositoryRoot, '..', 'deepseek-harness-plugins', 'dsh-pro-auth'))
+function readPackageManifest(directory: string, expectedName: string): Record<string, unknown> {
+  const manifest = JSON.parse(readFileSync(join(directory, 'package.json'), 'utf8')) as Record<string, unknown>
+  if (manifest.name !== expectedName || typeof manifest.version !== 'string') {
+    throw new Error(`private plugin packaging: invalid published package ${expectedName}`)
+  }
+  return manifest
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

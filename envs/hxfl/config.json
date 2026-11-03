@@ -3,20 +3,42 @@
   "environment": "hxfl",
   "plugins": {
     "privateMarket": {
-      "catalogUrl": "https://dsh-market.hxfl.com.cn/app-api/v1/plugins",
+      "catalogUrl": "https://dshwork.hxfl.com.cn/app-api/v1/plugins",
+      "tenantId": "1",
       "registryUrl": "https://repo.hxfl.com.cn/repository/npm/"
+    },
+    "dsh-pro-auth": {
+      "aicodeApiOrigin": "https://dshwork.hxfl.com.cn",
+      "autoLlmKeyEnabled": true,
+      "llmKeyEnvironment": "hxfl",
+      "modelApiKeyEnv": "hxfl"
+    }
+  },
+  "llm-pi-ai": {
+    "providers": {
+      "local": {
+        "displayName": "hxfl",
+        "apiKeyEnv": "hxfl",
+        "api": "openai-completions",
+        "baseURL": "https://aigw.hxfl.com.cn/v1",
+        "models": [
+          { "id": "hxfl-lite" },
+          { "id": "hxfl-pro" }
+        ]
+      }
     }
   },
   "desktop": {
+    "authProvider": "dsh-pro-auth",
     "branding": {
       "displayName": "金租办公",
       "iconSet": "hxfl"
     },
     "updates": {
       "distribution": "dshwork",
-      "checkUrl": "https://dsh-market.hxfl.com.cn/app-api/v1/desktop/updates/check",
+      "checkUrl": "https://dshwork.hxfl.com.cn/app-api/v1/desktop/updates/check",
       "channel": "stable",
-      "feedOrigins": ["https://dsh-market.hxfl.com.cn"]
+      "feedOrigins": ["https://dshwork.hxfl.com.cn"]
     }
   }
 }

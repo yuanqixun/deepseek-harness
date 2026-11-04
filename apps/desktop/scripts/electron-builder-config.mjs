@@ -20,7 +20,7 @@ import {
   resolveWindowsUpdatePublisher,
   scrubWindowsSigningEnvironment,
 } from './windows-sign.mjs'
-import { resolveDesktopAutoUpdateConfig } from './desktop-auto-update-environment.mjs'
+import { resolveDesktopAutoUpdateConfig, resolveDesktopUpdateChannel } from './desktop-auto-update-environment.mjs'
 import { resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { resolveDesktopBuildVersion } from './desktop-build-version.mjs'
 import { resolveDesktopPolicyEnvironment } from './desktop-policy-environment.mjs'
@@ -82,6 +82,20 @@ export function createElectronBuilderConfig(
   if (skipNotarization && (withoutReleaseSigning || resolvedPlatform !== 'darwin')) throw new Error('Skipping notarization requires a signed macOS build')
   const packagesMacOS = targetPlatform === 'darwin' || (targetPlatform === undefined && hostPlatform === 'darwin')
   const packagesWindows = resolvedPlatform === 'win32'
+  let privateUpdateConfig
+  if (env.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG !== undefined) {
+    try { privateUpdateConfig = JSON.parse(env.DSH_DESKTOP_PRIVATE_UPDATE_CONFIG) }
+    catch (error) { throw new Error('desktop package: invalid DSH_DESKTOP_PRIVATE_UPDATE_CONFIG', { cause: error }) }
+    if (typeof privateUpdateConfig !== 'object' || privateUpdateConfig === null || Array.isArray(privateUpdateConfig)
+      || !Array.isArray(privateUpdateConfig.feedOrigins) || privateUpdateConfig.feedOrigins.length === 0
+      || privateUpdateConfig.feedOrigins.some(origin => typeof origin !== 'string' || origin.length === 0)) {
+      throw new Error('desktop package: DSH_DESKTOP_PRIVATE_UPDATE_CONFIG must include non-empty feedOrigins')
+    }
+    if (!((resolvedPlatform === 'darwin' && resolvedArch === 'arm64')
+      || (resolvedPlatform === 'win32' && resolvedArch === 'x64'))) {
+      throw new Error('desktop package: private desktop updates require win-x64 or darwin-arm64')
+    }
+  }
   const policy = packagesMacOS && withoutReleaseSigning ? undefined : resolveDesktopPolicyEnvironment(env)
   if (resolvedPlatform === 'win32') installWindowsDirectoryInstaller()
   const macOSSigning = packagesMacOS && !withoutReleaseSigning ? resolveMacOSSigningEnvironment(env) : undefined
@@ -116,7 +130,9 @@ export function createElectronBuilderConfig(
   if (windowsSigner !== undefined) {
     installWindowsNsisBootstrapSigner({ sign: windowsSigner })
   }
-  const update = withoutReleaseSigning ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
+  const update = withoutReleaseSigning ? undefined : privateUpdateConfig === undefined
+    ? resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
+    : { publicUrl: privateUpdateConfig.feedOrigins[0], channel: resolveDesktopUpdateChannel(env) }
   if (preparedRuntime !== undefined) buildPaths.dsh = preparedRuntime
   // electron-builder merges extraMetadata into the packaged manifest, so a build version here reaches
   // the artifact names, the update feed, and the installed app.getVersion() the updater compares against.
@@ -139,6 +155,7 @@ export function createElectronBuilderConfig(
       dshDesktopBranding: branding,
       dshDesktopAuthProvider: env.DSH_DESKTOP_AUTH_PROVIDER ?? 'deepseek-official',
       ...(desktopRuntimeConfig === undefined ? {} : { dshDesktopRuntimeConfig: desktopRuntimeConfig }),
+      ...(privateUpdateConfig === undefined ? {} : { dshPrivateDesktopUpdates: privateUpdateConfig }),
       ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
       ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },

@@ -283,7 +283,7 @@ pnpm run package:desktop
 
 ### 按环境配置品牌
 
-所选 `config.json` 可在 `desktop.branding` 下设置 `displayName`、`iconSet` 和可选的 `artifactNameBase`。`local` 和 `hxfl` 环境会在应用和侧栏品牌名称中显示“金租办公”，并使用 `hxfl` 图标；未设置这些值的环境继续使用 DSH 默认值。空值按未配置处理。设置 `displayName` 后若省略 `artifactNameBase`，安装文件名基础名称也使用显示名称；如果发布文件名需要 ASCII 前缀，可单独设置 `artifactNameBase`。使用 `--config-env hxfl` 选择 `hxfl` 环境打包。
+所选 `config.json` 可在 `desktop.branding` 下设置 `displayName`、`iconSet` 和可选的 `artifactNameBase`。`local` 和 `hxfl` 环境会在应用和侧栏品牌名称中显示“金租办公”，并使用 `hxfl` 图标；`superbpm` 使用“信舟办公”和 `superbpm` 图标。未设置这些值的环境继续使用 DSH 默认值。空值按未配置处理。设置 `displayName` 后若省略 `artifactNameBase`，安装文件名基础名称也使用显示名称；如果发布文件名需要 ASCII 前缀，可单独设置 `artifactNameBase`。使用 `--config-env <name>` 选择对应环境打包。
 
 ```json
 "desktop": {

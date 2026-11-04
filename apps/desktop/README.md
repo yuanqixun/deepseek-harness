@@ -283,7 +283,7 @@ pnpm run package:desktop
 
 ### Environment branding
 
-The selected `config.json` may set `desktop.branding.displayName`, `iconSet`, and the optional `artifactNameBase`. The `local` and `hxfl` environments use “金租办公” in the application and sidebar brand name, with the `hxfl` artwork; environments without these values keep the DSH defaults. An empty value is treated as unconfigured. When `displayName` is set and `artifactNameBase` is omitted, the display name also becomes the installer filename base; set `artifactNameBase` separately when release filenames need an ASCII prefix. Select `hxfl` with `--config-env hxfl` to package its environment-specific configuration.
+The selected `config.json` may set `desktop.branding.displayName`, `iconSet`, and the optional `artifactNameBase`. The `local` and `hxfl` environments use “金租办公” in the application and sidebar brand name, with the `hxfl` artwork; `superbpm` uses “信舟办公” with the `superbpm` artwork. Environments without these values keep the DSH defaults. An empty value is treated as unconfigured. When `displayName` is set and `artifactNameBase` is omitted, the display name also becomes the installer filename base; set `artifactNameBase` separately when release filenames need an ASCII prefix. Select an environment with `--config-env <name>` to package its configuration.
 
 ```json
 "desktop": {

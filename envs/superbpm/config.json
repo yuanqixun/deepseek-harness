@@ -32,7 +32,7 @@
     "authProvider": "dsh-pro-auth",
     "branding": {
       "displayName": "信舟办公",
-      "iconSet": "hxfl"
+      "iconSet": "superbpm"
     },
     "updates": {
       "distribution": "dshwork",

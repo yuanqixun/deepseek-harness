@@ -6,21 +6,18 @@
  * `.YYYYMMDD.run.attempt`; these identify unpublished builds, not release sequences.
  *
  * A production release publishes the Desktop package version. The bundled dsh
- * runtime keeps the root package version and is recorded separately. A test
- * build appends a date and sequence number, so one test feed can carry several
- * builds of one Desktop version. For example, `0.1.6-alpha.1.20260916.1`
- * extends a prerelease base and `0.1.6-test.20260916.1` extends a stable one,
- * as the release versions table in `apps/desktop/README.md` shows. Passing the
- * build version here keeps it out of the manifests, so the tracked version stays the Desktop product's while
- * the build version reaches electron-builder, the update feed, and upload
- * validation as one input.
+ * runtime keeps the root package version and is recorded separately. Automatic
+ * test builds append a date and sequence number, using `test` after a stable
+ * base. A manual build version may use any SemVer prerelease identifier while
+ * retaining the same product version. Passing the build version here keeps it
+ * out of tracked manifests while sending it to electron-builder, the update
+ * feed, and upload validation.
  *
  * `electron-updater` compares feed versions with `semver.gt` against the
  * installed `app.getVersion()`, so validation uses the same library. Sequence
- * numbers order builds within a feed under either form. The forms differ only
- * against the base itself: builds extending a prerelease outrank it, while
- * `0.1.6-test.1` ranks below `0.1.6`, which is why the stable form belongs to a
- * test feed that never serves the production release.
+ * numbers order builds when preceding prerelease identifiers remain the same.
+ * Any prerelease version ranks below its stable base, and its identifiers
+ * participate in updater ordering independently of the update channel.
  */
 
 import { parse } from 'semver'
@@ -28,7 +25,7 @@ import { parse } from 'semver'
 /** Environment variable that carries the build version through one packaging and upload run. */
 export const DESKTOP_BUILD_VERSION_ENV = 'DSH_DESKTOP_BUILD_VERSION'
 
-/** Prerelease field that opens a test build's suffix on a stable product version. */
+/** Default prerelease field used when numbering test builds from a stable product version. */
 const STABLE_TEST_FIELD = 'test'
 
 /**
@@ -48,9 +45,9 @@ function parseVersion(version, label) {
 }
 
 /**
- * The prerelease fields every build version for one product version starts with.
+ * The prerelease fields automatic build versions start with for one product version.
  * @param {import('semver').SemVer} product - Parsed product version.
- * @returns {readonly (string | number)[]} Fields a build version must repeat before its date.
+ * @returns {readonly (string | number)[]} Fields automatic build versions repeat before their date.
  */
 function requiredFields(product) {
   return product.prerelease.length === 0 ? [STABLE_TEST_FIELD] : product.prerelease
@@ -69,13 +66,13 @@ export function validateDesktopBuildVersion(buildVersion, productVersion) {
   if (build.compareMain(product) !== 0) {
     throw new Error(`desktop build version: ${buildVersion} must extend product version ${productVersion}`)
   }
-  const required = requiredFields(product)
+  const required = product.prerelease
   const extendsProduct = build.prerelease.length > required.length
     && required.every((field, index) => build.prerelease[index] === field)
   if (!extendsProduct) {
-    throw new Error(`desktop build version: ${buildVersion} must extend ${productVersion} as ${
-      desktopBuildVersionPrefix(productVersion)}<date>.<sequence> or ${
-      desktopBuildVersionPrefix(productVersion)}<date>.<run>.<attempt>`)
+    throw new Error(
+      `desktop build version: ${buildVersion} must extend product version ${productVersion} with a SemVer prerelease identifier`,
+    )
   }
   return build.version
 }

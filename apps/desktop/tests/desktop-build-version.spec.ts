@@ -21,9 +21,15 @@ describe('desktop build version', () => {
       expect(validateDesktopBuildVersion(buildVersion, PRERELEASE)).toBe(buildVersion)
     })
 
-  it('accepts the documented test form on a stable base', () => {
-    // 0.1.6-test.x ranks below 0.1.6, which is why this form only ever reaches a test feed.
-    expect(validateDesktopBuildVersion('0.1.6-test.20260921.1', STABLE)).toBe('0.1.6-test.20260921.1')
+  it.each([
+    '0.1.6-test.20260921.1',
+    '0.1.6-hxfl.20260921.1',
+    '0.1.6-superbpm.20260921.1',
+    '0.1.6-local.20260921.1',
+    '0.1.6-prod.20260921.1',
+  ])('accepts %s as a labeled build on a stable base', (buildVersion) => {
+    // Any prerelease ranks below the stable base; the channel is configured separately.
+    expect(validateDesktopBuildVersion(buildVersion, STABLE)).toBe(buildVersion)
   })
 
   it.each([PRERELEASE, STABLE])('accepts %s, the product version itself', (productVersion) => {
@@ -50,13 +56,20 @@ describe('desktop build version', () => {
 
   it.each(['0.1.6-beta.2.20260921.1', '0.1.6-alpha.3', '0.1.6'])(
     'rejects %s because it does not extend the product prerelease', (buildVersion) => {
-      expect(() => validateDesktopBuildVersion(buildVersion, PRERELEASE)).toThrow(/must extend 0\.1\.6-alpha\.2 as/u)
+      expect(() => validateDesktopBuildVersion(buildVersion, PRERELEASE)).toThrow(/must extend product version/u)
     })
 
-  it.each(['0.1.6-20260921.1', '0.1.6-nightly.20260921.1'])(
-    'rejects %s on a stable base, which the test form has to open', (buildVersion) => {
-      expect(() => validateDesktopBuildVersion(buildVersion, STABLE)).toThrow(/must extend 0\.1\.6 as 0\.1\.6-test\./u)
-    })
+  it('rejects the stable base without a prerelease identifier as a build version', () => {
+    expect(() => validateDesktopBuildVersion(STABLE, '0.1.6-rc.1')).toThrow(/must extend product version/u)
+  })
+
+  it('keeps requiring a build identifier to extend the product prerelease', () => {
+    expect(() => validateDesktopBuildVersion('0.1.6-beta.2', PRERELEASE)).toThrow(/must extend product version/u)
+  })
+
+  it('rejects build versions that change the product prerelease family', () => {
+    expect(() => validateDesktopBuildVersion('0.1.6-beta.2.20260921.1', PRERELEASE)).toThrow(/must extend product version/u)
+  })
 
   it.each([[PRERELEASE, '0.1.6-alpha.2.'], [STABLE, '0.1.6-test.']])(
     'opens %s build versions with %s', (productVersion, prefix) => {

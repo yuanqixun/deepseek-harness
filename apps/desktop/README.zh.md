@@ -242,7 +242,7 @@ Desktop 在 Host 启动后、打开工作区前检查模型 API Key 引用是否
 
 每次 Desktop 打包前，第一步都要与当前用户确认完整 Desktop 版本号。检查所选部署环境、`apps/desktop/package.json` 版本、保留的 Desktop 发布记录和已发布对象，再提出准确版本供用户确认。用户确认前不得启动打包；仅选择部署环境不代表用户已认可版本号。内置 dsh 版本与 Desktop 版本分别记录。
 
-Desktop 包版本作为 production 发布基础版本。test 发布保留其完整的预发布基础版本并追加 `.YYYYMMDD.index`；稳定基础版本则追加 `-test.YYYYMMDD.index`。修改 `apps/desktop/package.json` 不会改变根 dsh 版本或内置运行时。
+Desktop 包版本作为 production 发布基础版本。自动编号的 test 版本保留其完整预发布基础版本并追加 `.YYYYMMDD.index`；稳定基础版本默认追加 `-test.YYYYMMDD.index`。手动指定的构建版本可以使用任意符合 SemVer 的预发布标识替代 `test`；该标识属于应用安装版本并参与 SemVer 更新排序，更新通道仍单独配置。修改 `apps/desktop/package.json` 不会改变根 dsh 版本或内置运行时。
 
 | Desktop 基础版本 | production Desktop | test Desktop 示例 |
 |---|---|---|

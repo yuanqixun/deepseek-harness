@@ -40,7 +40,7 @@ description: "在本地或 Windows／macOS Actions 中生成 Desktop 安装包�
 
 每次 Desktop 打包前，第一步都要与当前用户确认完整版本号。检查所选部署环境、dsh 基础版本、保留的发布记录和已发布对象，再提出准确版本供用户确认。用户确认前不得启动打包；仅选择部署环境不代表用户已认可版本号。
 
-记录当前 dsh 版本作为基础版本。production Desktop 使用完全相同的版本，包括其中的 `alpha`、`beta` 或 `rc` 标识。test 发布保留完整的预发布基础版本并追加 `.YYYYMMDD.index`；稳定基础版本则追加 `-test.YYYYMMDD.index`。
+记录当前 Desktop 版本作为基础版本。production Desktop 使用完全相同的版本，包括其中的 `alpha`、`beta` 或 `rc` 标识。自动编号的 test 版本保留完整的预发布基础版本并追加 `.YYYYMMDD.index`；稳定基础版本默认追加 `-test.YYYYMMDD.index`。手动指定 `--build-version` 时，可以用任意符合 SemVer 的预发布标识替代 `test`，例如 `1.0.1-hxfl.20261101.2`、`1.0.1-superbpm.20261101.2`、`1.0.1-local.20261101.2` 或 `1.0.1-prod.20261101.2`。完整版本仍须符合 SemVer 并扩展所选产品版本；预发布标识属于应用安装版本并参与 SemVer 更新排序，更新通道仍单独配置。
 
 | dsh 基础版本 | production Desktop | test Desktop 示例 |
 |---|---|---|

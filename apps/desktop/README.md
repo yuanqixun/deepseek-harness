@@ -242,7 +242,7 @@ The welcome window follows system appearance with the design’s Platform light/
 
 Before each Desktop packaging run, first confirm the complete Desktop version string with the current user. Check the selected deployment, `apps/desktop/package.json` version, retained Desktop release records, and published objects, then propose the exact version for approval. Do not start packaging until the user confirms that version; the deployment setting alone does not authorize a version choice. Record the bundled dsh version separately from the Desktop version.
 
-The Desktop package version is the production release base. A test release preserves its complete prerelease base and appends `.YYYYMMDD.index`; a stable base uses `-test.YYYYMMDD.index` instead. Updating `apps/desktop/package.json` does not change the root dsh version or the bundled runtime.
+The Desktop package version is the production release base. A test release preserves its complete prerelease base and appends `.YYYYMMDD.index`; a stable base uses `-test.YYYYMMDD.index` by default. Manual build versions may use any SemVer prerelease identifier in place of `test`; the identifier is part of the installed app version and affects SemVer update ordering, while the update channel remains configured separately. Updating `apps/desktop/package.json` does not change the root dsh version or the bundled runtime.
 
 | Desktop base | Production Desktop | Test Desktop example |
 |---|---|---|

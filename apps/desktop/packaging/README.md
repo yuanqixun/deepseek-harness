@@ -40,7 +40,7 @@ Set `DSH_DESKTOP_PACKAGE_CACHE_DIR` to an absolute build-cache directory for reu
 
 Before each Desktop packaging run, first confirm the complete version string with the current user. Check the selected deployment, dsh base version, retained release records, and published objects, then propose the exact version for approval. Do not start packaging until the user confirms that version; the deployment setting alone does not authorize a version choice.
 
-Record the current dsh version as the base. A production Desktop release uses that exact version, including any `alpha`, `beta`, or `rc` identifiers. A test release preserves the complete prerelease base and appends `.YYYYMMDD.index`; a stable base uses `-test.YYYYMMDD.index` instead.
+Record the current Desktop version as the base. A production Desktop release uses that exact version, including any `alpha`, `beta`, or `rc` identifiers. Automatically numbered test versions preserve the complete prerelease base and append `.YYYYMMDD.index`; for a stable base, automatic numbering uses `-test.YYYYMMDD.index`. A manually supplied `--build-version` may use any SemVer prerelease identifier in place of `test`, such as `1.0.1-hxfl.20261101.2`, `1.0.1-superbpm.20261101.2`, `1.0.1-local.20261101.2`, or `1.0.1-prod.20261101.2`. The full version must remain valid SemVer and extend the selected product version; its prerelease identifier is part of the installed app version and affects SemVer update ordering, while the update channel is configured separately.
 
 | dsh base | Production Desktop | Test Desktop example |
 |---|---|---|

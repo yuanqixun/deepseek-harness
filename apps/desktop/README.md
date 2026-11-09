@@ -255,7 +255,7 @@ Use the actual creation date in Asia/Shanghai. For each base and date, start the
 
 Manual Windows CI uses a separate unpublished Desktop build identifier: `auto` appends the UTC date, workflow run number and attempt (`.YYYYMMDD.run.attempt`, with `-test` for a stable base). For example, `1.0.2.20261008.42.2`. These numbers are not reserved release sequence numbers.
 
-Pass the confirmed version to the packaging command as `--build-version`, which reaches the artifact names, the update feed, and the upload validation as one value. The manifests keep the product version, so a test build no longer rewrites the release family and leaves nothing to revert:
+Pass the confirmed version to the packaging command as `--build-version`, which reaches the artifact names, the update feed, and the upload validation as one value. A stable product accepts any prerelease identifier followed by a date and sequence, such as `1.0.1-hxfl.20261104.1`; automatic test builds continue to use `test`. The manifests keep the product version, so a test build no longer rewrites the release family and leaves nothing to revert:
 
 ```sh
 pnpm --dir apps/desktop run package:win:x64 --build-version 0.1.6-alpha.1.20260916.1

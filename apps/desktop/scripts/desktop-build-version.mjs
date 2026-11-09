@@ -19,8 +19,8 @@
  * installed `app.getVersion()`, so validation uses the same library. Sequence
  * numbers order builds within a feed under either form. The forms differ only
  * against the base itself: builds extending a prerelease outrank it, while
- * `0.1.6-test.1` ranks below `0.1.6`, which is why the stable form belongs to a
- * test feed that never serves the production release.
+ * prerelease builds of stable products rank below the stable version, so their
+ * suffix is intended for feeds that do not serve the production release.
  */
 
 import { parse } from 'semver'
@@ -28,7 +28,7 @@ import { parse } from 'semver'
 /** Environment variable that carries the build version through one packaging and upload run. */
 export const DESKTOP_BUILD_VERSION_ENV = 'DSH_DESKTOP_BUILD_VERSION'
 
-/** Prerelease field that opens a test build's suffix on a stable product version. */
+/** Default prerelease field for automatic builds from stable product versions. */
 const STABLE_TEST_FIELD = 'test'
 
 /**
@@ -70,12 +70,15 @@ export function validateDesktopBuildVersion(buildVersion, productVersion) {
     throw new Error(`desktop build version: ${buildVersion} must extend product version ${productVersion}`)
   }
   const required = requiredFields(product)
-  const extendsProduct = build.prerelease.length > required.length
-    && required.every((field, index) => build.prerelease[index] === field)
+  const extendsProduct = product.prerelease.length === 0
+    ? build.prerelease.length >= 3
+    : build.prerelease.length > required.length
+      && required.every((field, index) => build.prerelease[index] === field)
   if (!extendsProduct) {
-    throw new Error(`desktop build version: ${buildVersion} must extend ${productVersion} as ${
-      desktopBuildVersionPrefix(productVersion)}<date>.<sequence> or ${
-      desktopBuildVersionPrefix(productVersion)}<date>.<run>.<attempt>`)
+    const expected = product.prerelease.length === 0
+      ? '<identifier>.<date>.<sequence>'
+      : `${desktopBuildVersionPrefix(productVersion)}<date>.<sequence> or ${desktopBuildVersionPrefix(productVersion)}<date>.<run>.<attempt>`
+    throw new Error(`desktop build version: ${buildVersion} must extend ${productVersion} with ${expected}`)
   }
   return build.version
 }

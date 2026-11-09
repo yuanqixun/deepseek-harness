@@ -255,7 +255,7 @@ Desktop 包版本作为 production 发布基础版本。test 发布保留其完�
 
 Windows 手动 CI 使用独立的未发布 Desktop 构建标识：`auto` 追加 UTC 日期、工作流运行编号和尝试次数（`.YYYYMMDD.run.attempt`，稳定基础版本使用 `-test`）。例如 `1.0.2.20261008.42.2`。这些编号不是预留的发布序号。
 
-把确认后的版本通过 `--build-version` 传给打包命令，该值同时决定产物文件名、更新 feed 与上传校验。清单保留产品版本，因此 test 打包不再改写发布家族，也不留下需要还原的改动：
+把确认后的版本通过 `--build-version` 传给打包命令，该值同时决定产物文件名、更新 feed 与上传校验。稳定产品接受任意预发布标识及其后的日期和序号，例如 `1.0.1-hxfl.20261104.1`；自动生成的测试构建仍使用 `test`。清单保留产品版本，因此 test 打包不再改写发布家族，也不留下需要还原的改动：
 
 ```sh
 pnpm --dir apps/desktop run package:win:x64 --build-version 0.1.6-alpha.1.20260916.1

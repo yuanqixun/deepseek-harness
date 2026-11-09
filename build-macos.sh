@@ -4,7 +4,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: ./build-macos.sh [--internal-dmg] [--no-preinstall-private-plugins] [--config-env NAME] <build-version>
+Usage: ./build-macos.sh [--internal-dmg] [--no-preinstall-private-plugins] [--config-env NAME] [build-version]
 
 By default, builds the signed macOS arm64 release artifacts: DMG, ZIP, ZIP blockmap,
 and update feed YAML. The local dsh-pro-auth and dsh-private-market bundles are
@@ -13,9 +13,12 @@ Use --no-preinstall-private-plugins to omit those bundles. Without market settin
 the private-market UI bundle is installed but its Host catalog service stays disabled.
 Set DSH_CONFIG_ENV_DIR and DSH_CONFIG_ENV in apps/desktop/.env.macos to select the
 private-market configuration. --config-env overrides the environment name for this run.
-The version must be confirmed before packaging. Configure apps/desktop/.env.macos
-from its example first; signed release builds also require the signing and
-notarization credentials documented for Desktop packaging.
+When run in a terminal, the script prompts for the configuration environment
+and build version, then asks for confirmation. Enter to keep the shown default;
+use '-' to clear the configuration environment. Confirmed values are stored in
+the current user's config directory. Configure apps/desktop/.env.macos from its
+example first; signed release builds also require the signing and notarization
+credentials documented for Desktop packaging.
 EOF
 }
 
@@ -26,12 +29,13 @@ fi
 internal_dmg=0
 preinstall_private_plugins=1
 config_environment=
-while [[ $# -gt 1 ]]; do
+build_version=
+while [[ $# -gt 0 ]]; do
   case $1 in
     --internal-dmg) internal_dmg=1 ;;
     --no-preinstall-private-plugins) preinstall_private_plugins=0 ;;
     --config-env)
-      if [[ $# -lt 3 || -z ${2:-} ]]; then
+      if [[ $# -lt 2 || -z ${2:-} ]]; then
         usage >&2
         exit 2
       fi
@@ -39,14 +43,20 @@ while [[ $# -gt 1 ]]; do
       shift 2
       continue
       ;;
-    *) break ;;
+    --*)
+      usage >&2
+      exit 2
+      ;;
+    *)
+      if [[ -n $build_version ]]; then
+        usage >&2
+        exit 2
+      fi
+      build_version=$1
+      ;;
   esac
   shift
 done
-if [[ $# -ne 1 ]]; then
-  usage >&2
-  exit 2
-fi
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 cd "$script_dir"
@@ -71,15 +81,62 @@ if [[ ! -f apps/desktop/.env.macos ]]; then
   exit 1
 fi
 
+if [[ -t 0 && -t 1 ]]; then
+  preferences=$(node scripts/desktop-build-preferences.mjs read macos)
+  if [[ -z $build_version ]]; then
+    build_version=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).buildVersion)' "$preferences")
+  fi
+  if [[ -z $config_environment ]]; then
+    config_environment=$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).configEnvironment)' "$preferences")
+  fi
+  printf '配置环境名 [%s；回车沿用，输入 - 清除]: ' "${config_environment:-未选择}"
+  IFS= read -r entered_environment
+  if [[ -n $entered_environment ]]; then
+    if [[ $entered_environment == - ]]; then
+      config_environment=
+    else
+      config_environment=$entered_environment
+    fi
+  fi
+  if [[ -n $config_environment && ! $config_environment =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+    printf '%s\n' 'Configuration environment must match ^[a-z0-9][a-z0-9-]*$.' >&2
+    exit 2
+  fi
+  printf 'Desktop 版本 [%s；回车沿用]: ' "${build_version:-请输入版本}"
+  IFS= read -r entered_version
+  if [[ -n $entered_version ]]; then
+    build_version=$entered_version
+  fi
+  if [[ -z $build_version ]]; then
+    printf '%s\n' 'A Desktop build version is required.' >&2
+    exit 2
+  fi
+  printf '准备打包：配置环境=%s，版本=%s。确认开始？[y/N] ' "${config_environment:-未选择}" "$build_version"
+  IFS= read -r confirmation
+  if [[ ! $confirmation =~ ^([yY]|[yY][eE][sS])$ ]]; then
+    printf '%s\n' 'Packaging cancelled.'
+    exit 0
+  fi
+  node scripts/desktop-build-preferences.mjs write macos "$build_version" "$config_environment"
+elif [[ -z $build_version ]]; then
+  printf '%s\n' 'A build version is required when input is not interactive.' >&2
+  usage >&2
+  exit 2
+fi
+if [[ -n $config_environment && ! $config_environment =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+  printf '%s\n' 'Configuration environment must match ^[a-z0-9][a-z0-9-]*$.' >&2
+  exit 2
+fi
+
 if [[ $internal_dmg -eq 1 ]]; then
   package_script=package:desktop:mac:arm64:internal-dmg
 else
   package_script=package:desktop:mac:arm64
 fi
 if [[ $preinstall_private_plugins -eq 1 ]]; then
-  package_arguments=(--build-version "$1" --preinstall-private-plugins)
+  package_arguments=(--build-version "$build_version" --preinstall-private-plugins)
 else
-  package_arguments=(--build-version "$1")
+  package_arguments=(--build-version "$build_version")
 fi
 if [[ -n $config_environment ]]; then
   package_arguments+=(--config-env "$config_environment")

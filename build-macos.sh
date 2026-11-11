@@ -5,6 +5,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage: ./build-macos.sh [--signed | --internal-dmg] [--no-preinstall-private-plugins] [--config-env NAME] [build-version]
+Example: ./build-macos.sh --config-env hxfluat 0.2.1
 
 By default, builds an unsigned macOS arm64 DMG without signing or notarization.
 Pass --signed to build signed release artifacts: DMG, ZIP, ZIP blockmap, and update feed YAML.
@@ -14,6 +15,8 @@ Use --no-preinstall-private-plugins to omit those bundles. Without market settin
 the private-market UI bundle is installed but its Host catalog service stays disabled.
 Set DSH_CONFIG_ENV_DIR and DSH_CONFIG_ENV in apps/desktop/.env.macos to select the
 private-market configuration. --config-env overrides the environment name for this run.
+Use --config-env hxfluat to package with envs/hxfluat/config.json when
+DSH_CONFIG_ENV_DIR points to the repository's envs directory.
 When run in a terminal, the script prompts for the configuration environment
 and build version, then asks for confirmation. Enter to keep the shown default;
 use '-' to clear the configuration environment. Confirmed values are stored in

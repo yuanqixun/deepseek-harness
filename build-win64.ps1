@@ -1,4 +1,17 @@
-﻿[CmdletBinding()]
+﻿<#
+.SYNOPSIS
+Builds the Windows x64 Desktop package.
+
+.DESCRIPTION
+Set DSH_CONFIG_ENV_DIR in apps/desktop/.env.windows to the repository's envs
+directory, then select a named configuration with -ConfigEnvironment.
+
+.EXAMPLE
+./build-win64.ps1 0.2.1 -ConfigEnvironment hxfluat
+
+Packages with envs/hxfluat/config.json.
+#>
+[CmdletBinding()]
 param(
   [Parameter(Position = 0)]
   [string]$BuildVersion,

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "environment": "hxfluat",
+  "plugins": {
+    "privateMarket": {
+      "catalogUrl": "https://hxai-uat.hxfl.com.cn/app-api/v1/plugins",
+      "tenantId": "1",
+      "registryUrl": "https://repo.hxfl.com.cn/repository/npm/"
+    },
+    "dsh-pro-auth": {
+      "casLoginUrl": "https://sso-uat.hxfl.com.cn/authz/cas/login",
+      "casValidateUrl": "https://sso-uat.hxfl.com.cn/authz/cas/p3/serviceValidate",
+      "callbackPort": 19878,
+      "aicodeApiOrigin": "https://hxai-uat.hxfl.com.cn",
+      "autoLlmKeyEnabled": true,
+      "llmKeyEnvironment": "hxfl",
+      "modelApiKeyEnv": "hxfl"
+    }
+  },
+  "llm-pi-ai": {
+    "providers": {
+      "local": {
+        "displayName": "hxfl",
+        "apiKeyEnv": "hxfl",
+        "api": "openai-completions",
+        "baseURL": "https://aigw.hxfl.com.cn/v1",
+        "models": [
+          { "id": "hxfl-lite" },
+          { "id": "hxfl-pro" }
+        ]
+      }
+    }
+  },
+  "desktop": {
+    "authProvider": "dsh-pro-auth",
+    "branding": {
+      "displayName": "金租办公-UAT",
+      "iconSet": "hxfl"
+    },
+    "updates": {
+      "distribution": "dshwork",
+      "checkUrl": "https://hxai-uat.hxfl.com.cn/app-api/v1/desktop/updates/check",
+      "channel": "stable",
+      "feedOrigins": ["https://hxai-uat.hxfl.com.cn"]
+    }
+  }
+}

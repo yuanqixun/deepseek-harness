@@ -70,6 +70,9 @@ import electronUpdater from 'electron-updater'
 interface DesktopRuntimeConfig {
   readonly authProvider: 'deepseek-official' | 'dsh-pro-auth'
   readonly dshProAuth?: {
+    readonly casLoginUrl: string
+    readonly casValidateUrl: string
+    readonly callbackPort?: number
     readonly aicodeApiOrigin: string
     readonly autoLlmKeyEnabled: boolean
     readonly llmKeyEnvironment: string
@@ -169,7 +172,10 @@ function readDesktopRuntimeConfig(): DesktopRuntimeConfig {
 }
 
 function isDesktopProAuthConfig(value: unknown): value is NonNullable<DesktopRuntimeConfig['dshProAuth']> {
-  return isRecord(value) && typeof value.aicodeApiOrigin === 'string'
+  return isRecord(value) && typeof value.casLoginUrl === 'string' && typeof value.casValidateUrl === 'string'
+    && (value.callbackPort === undefined || (typeof value.callbackPort === 'number'
+    && Number.isInteger(value.callbackPort) && value.callbackPort >= 1 && value.callbackPort <= 65535))
+    && typeof value.aicodeApiOrigin === 'string'
     && typeof value.autoLlmKeyEnabled === 'boolean' && typeof value.llmKeyEnvironment === 'string'
     && typeof value.modelApiKeyEnv === 'string'
 }
@@ -452,12 +458,19 @@ async function main(): Promise<void> {
   let hostEnvironment: NodeJS.ProcessEnv = process.env
   const prepareHostEnvironment = async (): Promise<void> => {
     hostEnvironment = { ...await loginShell }
-    const aicode = desktopRuntimeConfig.dshProAuth
-    if (aicode !== undefined) {
-      hostEnvironment.DSH_AICODE_API_ORIGIN = aicode.aicodeApiOrigin
-      hostEnvironment.DSH_AICODE_AUTO_LLM_KEY = String(aicode.autoLlmKeyEnabled)
-      hostEnvironment.DSH_LLM_KEY_ENVIRONMENT = aicode.llmKeyEnvironment
-      hostEnvironment.DSH_MODEL_API_KEY_ENV = aicode.modelApiKeyEnv
+    const proAuth = desktopRuntimeConfig.dshProAuth
+    if (proAuth !== undefined) {
+      hostEnvironment.DSH_CAS_LOGIN_URL = proAuth.casLoginUrl
+      hostEnvironment.DSH_CAS_VALIDATE_URL = proAuth.casValidateUrl
+      if (proAuth.callbackPort !== undefined) hostEnvironment.DSH_CAS_CALLBACK_PORT = String(proAuth.callbackPort)
+      else delete hostEnvironment.DSH_CAS_CALLBACK_PORT
+      hostEnvironment.DSH_AICODE_API_ORIGIN = proAuth.aicodeApiOrigin
+      hostEnvironment.DSH_AICODE_AUTO_LLM_KEY = String(proAuth.autoLlmKeyEnabled)
+      hostEnvironment.DSH_LLM_KEY_ENVIRONMENT = proAuth.llmKeyEnvironment
+      hostEnvironment.DSH_MODEL_API_KEY_ENV = proAuth.modelApiKeyEnv
+    } else {
+      delete hostEnvironment.DSH_CAS_LOGIN_URL
+      delete hostEnvironment.DSH_CAS_VALIDATE_URL
     }
     const providers = desktopRuntimeConfig.llmPiAiProviders
     if (providers !== undefined) hostEnvironment.DSH_LLM_PI_AI_PROVIDERS = JSON.stringify(providers)

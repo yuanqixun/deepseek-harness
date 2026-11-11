@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-rc.3/macos-unsigned-default/guide.md
+/:
+  en: 7a786b1e55b01935
+  zh: 024e07ac299eea1d
+/macos-package-commands-now-default-to-unsigned:
+  en: f05f5061f13f0374
+  zh: 2055bd150dc3a3cd
+/macos-package-commands-now-default-to-unsigned/change:
+  en: 54eff748b9a8939c
+  zh: 7c913b8f0b879f33
+/macos-package-commands-now-default-to-unsigned/migration:
+  en: 0bc5cc4f63658b77
+  zh: 77e1caced336a6d9

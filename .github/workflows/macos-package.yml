@@ -121,14 +121,14 @@ jobs:
         run: |
           args=()
           if [[ "$PACKAGE_SKIP_NOTARIZATION" = true ]]; then args+=(--skip-notarization); fi
-          pnpm run package:desktop:mac:arm64 --check --build-version "$PACKAGE_VERSION" "${args[@]}"
+          pnpm run package:desktop:mac:arm64:signed --check --build-version "$PACKAGE_VERSION" "${args[@]}"
       - name: Build signed installers
         env:
           PACKAGE_VERSION: ${{ steps.settings.outputs.version }}
         run: |
           args=()
           if [[ "$PACKAGE_SKIP_NOTARIZATION" = true ]]; then args+=(--skip-notarization); fi
-          pnpm run package:desktop:mac:arm64 --build-version "$PACKAGE_VERSION" "${args[@]}"
+          pnpm run package:desktop:mac:arm64:signed --build-version "$PACKAGE_VERSION" "${args[@]}"
       - name: Retain complete package outside the checkout
         id: retained
         env:

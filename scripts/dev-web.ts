@@ -50,7 +50,7 @@ import {
   repositoryClientBuildEnvironment,
 } from './client-build-environment.ts'
 import { pnpmInvocation } from './pnpm-invocation.ts'
-import { readPrivateMarketEnvironment } from './config-environment.ts'
+import { readDesktopRuntimeEnvironment, readPrivateMarketEnvironment } from './config-environment.ts'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
@@ -511,9 +511,11 @@ if (isMain) {
     ? undefined
     : resolve(process.env.DSH_PRIVATE_MARKET_SOURCE ?? join(repoRoot, '..', 'deepseek-harness-plugins', 'dsh-private-market'))
   const selectedEnvironment = options.configEnvironment
+  let selectedRuntime: ReturnType<typeof readDesktopRuntimeEnvironment> | undefined
   if (selectedEnvironment !== undefined) {
     try {
       readPrivateMarketEnvironment(process.env.DSH_CONFIG_ENV_DIR, selectedEnvironment)
+      selectedRuntime = readDesktopRuntimeEnvironment(process.env.DSH_CONFIG_ENV_DIR, selectedEnvironment)
       if (privateMarketSource === undefined) throw new Error('dev-web: private market source was not resolved')
       const manifest = JSON.parse(readFileSync(join(privateMarketSource, 'package.json'), 'utf8')) as { name?: unknown }
       if (manifest.name !== '@deepseek-ai/dsh-private-market') throw new Error(`dev-web: invalid plugin source ${privateMarketSource}`)
@@ -521,6 +523,12 @@ if (isMain) {
       console.error(error instanceof Error ? error.message : error)
       process.exit(1)
     }
+  }
+  delete process.env.DSH_CAS_LOGIN_URL
+  delete process.env.DSH_CAS_VALIDATE_URL
+  if (selectedRuntime?.dshProAuth !== undefined) {
+    process.env.DSH_CAS_LOGIN_URL = selectedRuntime.dshProAuth.casLoginUrl
+    process.env.DSH_CAS_VALIDATE_URL = selectedRuntime.dshProAuth.casValidateUrl
   }
 
   // Shutdown is requested once, by a terminal signal or by a stage exiting on

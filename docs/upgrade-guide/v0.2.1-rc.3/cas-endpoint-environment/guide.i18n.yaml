@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-rc.3/cas-endpoint-environment/guide.md
+/:
+  en: f4afd51f8f4e5b82
+  zh: 10398263ef284af5
+/cas-endpoints-move-to-deployment-configuration:
+  en: 4e040ee4fc9832d9
+  zh: 894661362776928b
+/cas-endpoints-move-to-deployment-configuration/change:
+  en: b9f4aff63213227a
+  zh: 038a3714b70ba552
+/cas-endpoints-move-to-deployment-configuration/migration:
+  en: 9aeacdb13b16ae14
+  zh: 70b0cc10bbbb5bf4

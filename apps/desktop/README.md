@@ -48,7 +48,7 @@ Desktop Host Platform API requests and update-policy requests identify the insta
 
 A server-expired account credential returns to Welcome when no official API key is configured; an available API key keeps the workspace open. Explicit sign-out follows the same rule. Both Welcome and the workspace display the localized expiry notice.
 
-An environment that sets `desktop.authProvider` to `dsh-pro-auth` uses CAS on the native welcome page and packages the `dsh-pro-auth` bundle automatically. Desktop carries that environment's non-secret `plugins.dsh-pro-auth` and `llm-pi-ai.providers` settings into the Host; model `baseURL` remains owned by the selected environment.
+An environment that sets `desktop.authProvider` to `dsh-pro-auth` uses CAS on the native welcome page and packages the `dsh-pro-auth` bundle automatically. Set `plugins.dsh-pro-auth.casLoginUrl` and `casValidateUrl` in the selected `config.json`; Desktop embeds these endpoints in the packaged Host. Web reads the same fields when launched with `pnpm run dev:web -- --config-env <environment>`. Desktop also carries that environment's other non-secret `plugins.dsh-pro-auth` and `llm-pi-ai.providers` settings into the Host; model `baseURL` remains owned by the selected environment. Set `plugins.dsh-pro-auth.callbackPort` to a fixed port from 1 to 65535 when CAS requires a stable loopback callback; this requires `dsh-pro-auth` 0.1.3 or later in the plugin registry.
 
 Desktop microphone access is restricted to audio requests from the primary `dsh-app://app` frame. macOS uses system microphone authorization, a packaged usage description, and `com.apple.security.device.audio-input` in the main application and Helper signatures.
 
@@ -306,12 +306,12 @@ Versioned files retain `<artifactNameBase>-<version>-<os>-<arch>[-unsigned|-inte
 Release automation uses fixed target commands so runtime preparation, dsh preparation, and electron-builder receive the same platform and architecture:
 
 ```sh
-pnpm run package:desktop:mac:arm64
-pnpm run package:desktop:mac:x64
+pnpm run package:desktop:mac:arm64:signed
+pnpm run package:desktop:mac:x64:signed
 pnpm run package:desktop:win:x64
 ```
 
-`build-macos.sh` and `build-win64.ps1` preinstall the published `dsh-pro-auth` and `dsh-private-market` bundles by default. Desktop packaging requires `dsh-pro-auth@0.1.2` or later for automatic Aicode Key provisioning and resolves the package from the registry's `latest` tag. The Windows script uses unsigned packaging by default; pass `-Sign` for a signed release. It clears an inherited `ELECTRON_CUSTOM_DIR` and downloads these plugins from the HXFL Nexus registry, verifying each package against the registry's SHA-512 integrity. The private market bundle receives the selected environment's catalog and registry settings before it is packed. The package commands accept `--preinstall-private-plugins`; `build-macos.sh --no-preinstall-private-plugins` and `build-win64.ps1 -NoPreinstallPrivatePlugins` opt out. Both bundles are added to the packaged runtime and seeded into new Desktop profiles. Existing Desktop profiles receive each bundle once and can disable it afterward. Put `DSH_CONFIG_ENV_DIR` and `DSH_CONFIG_ENV` in the target's ignored `apps/desktop/.env.macos` or `.env.windows`; relative directory paths resolve from `apps/desktop`. The repository keeps shared named environments under root `envs/`; set `DSH_CONFIG_ENV_DIR=../../envs` in those files. The selected file is `$DSH_CONFIG_ENV_DIR/<environment>/config.json`. A `--config-env NAME` command-line option overrides `DSH_CONFIG_ENV`; `build-win64.ps1` accepts the equivalent `-ConfigEnvironment NAME`. Without a selected environment, both plugins are enabled, but the private market has no catalog URL. Packaging records the selected environment, configuration digest, package versions, and tarball integrity. The `config.json` contains no credential value:
+`build-macos.sh` and `build-win64.ps1` preinstall the published `dsh-pro-auth` and `dsh-private-market` bundles by default. macOS packaging is unsigned by default; pass `--signed` to `build-macos.sh` or use a `:signed` package command for a signed release. The Windows script uses unsigned packaging by default; pass `-Sign` for a signed release. Desktop packaging requires `dsh-pro-auth@0.1.2` or later for automatic Aicode Key provisioning and resolves the package from the registry's `latest` tag. The packaging scripts clear an inherited `ELECTRON_CUSTOM_DIR` and download these plugins from the HXFL Nexus registry, verifying each package against the registry's SHA-512 integrity. The private market bundle receives the selected environment's catalog and registry settings before it is packed. The package commands accept `--preinstall-private-plugins`; `build-macos.sh --no-preinstall-private-plugins` and `build-win64.ps1 -NoPreinstallPrivatePlugins` opt out. Both bundles are added to the packaged runtime and seeded into new Desktop profiles. Existing Desktop profiles receive each bundle once and can disable it afterward. Put `DSH_CONFIG_ENV_DIR` and `DSH_CONFIG_ENV` in the target's ignored `apps/desktop/.env.macos` or `.env.windows`; relative directory paths resolve from `apps/desktop`. The repository keeps shared named environments under root `envs/`; set `DSH_CONFIG_ENV_DIR=../../envs` in those files. The selected file is `$DSH_CONFIG_ENV_DIR/<environment>/config.json`. A `--config-env NAME` command-line option overrides `DSH_CONFIG_ENV`; `build-win64.ps1` accepts the equivalent `-ConfigEnvironment NAME`. Without a selected environment, both plugins are enabled, but the private market has no catalog URL. Packaging records the selected environment, configuration digest, package versions, and tarball integrity. The `config.json` contains no credential value:
 
 ```json
 {
@@ -350,9 +350,9 @@ This deployment uses the `dshwork` distribution at `hxai.superbpm.com`. Private 
 
 The macOS arm64 command requires Apple Silicon. The macOS x64 command runs on Intel macOS or Apple Silicon with Rosetta. The Windows x64 command requires Windows x64. Linux is not a supported Desktop release target.
 
-`build-macos.sh --internal-dmg <version>` builds an unsigned internal DMG without Apple signing or notarization credentials. It writes `deepseek-harness-<version>-mac-arm64-internal.dmg` under `releases/<version>/macos/arm64/internal/`; this local artifact does not include release metadata or qualify for upload.
+`build-macos.sh <version>` builds an unsigned macOS arm64 DMG without Apple signing or notarization credentials. It writes the artifact under `releases/<version>/macos/arm64/internal/`; it does not include release metadata or qualify for upload. Pass `--signed` to create signed release artifacts.
 
-Each target owns its packed package inputs, prepared runtime, package set, dsh tree, and pnpm preparation state under `apps/desktop/.desktop-build/targets/<target>/`. Electron archives remain shared under `.desktop-build/downloads` because every archive name includes its version, platform, and architecture and is verified before extraction. Artifacts are retained under `releases/<desktop-version>/<windows|macos>/<architecture>/`; unsigned Windows installers and internal macOS DMGs use the `internal/` subdirectory, and signed release artifacts include release metadata. Windows uses `x64`, while macOS uses `arm64` or `x64`. A target build never consumes another target's mutable preparation state.
+Each target owns its packed package inputs, prepared runtime, package set, dsh tree, and pnpm preparation state under `apps/desktop/.desktop-build/targets/<target>/`. Electron archives remain shared under `.desktop-build/downloads` because every archive name includes its version, platform, and architecture and is verified before extraction. Artifacts are retained under `releases/<desktop-version>/<windows|macos>/<architecture>/`; unsigned artifacts and internal macOS DMGs use the `internal/` subdirectory, while signed release artifacts stay at the target root and include release metadata. Windows uses `x64`, while macOS uses `arm64` or `x64`. A target build never consumes another target's mutable preparation state.
 
 ### Local macOS DMG without release signing
 
@@ -363,7 +363,7 @@ pnpm run package:desktop:mac:arm64:unsigned
 pnpm run package:desktop:mac:x64:unsigned
 ```
 
-Add `--check` to validate local configuration and tools without building, or `--dir` to stop at the unpacked application. The DMG is `apps/desktop/.desktop-build/targets/<target>/unsigned-artifacts/deepseek-harness-<version>-mac-<arch>-unsigned.dmg`. After all checks pass, the command prints `DMG:` followed by its absolute path. Open it and copy the application to a local test directory.
+Add `--check` to validate local configuration and tools without building, or `--dir` to stop at the unpacked application. The DMG is `releases/<version>/macos/<architecture>/internal/<brand>-<version>-mac-<arch>-unsigned.dmg`. After all checks pass, the command prints `DMG:` followed by its absolute path. Open it and copy the application to a local test directory.
 
 These commands ignore `.env.macos` and inherited release settings, use `com.deepseek.harness` as the app ID, and omit automatic-update and mandatory-update configuration. Build tools, standard network proxies, and `DSH_DESKTOP_NPM_REGISTRY` remain available from the shell. They skip Developer ID signing, Apple notarization, temporary signing keychains, and notarization proxy changes. Electron receives a local ad-hoc signature without certificates so the modified executable can run; the DMG is unsigned. Both preparation and the assembled application still run runtime integrity and smoke checks. Local builds omit update feeds, ZIPs, and release completion records, and the upload commands cannot publish them. macOS may require approval in System Settings → Privacy & Security to open an unnotarized application.
 
@@ -437,7 +437,7 @@ Distribute each test batch through its complete download links. Installed test c
 Configure the update origin and selected COS bucket, SecretId, and SecretKey in the target dotenv file, then package and upload the same target:
 
 ```sh
-pnpm run package:desktop:mac:arm64
+pnpm run package:desktop:mac:arm64:signed
 pnpm run upload:mac:arm64
 ```
 

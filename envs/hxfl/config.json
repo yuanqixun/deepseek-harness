@@ -3,12 +3,15 @@
   "environment": "hxfl",
   "plugins": {
     "privateMarket": {
-      "catalogUrl": "https://dshwork.hxfl.com.cn/app-api/v1/plugins",
+      "catalogUrl": "https://hxai.hxfl.com.cn/app-api/v1/plugins",
       "tenantId": "1",
       "registryUrl": "https://repo.hxfl.com.cn/repository/npm/"
     },
     "dsh-pro-auth": {
-      "aicodeApiOrigin": "https://dshwork.hxfl.com.cn",
+      "casLoginUrl": "https://sso.hxfl.com.cn/authz/cas/login",
+      "casValidateUrl": "https://sso.hxfl.com.cn/authz/cas/p3/serviceValidate",
+      "callbackPort": 19878,
+      "aicodeApiOrigin": "https://hxai.hxfl.com.cn",
       "autoLlmKeyEnabled": true,
       "llmKeyEnvironment": "hxfl",
       "modelApiKeyEnv": "hxfl"
@@ -36,9 +39,9 @@
     },
     "updates": {
       "distribution": "dshwork",
-      "checkUrl": "https://dshwork.hxfl.com.cn/app-api/v1/desktop/updates/check",
+      "checkUrl": "https://hxai.hxfl.com.cn/app-api/v1/desktop/updates/check",
       "channel": "stable",
-      "feedOrigins": ["https://dshwork.hxfl.com.cn"]
+      "feedOrigins": ["https://hxai.hxfl.com.cn"]
     }
   }
 }

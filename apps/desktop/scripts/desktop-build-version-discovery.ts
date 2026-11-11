@@ -18,6 +18,7 @@
  */
 
 import { readdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import { parse } from 'semver'
 import { desktopBuildVersionPrefix, validateDesktopBuildVersion } from './desktop-build-version.mjs'
 import { DESKTOP_AUTO_UPDATE_ENV, resolveDesktopUploadConfig } from './desktop-auto-update-environment.mjs'
@@ -31,7 +32,7 @@ const LISTING_DEADLINE_MS = 8_000
 const LISTING_PAGE_SIZE = 1000
 
 /** Artifact name electron-builder writes for one build, on either platform; unsigned and unnotarized builds add a suffix. */
-const ARTIFACT = /(?:^|\/)deepseek-harness-(?<version>.+)-(?:mac|win)-(?:arm64|x64)(?:-unsigned|-unnotarized)?\.(?:exe|dmg|zip)$/u
+const ARTIFACT = /^.+-(?<version>.+)-(?:mac|win)-(?:arm64|x64)(?:-unsigned|-unnotarized)?\.(?:exe|dmg|zip)$/u
 
 /** Inputs that decide which versions are already taken. */
 export interface DesktopBuildVersionSuggestionOptions {
@@ -40,7 +41,7 @@ export interface DesktopBuildVersionSuggestionOptions {
   readonly environment: NodeJS.ProcessEnv
   /** Date segment to number within; defaults to today where the build runs. */
   readonly date?: string
-  /** Directory electron-builder writes installers into for this build. */
+  /** Directory containing existing local artifacts for this target. */
   readonly artifactsRoot: string
 }
 
@@ -71,14 +72,32 @@ function sequenceNumbers(versions: Iterable<string>, prefix: string): number[] {
 }
 
 /**
- * Read the versions one output directory already holds.
- * @param artifactsRoot - Directory electron-builder wrote installers into.
+ * Read target versions from a direct artifact directory or the versioned release tree.
+ * @param artifactsRoot - Directory containing existing artifacts.
+ * @param target - Target whose artifact names should be considered.
  * @returns Versions parsed from artifact names.
  */
-async function localVersions(artifactsRoot: string): Promise<string[]> {
-  const entries = await readdir(artifactsRoot).catch(() => [])
-  return entries.map(entry => ARTIFACT.exec(entry)?.groups?.version)
-    .filter((version): version is string => version !== undefined && parse(version) !== null)
+async function artifactVersions(artifactsRoot: string, target: DesktopPackageTargetName): Promise<string[]> {
+  const entries = await readdir(artifactsRoot, { withFileTypes: true }).catch(() => [])
+  return entries.flatMap((entry) => {
+    if (!entry.isFile() || !entry.name.includes(`-${target}`)) return []
+    const version = ARTIFACT.exec(entry.name)?.groups?.version
+    return version !== undefined && parse(version) !== null ? [version] : []
+  })
+}
+
+async function localVersions(artifactsRoot: string, target: DesktopPackageTargetName): Promise<string[]> {
+  const versions = await artifactVersions(artifactsRoot, target)
+  const platform = target === 'win-x64' ? 'windows' : 'macos'
+  const arch = target === 'mac-arm64' ? 'arm64' : 'x64'
+  const releases = await readdir(artifactsRoot, { withFileTypes: true }).catch(() => [])
+  for (const release of releases) {
+    if (!release.isDirectory()) continue
+    const targetDirectory = join(artifactsRoot, release.name, platform, arch)
+    versions.push(...await artifactVersions(targetDirectory, target))
+    versions.push(...await artifactVersions(join(targetDirectory, 'internal'), target))
+  }
+  return versions
 }
 
 /**
@@ -146,7 +165,7 @@ async function remoteVersions(options: DesktopBuildVersionSuggestionOptions): Pr
 export async function suggestDesktopBuildVersion(options: DesktopBuildVersionSuggestionOptions): Promise<string> {
   const prefix = `${desktopBuildVersionPrefix(options.productVersion)}${options.date ?? desktopBuildDateSegment()}.`
   const published = await remoteVersions(options)
-  const taken = published ?? await localVersions(options.artifactsRoot)
+  const taken = published ?? await localVersions(options.artifactsRoot, options.target)
   const used = sequenceNumbers(taken, prefix)
   const next = used.length === 0 ? 1 : Math.max(...used) + 1
   const suggestion = validateDesktopBuildVersion(`${prefix}${String(next)}`, options.productVersion)

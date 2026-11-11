@@ -18,6 +18,9 @@ export interface PrivateMarketEnvironment {
 export interface DesktopRuntimeEnvironment {
   readonly authProvider: 'deepseek-official' | 'dsh-pro-auth'
   readonly dshProAuth?: {
+    readonly casLoginUrl: string
+    readonly casValidateUrl: string
+    readonly callbackPort?: number
     readonly aicodeApiOrigin: string
     readonly autoLlmKeyEnabled: boolean
     readonly llmKeyEnvironment: string
@@ -161,9 +164,15 @@ export function readDesktopRuntimeEnvironment(
 }
 
 function readProAuthConfig(value: Record<string, unknown>, environment: string): NonNullable<DesktopRuntimeEnvironment['dshProAuth']> {
-  const allowed = new Set(['aicodeApiOrigin', 'autoLlmKeyEnabled', 'llmKeyEnvironment', 'modelApiKeyEnv'])
+  const allowed = new Set(['casLoginUrl', 'casValidateUrl', 'aicodeApiOrigin', 'autoLlmKeyEnabled', 'llmKeyEnvironment', 'modelApiKeyEnv', 'callbackPort'])
   const unknown = Object.keys(value).find(key => !allowed.has(key))
   if (unknown !== undefined) throw new Error(`config-env: unsupported plugins.dsh-pro-auth field ${unknown}`)
+  const callbackPort = value.callbackPort
+  if (callbackPort !== undefined && (typeof callbackPort !== 'number' || !Number.isInteger(callbackPort) || callbackPort < 1 || callbackPort > 65535)) {
+    throw new Error('config-env: plugins.dsh-pro-auth.callbackPort must be an integer between 1 and 65535')
+  }
+  const casLoginUrl = httpUrl(value.casLoginUrl, 'plugins.dsh-pro-auth.casLoginUrl')
+  const casValidateUrl = httpUrl(value.casValidateUrl, 'plugins.dsh-pro-auth.casValidateUrl')
   const aicodeApiOrigin = value.aicodeApiOrigin
   const autoLlmKeyEnabled = value.autoLlmKeyEnabled
   const llmKeyEnvironment = value.llmKeyEnvironment
@@ -182,5 +191,5 @@ function readProAuthConfig(value: Record<string, unknown>, environment: string):
     || llmKeyEnvironment !== environment || !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(modelApiKeyEnv))) {
     throw new Error('config-env: automatic Aicode Key requires a matching llmKeyEnvironment and a credential reference')
   }
-  return { aicodeApiOrigin: origin?.origin ?? '', autoLlmKeyEnabled, llmKeyEnvironment, modelApiKeyEnv }
+  return { casLoginUrl, casValidateUrl, aicodeApiOrigin: origin?.origin ?? '', autoLlmKeyEnabled, llmKeyEnvironment, modelApiKeyEnv, ...(callbackPort === undefined ? {} : { callbackPort }) }
 }

@@ -34,8 +34,9 @@ describe('desktop package target', () => {
   })
 
   it('parses installer and unpacked-directory invocations', () => {
-    expect(parseDesktopPackageInvocation(['mac-arm64'], 'darwin', 'arm64').directory).toBe(false)
-    expect(parseDesktopPackageInvocation(['mac-arm64', '--dir'], 'darwin', 'arm64').directory).toBe(true)
+    expect(parseDesktopPackageInvocation(['mac-arm64'], 'darwin', 'arm64')).toMatchObject({ directory: false, unsigned: true })
+    expect(parseDesktopPackageInvocation(['mac-arm64', '--dir'], 'darwin', 'arm64')).toMatchObject({ directory: true, unsigned: true })
+    expect(parseDesktopPackageInvocation(['mac-arm64', '--signed'], 'darwin', 'arm64').unsigned).toBe(false)
     expect(parseDesktopPackageInvocation([], 'darwin', 'arm64').target.name).toBe('mac-arm64')
     expect(parseDesktopPackageInvocation(['--prepare-only'], 'darwin', 'arm64').prepareOnly).toBe(true)
     expect(parseDesktopPackageInvocation(['--check'], 'darwin', 'arm64').check).toBe(true)
@@ -150,10 +151,11 @@ describe('desktop package target', () => {
 })
 
 it('allows skipping notarization only for signed macOS packages', () => {
-  expect(parseDesktopPackageInvocation(['mac-arm64'], 'darwin', 'arm64').skipNotarization).toBe(false)
-  expect(parseDesktopPackageInvocation(['mac-arm64', '--skip-notarization'], 'darwin', 'arm64').skipNotarization).toBe(true)
+  expect(parseDesktopPackageInvocation(['mac-arm64', '--signed'], 'darwin', 'arm64').skipNotarization).toBe(false)
+  expect(parseDesktopPackageInvocation(['mac-arm64', '--signed', '--skip-notarization'], 'darwin', 'arm64').skipNotarization).toBe(true)
   for (const flag of ['--unsigned', '--prepare-only']) {
-    expect(() => parseDesktopPackageInvocation(['mac-arm64', '--skip-notarization', flag], 'darwin', 'arm64')).toThrow(/requires a signed macOS build/u)
+    expect(() => parseDesktopPackageInvocation(['mac-arm64', '--signed', '--skip-notarization', flag], 'darwin', 'arm64')).toThrow(/cannot be combined|cannot use/u)
   }
+  expect(() => parseDesktopPackageInvocation(['mac-arm64', '--skip-notarization'], 'darwin', 'arm64')).toThrow(/requires a signed macOS build/u)
   expect(() => parseDesktopPackageInvocation(['win-x64', '--skip-notarization'], 'win32', 'x64')).toThrow(/requires a signed macOS build/u)
 })

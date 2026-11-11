@@ -225,14 +225,13 @@ it.each(['--unsigned', '--prepare-only'])('keeps %s hardware-free and creates no
 })
 
 it.each(['mac-arm64', 'mac-x64', 'win-x64'] as const)('selects branding from the signing mode for %s', async (target) => {
-  const modes = [[], ['--unsigned'], ['--dir'], ['--unsigned', '--dir'], ['--prepare-only'],
-    ...(target === 'win-x64' ? [] : [['--skip-notarization'], ['--skip-notarization', '--dir']])]
+  const modes = [[], ['--signed'], ['--unsigned'], ['--dir'], ['--unsigned', '--dir'], ['--signed', '--dir'], ['--prepare-only'],
+    ...(target === 'win-x64' ? [] : [['--signed', '--skip-notarization'], ['--signed', '--skip-notarization', '--dir']])]
   for (const flags of modes) {
-    const unsigned = flags.includes('--unsigned')
+    const invocation = parseDesktopPackageInvocation([target, ...flags], target === 'win-x64' ? 'win32' : 'darwin',
+      target === 'win-x64' ? 'x64' : 'arm64')
+    const unsigned = invocation.unsigned
     const { run, stages } = supervisor()
-    const platform = target === 'win-x64' ? 'win32' : 'darwin'
-    const invocation = parseDesktopPackageInvocation([target, ...flags], platform,
-      platform === 'darwin' ? 'arm64' : 'x64')
     await packageTarget(invocation, {
       ...environment,
       APPLE_KEYCHAIN_PROFILE: 'fixture',
@@ -271,7 +270,7 @@ it('checks the assembled macOS runtime before notarizing and recording the relea
     expect(stages.at(-1)).toBe('exec tsx scripts/smoke-packaged-runtime.ts')
     expect(writeFileSync).not.toHaveBeenCalled()
   })
-  await packageTarget(parseDesktopPackageInvocation(['mac-arm64'], 'darwin', 'arm64'), environment, run)
+  await packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--signed'], 'darwin', 'arm64'), environment, run)
   expect(packageMacOSArtifacts).toHaveBeenCalledOnce()
   expect(writeFileSync).toHaveBeenCalledOnce()
 })
@@ -315,7 +314,7 @@ it('fails unsigned macOS packaging when the assembled runtime cannot run', async
 
 it.each([false, true])('refuses macOS notarization and release records after an assembled-runtime failure (directory=%s)', async (directory) => {
   const { run } = supervisor('exec tsx scripts/smoke-packaged-runtime.ts')
-  await expect(packageTarget(parseDesktopPackageInvocation(['mac-arm64', ...(directory ? ['--dir'] : [])], 'darwin', 'arm64'), environment, run))
+  await expect(packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--signed', ...(directory ? ['--dir'] : [])], 'darwin', 'arm64'), environment, run))
     .rejects.toThrow('stage refused')
   expect(withMacOSNotarizationProxy).not.toHaveBeenCalled()
   expect(packageMacOSArtifacts).not.toHaveBeenCalled()
@@ -349,7 +348,7 @@ it.each([undefined, '2'])('passes macOS pack concurrency %s only to workspace pa
 
 it.each([false, true])('scopes the Apple proxy around notarization (directory=%s)', async (directory) => {
   const { run } = supervisor()
-  await packageTarget(parseDesktopPackageInvocation(['mac-arm64', ...(directory ? ['--dir'] : [])], 'darwin', 'arm64'), {
+  await packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--signed', ...(directory ? ['--dir'] : [])], 'darwin', 'arm64'), {
     ...environment, APPLE_KEYCHAIN_PROFILE: 'fixture', DSH_DESKTOP_MACOS_NOTARIZATION_PROXY: 'http://apple.example:8081',
   }, run)
   expect(withMacOSNotarizationProxy).toHaveBeenCalledExactlyOnceWith('http://apple.example:8081', expect.any(Function), undefined, undefined, expect.any(Function))
@@ -364,14 +363,14 @@ it.each([false, true])('scopes the Apple proxy around notarization (directory=%s
 it('does not write a release completion record when Apple proxy cleanup fails', async () => {
   const { run } = supervisor()
   vi.mocked(withMacOSNotarizationProxy).mockRejectedValueOnce(new Error('proxy restoration failed'))
-  await expect(packageTarget(parseDesktopPackageInvocation(['mac-arm64'], 'darwin', 'arm64'), environment, run))
+  await expect(packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--signed'], 'darwin', 'arm64'), environment, run))
     .rejects.toThrow('proxy restoration failed')
   expect(writeFileSync).not.toHaveBeenCalled()
 })
 
 it.each([false, true])('keeps signing and runtime verification when notarization is skipped (directory=%s)', async (directory) => {
   const { run, stages } = supervisor()
-  await packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--skip-notarization', ...(directory ? ['--dir'] : [])], 'darwin', 'arm64'), {
+  await packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--signed', '--skip-notarization', ...(directory ? ['--dir'] : [])], 'darwin', 'arm64'), {
     ...environment, CSC_LINK: 'signing.p12', CSC_KEY_PASSWORD: 'fixture-password',
   }, run)
   expect(stages).toContain('exec electron-builder --config electron-builder.config.mjs --mac --arm64 --publish never --dir')
@@ -388,7 +387,7 @@ it.each([false, true])('keeps signing and runtime verification when notarization
 it.each(['mac-arm64', 'mac-x64'] as const)('applies ZIP compression without changing DMG settings when skipping notarization for %s', async (target) => {
   for (const level of [undefined, '3', '7']) {
     const { run } = supervisor()
-    await packageTarget(parseDesktopPackageInvocation([target, '--skip-notarization'], 'darwin', 'arm64'), {
+    await packageTarget(parseDesktopPackageInvocation([target, '--signed', '--skip-notarization'], 'darwin', 'arm64'), {
       ...environment, ELECTRON_BUILDER_COMPRESSION_LEVEL: '9',
       ...(level === undefined ? {} : { DSH_DESKTOP_MACOS_ZIP_COMPRESSION_LEVEL: level }),
     }, run)
@@ -416,7 +415,7 @@ it.each(['mac-arm64', 'mac-x64'] as const)('applies ZIP compression without chan
 it('fails debugging packages when runtime verification fails', async () => {
   const failure = 'exec tsx scripts/smoke-packaged-runtime.ts --skip-notarization'
   const { run, stages } = supervisor(failure)
-  await expect(packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--skip-notarization'], 'darwin', 'arm64'), environment, run))
+  await expect(packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--signed', '--skip-notarization'], 'darwin', 'arm64'), environment, run))
     .rejects.toThrow('stage refused')
   expect(stages.at(-1)).toBe(failure)
   expect(writeFileSync).not.toHaveBeenCalled()
@@ -425,7 +424,7 @@ it('fails debugging packages when runtime verification fails', async () => {
 it('stops unnotarized ZIP packaging when the DMG stage fails', async () => {
   const failure = 'exec electron-builder --config electron-builder.config.mjs --mac dmg'
   const { run, stages } = supervisor(failure)
-  await expect(packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--skip-notarization'], 'darwin', 'arm64'), environment, run))
+  await expect(packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--signed', '--skip-notarization'], 'darwin', 'arm64'), environment, run))
     .rejects.toThrow('stage refused')
   expect(stages.some(stage => stage.includes('--mac zip'))).toBe(false)
   expect(stages.some(stage => stage.includes('smoke-packaged-runtime'))).toBe(false)
@@ -440,7 +439,7 @@ it.each([undefined, '7'])('applies file-owned compression only to the final nota
   })
   const settings = { ...environment, ELECTRON_BUILDER_COMPRESSION_LEVEL: '9',
     ...(level === undefined ? {} : { DSH_DESKTOP_MACOS_ZIP_COMPRESSION_LEVEL: level }) }
-  await packageTarget(parseDesktopPackageInvocation(['mac-arm64'], 'darwin', 'arm64'), settings, run)
+  await packageTarget(parseDesktopPackageInvocation(['mac-arm64', '--signed'], 'darwin', 'arm64'), settings, run)
   const zip = run.run.mock.calls.find(call => call[0].includes('--mac zip'))
   const dmg = run.run.mock.calls.find(call => call[0].includes('--mac dmg'))
   expect(zip?.[3].env.ELECTRON_BUILDER_COMPRESSION_LEVEL).toBe(level ?? '3')

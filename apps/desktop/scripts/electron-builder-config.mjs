@@ -139,11 +139,9 @@ export function createElectronBuilderConfig(
   const productVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')).version
   const dshVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../../../package.json', import.meta.url)), 'utf8')).version
   const buildVersion = resolveDesktopBuildVersion(env, productVersion)
-  const output = internalDmg
-    ? { directory: desktopTargetInternalArtifactsDirectory(target, buildVersion), suffix: '-internal' }
-    : unsigned && packagesWindows
-      ? { directory: desktopTargetInternalArtifactsDirectory(target, buildVersion), suffix: '-unsigned' }
-    : desktopArtifactOutput(buildPaths, { unsigned, skipNotarization })
+  const output = internalDmg || unsigned
+    ? { directory: desktopTargetInternalArtifactsDirectory(target, buildVersion), suffix: internalDmg ? '-internal' : '-unsigned' }
+    : desktopArtifactOutput(buildPaths, { skipNotarization })
   if (update?.channel === 'latest' && buildVersion.includes('-')) throw new Error('desktop package: latest requires a stable version')
   const packaged = resolveDesktopBuildCommit(env)
   return {

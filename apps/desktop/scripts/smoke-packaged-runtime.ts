@@ -21,7 +21,7 @@ if (values.unsigned && !['win-x64', 'mac-arm64', 'mac-x64'].includes(target)) {
   throw new Error('desktop smoke: unsigned artifacts require a supported release target')
 }
 if (values['internal-dmg'] && (windows || values.unsigned)) throw new Error('desktop smoke: internal disk images require macOS')
-const artifacts = values.unsigned ? windows ? internalArtifacts : paths.unsignedArtifacts
+const artifacts = values.unsigned ? internalArtifacts
   : values['internal-dmg'] ? internalArtifacts
     : paths.artifacts
 const displayName = desktopBrandingFromEnvironment(process.env).displayName

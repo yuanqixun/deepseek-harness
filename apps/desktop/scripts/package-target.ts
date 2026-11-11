@@ -9,7 +9,7 @@ import {
   resolveDesktopAutoUpdateConfig,
 } from './desktop-auto-update-environment.mjs'
 import {
-  desktopArtifactOutput,
+  desktopReleasesRoot,
   desktopTargetBuildPaths,
   desktopTargetInternalArtifactsDirectory,
   desktopTargetReleaseArtifactsDirectory,
@@ -287,6 +287,7 @@ export function parseDesktopPackageInvocation(
       dir: { type: 'boolean', default: false },
       'prepare-only': { type: 'boolean', default: false },
       unsigned: { type: 'boolean', default: false },
+      signed: { type: 'boolean', default: false },
       'internal-dmg': { type: 'boolean', default: false },
       'skip-notarization': { type: 'boolean', default: false },
       'preinstall-private-plugins': { type: 'boolean', default: false },
@@ -297,12 +298,17 @@ export function parseDesktopPackageInvocation(
   })
   if (positionals.length > 1) throw new Error('desktop package: expected at most one target')
   const name = positionals[0] ?? hostTargetName(hostPlatform, hostArch)
+  const target = resolveDesktopPackageTarget(name, hostPlatform, hostArch)
+  if (values.unsigned && values.signed) throw new Error('desktop package: --unsigned and --signed cannot be combined')
+  if (values.signed && target.platform !== 'darwin') throw new Error('desktop package: --signed is supported only for macOS targets')
   if (values.unsigned && values['prepare-only']) throw new Error('desktop package: --unsigned cannot use --prepare-only')
   if (values['internal-dmg'] && name !== 'mac-arm64') throw new Error('desktop package: --internal-dmg requires mac-arm64')
-  if (values['internal-dmg'] && (values.unsigned || values['prepare-only'] || values.dir)) {
-    throw new Error('desktop package: --internal-dmg cannot combine with --unsigned, --prepare-only, or --dir')
+  if (values['internal-dmg'] && (values.unsigned || values.signed || values['prepare-only'] || values.dir)) {
+    throw new Error('desktop package: --internal-dmg cannot combine with --unsigned, --signed, --prepare-only, or --dir')
   }
-  if (values['skip-notarization'] && (name === 'win-x64' || values.unsigned || values['prepare-only'])) {
+  const unsigned = values.unsigned || (target.platform === 'darwin'
+    && !values.signed && !values['prepare-only'] && !values['internal-dmg'])
+  if (values['skip-notarization'] && (target.platform !== 'darwin' || unsigned || values['prepare-only'] || values['internal-dmg'])) {
     throw new Error('desktop package: --skip-notarization requires a signed macOS build, without --prepare-only')
   }
   const requestedBuildVersion = values['build-version']?.trim()
@@ -310,10 +316,10 @@ export function parseDesktopPackageInvocation(
     throw new Error('desktop package: --build-version requires a value')
   }
   return {
-    target: resolveDesktopPackageTarget(name, hostPlatform, hostArch),
+    target,
     directory: values.dir,
     prepareOnly: values['prepare-only'],
-    unsigned: values.unsigned,
+    unsigned,
     internalDmg: values['internal-dmg'],
     skipNotarization: values['skip-notarization'],
     preinstallPrivatePlugins: values['preinstall-private-plugins'],
@@ -394,13 +400,12 @@ async function resolveRequestedBuildVersion(
   const requested = invocation.requestedBuildVersion
   if (requested === undefined) return productVersion
   if (requested !== AUTOMATIC_BUILD_VERSION) return validateDesktopBuildVersion(requested, productVersion)
-  const paths = desktopTargetBuildPaths(invocation.target.name, environment)
   return suggestDesktopBuildVersion({
     productVersion,
     target: invocation.target.name,
     // Machine presets own packaging, not upload credentials; local auto numbering uses existing artifacts.
     environment: environment.DSH_PACKAGING_PRESET === undefined ? environment : {},
-    artifactsRoot: desktopArtifactOutput(paths, invocation).directory,
+    artifactsRoot: desktopReleasesRoot(),
   })
 }
 
@@ -519,9 +524,8 @@ async function main(): Promise<void> {
     run.finish(success)
   }
   if (success && target.platform === 'darwin' && !invocation.directory && !invocation.prepareOnly) {
-    const paths = desktopTargetBuildPaths(target.name)
     const filename = `${selectedBranding.artifactNameBase}-${buildVersion}-mac-${target.arch}${invocation.unsigned ? '-unsigned' : invocation.internalDmg ? '-internal' : ''}.dmg`
-    console.log(`DMG: ${join(invocation.unsigned ? paths.unsignedArtifacts
+    console.log(`DMG: ${join(invocation.unsigned ? desktopTargetInternalArtifactsDirectory(target.name, buildVersion)
       : invocation.internalDmg ? desktopTargetInternalArtifactsDirectory(target.name, buildVersion)
         : desktopTargetReleaseArtifactsDirectory(target.name, buildVersion), filename)}`)
   }
@@ -553,9 +557,7 @@ export async function packageTarget(
   const buildPaths = desktopTargetBuildPaths(target.name, environment)
   const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
   const buildVersion = resolveDesktopBuildVersion(environment, productVersion)
-  const unsignedArtifacts = target.platform === 'win32'
-    ? desktopTargetInternalArtifactsDirectory(target.name, buildVersion) : buildPaths.unsignedArtifacts
-  const artifactsRoot = invocation.unsigned ? unsignedArtifacts
+  const artifactsRoot = invocation.unsigned ? desktopTargetInternalArtifactsDirectory(target.name, buildVersion)
     : invocation.internalDmg ? desktopTargetInternalArtifactsDirectory(target.name, buildVersion)
       : invocation.skipNotarization ? buildPaths.unnotarizedArtifacts
         : desktopTargetReleaseArtifactsDirectory(target.name, buildVersion)

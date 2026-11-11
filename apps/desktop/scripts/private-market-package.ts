@@ -6,11 +6,12 @@ import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { satisfies } from 'semver'
-import { readPrivateMarketEnvironment } from '../../../scripts/config-environment.ts'
+import { readDesktopRuntimeEnvironment, readPrivateMarketEnvironment } from '../../../scripts/config-environment.ts'
 
 const PRIVATE_MARKET = '@deepseek-ai/dsh-private-market'
 const PRO_AUTH = 'dsh-pro-auth'
 const MINIMUM_PRO_AUTH_VERSION = '0.1.2'
+const FIXED_CALLBACK_PRO_AUTH_VERSION = '0.1.3'
 const DSH_CLI = '@deepseek-ai/dsh'
 const DEFAULT_PLUGIN_REGISTRY = 'https://hxflnexus.superbpm.com/repository/npm-group/'
 
@@ -82,10 +83,11 @@ export function assertPrivateMarketPeerCompatibility(
   }
 }
 
-/** Reject an auth bundle older than the Desktop Aicode Key integration. */
-function assertProAuthMinimumVersion(version: string): void {
-  if (!satisfies(version, `>=${MINIMUM_PRO_AUTH_VERSION}`)) {
-    throw new Error(`private plugin packaging: ${PRO_AUTH}@${version} is too old; HXFL Nexus must provide ${MINIMUM_PRO_AUTH_VERSION} or later`)
+/** Reject an auth bundle that cannot honor the selected Desktop configuration. */
+function assertProAuthMinimumVersion(version: string, fixedCallback: boolean): void {
+  const minimum = fixedCallback ? FIXED_CALLBACK_PRO_AUTH_VERSION : MINIMUM_PRO_AUTH_VERSION
+  if (!satisfies(version, `>=${minimum}`)) {
+    throw new Error(`private plugin packaging: ${PRO_AUTH}@${version} is too old; HXFL Nexus must provide ${minimum} or later`)
   }
 }
 
@@ -177,7 +179,9 @@ export async function packagePrivateMarket(options: {
       ? await downloadRegistryPackage(PRO_AUTH, registryUrl, authOutput)
       : undefined
     if (proAuthRecord !== undefined) {
-      assertProAuthMinimumVersion(proAuthRecord.version)
+      const fixedCallback = environment !== undefined
+        && readDesktopRuntimeEnvironment(options.configRoot, environment).dshProAuth?.callbackPort !== undefined
+      assertProAuthMinimumVersion(proAuthRecord.version, fixedCallback)
       extractPackage(proAuthRecord.tarball, authStage)
       const authManifest = readPackageManifest(authStage, PRO_AUTH)
       assertPrivateMarketPeerCompatibility(authManifest, versions)

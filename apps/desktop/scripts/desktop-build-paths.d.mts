@@ -4,7 +4,6 @@ import type { DesktopAutoUpdateTarget } from './desktop-auto-update-environment.
 export interface DesktopTargetBuildPaths {
   readonly root: string
   readonly artifacts: string
-  readonly unsignedArtifacts: string
   readonly unnotarizedArtifacts: string
   readonly runtime: string
   readonly packageSet: string
@@ -98,6 +97,6 @@ export function developmentRuntimeDirectory(
  * @returns Matching artifact destination and filename marker.
  */
 export function desktopArtifactOutput(
-  paths: Pick<DesktopTargetBuildPaths, 'artifacts' | 'unsignedArtifacts' | 'unnotarizedArtifacts'>,
-  mode: { unsigned: boolean, skipNotarization: boolean },
+  paths: Pick<DesktopTargetBuildPaths, 'artifacts' | 'unnotarizedArtifacts'>,
+  mode: { skipNotarization: boolean },
 ): { directory: string, suffix: string }

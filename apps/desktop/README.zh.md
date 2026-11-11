@@ -48,7 +48,7 @@ Desktop Host 的 Platform API 请求与更新策略请求用相同的 Platform �
 
 账号凭据被服务端判定失效后，未配置官方 API key 时返回 Welcome；有可用 API key 时保持工作区打开。主动退出登录遵循相同规则。Welcome 和工作区均显示本地化的登录失效提示。
 
-环境将 `desktop.authProvider` 设为 `dsh-pro-auth` 后，桌面原生欢迎页会使用 CAS 登录，打包时也会自动包含 `dsh-pro-auth` bundle。Desktop 会将该环境的非密钥 `plugins.dsh-pro-auth` 和 `llm-pi-ai.providers` 配置传给 Host；模型 `baseURL` 仍由所选环境提供。
+环境将 `desktop.authProvider` 设为 `dsh-pro-auth` 后，桌面原生欢迎页会使用 CAS 登录，打包时也会自动包含 `dsh-pro-auth` bundle。在所选 `config.json` 的 `plugins.dsh-pro-auth` 下设置 `casLoginUrl` 和 `casValidateUrl`；Desktop 会将这些端点嵌入打包后的 Host。使用 `pnpm run dev:web -- --config-env <环境名>` 启动 Web 时，也会读取相同字段。Desktop 还会将该环境中 `plugins.dsh-pro-auth` 的其他非密钥字段和 `llm-pi-ai.providers` 配置传给 Host；模型 `baseURL` 仍由所选环境提供。CAS 需要固定 loopback 回调地址时，可将 `plugins.dsh-pro-auth.callbackPort` 设为 1 到 65535 之间的端口；插件仓库须提供 `dsh-pro-auth` 0.1.3 或更高版本。
 
 桌面麦克风访问仅允许主 `dsh-app://app` 页面发起的音频请求。macOS 使用系统麦克风授权、随包用途说明，以及主应用与 Helper 签名中的 `com.apple.security.device.audio-input` 权限。
 
@@ -306,12 +306,12 @@ pnpm --dir apps/desktop run upload:win:x64 --config-env local
 发布自动化使用固定目标命令，确保运行时准备、dsh 准备与 electron-builder 接收相同的平台和架构：
 
 ```sh
-pnpm run package:desktop:mac:arm64
-pnpm run package:desktop:mac:x64
+pnpm run package:desktop:mac:arm64:signed
+pnpm run package:desktop:mac:x64:signed
 pnpm run package:desktop:win:x64
 ```
 
-`build-macos.sh` 和 `build-win64.ps1` 默认预置从 HXFL Nexus 发布的 `dsh-pro-auth` 与 `dsh-private-market` bundle。为了启用 Aicode Key 自动配置，Desktop 打包要求 `dsh-pro-auth@0.1.2` 或更新版本，并从 registry 的 `latest` 标签解析该包。Windows 脚本默认生成未签名包；传入 `-Sign` 才会使用签名发布命令。它会清除继承的 `ELECTRON_CUSTOM_DIR`，并从 HXFL Nexus 下载插件，按 registry 提供的 SHA-512 完整性校验包；市场插件下载后会写入所选环境的目录和 registry 配置。打包命令支持 `--preinstall-private-plugins`；可用 `build-macos.sh --no-preinstall-private-plugins` 或 `build-win64.ps1 -NoPreinstallPrivatePlugins` 关闭预置。两个 bundle 会加入打包运行时，并预置到新建的 Desktop profile。已有 Desktop profile 会各迁移一次，用户之后仍可关闭。把 `DSH_CONFIG_ENV_DIR` 和 `DSH_CONFIG_ENV` 放在目标对应的忽略文件 `apps/desktop/.env.macos` 或 `.env.windows` 中；相对目录路径以 `apps/desktop` 为基准。仓库统一在根目录 `envs/` 管理具名环境；在上述文件中设置 `DSH_CONFIG_ENV_DIR=../../envs`。所选配置文件为 `$DSH_CONFIG_ENV_DIR/<环境名>/config.json`。命令行参数 `--config-env NAME` 可以覆盖 `DSH_CONFIG_ENV`；`build-win64.ps1` 使用等价参数 `-ConfigEnvironment NAME`。没有选择环境时，两个插件仍会启用，但私有市场没有目录 URL。打包记录保存环境名、配置摘要、包版本和 tarball 完整性。`config.json` 不包含凭据值：
+`build-macos.sh` 和 `build-win64.ps1` 默认预置从 HXFL Nexus 发布的 `dsh-pro-auth` 与 `dsh-private-market` bundle。macOS 打包默认不签名；传入 `build-macos.sh --signed` 或使用 `:signed` package 命令才会执行签名发布。Windows 脚本默认生成未签名包；传入 `-Sign` 才会使用签名发布命令。为了启用 Aicode Key 自动配置，Desktop 打包要求 `dsh-pro-auth@0.1.2` 或更新版本，并从 registry 的 `latest` 标签解析该包。打包脚本会清除继承的 `ELECTRON_CUSTOM_DIR`，并从 HXFL Nexus 下载插件，按 registry 提供的 SHA-512 完整性校验包；市场插件下载后会写入所选环境的目录和 registry 配置。打包命令支持 `--preinstall-private-plugins`；可用 `build-macos.sh --no-preinstall-private-plugins` 或 `build-win64.ps1 -NoPreinstallPrivatePlugins` 关闭预置。两个 bundle 会加入打包运行时，并预置到新建的 Desktop profile。已有 Desktop profile 会各迁移一次，用户之后仍可关闭。把 `DSH_CONFIG_ENV_DIR` 和 `DSH_CONFIG_ENV` 放在目标对应的忽略文件 `apps/desktop/.env.macos` 或 `.env.windows` 中；相对目录路径以 `apps/desktop` 为基准。仓库统一在根目录 `envs/` 管理具名环境；在上述文件中设置 `DSH_CONFIG_ENV_DIR=../../envs`。所选配置文件为 `$DSH_CONFIG_ENV_DIR/<环境名>/config.json`。命令行参数 `--config-env NAME` 可以覆盖 `DSH_CONFIG_ENV`；`build-win64.ps1` 使用等价参数 `-ConfigEnvironment NAME`。没有选择环境时，两个插件仍会启用，但私有市场没有目录 URL。打包记录保存环境名、配置摘要、包版本和 tarball 完整性。`config.json` 不包含凭据值：
 
 ```json
 {
@@ -350,9 +350,9 @@ pnpm run package:desktop:win:x64
 
 macOS arm64 命令要求 Apple Silicon。macOS x64 命令可以在 Intel macOS 或带 Rosetta 的 Apple Silicon 上运行。Windows x64 命令要求 Windows x64。Linux 不是受支持的 Desktop 发布目标。
 
-`build-macos.sh --internal-dmg <version>` 无需 Apple 签名或公证凭据即可构建未签名的内部 DMG。文件名为 `deepseek-harness-<version>-mac-arm64-internal.dmg`，保存在 `releases/<version>/macos/arm64/internal/` 下；此本地产物不包含发布元数据，也不能用于上传。
+`build-macos.sh <version>` 无需 Apple 签名或公证凭据即可构建未签名的 macOS arm64 DMG。产物写入 `releases/<version>/macos/arm64/internal/`，不包含发布元数据，也不能用于上传。传入 `--signed` 才会生成签名发布包。
 
-每个目标都在 `apps/desktop/.desktop-build/targets/<target>/` 下持有自己的打包输入、已准备运行时、包集合、dsh 依赖树和 pnpm 准备状态。Electron 归档缓存继续由 `.desktop-build/downloads` 共享，因为每个归档文件名都包含版本、平台和架构，并且在解包前经过验证。构件保存在 `releases/<desktop-version>/<windows|macos>/<architecture>/` 下；Windows 未签名安装包和 macOS 内部 DMG 放在 `internal/` 子目录中，签名发布构件包含发布元数据。Windows 使用 `x64`，macOS 使用 `arm64` 或 `x64`。目标构建绝不读取其他目标的可变准备状态。
+每个目标都在 `apps/desktop/.desktop-build/targets/<target>/` 下持有自己的打包输入、已准备运行时、包集合、dsh 依赖树和 pnpm 准备状态。Electron 归档缓存继续由 `.desktop-build/downloads` 共享，因为每个归档文件名都包含版本、平台和架构，并且在解包前经过验证。构件保存在 `releases/<desktop-version>/<windows|macos>/<architecture>/` 下；未签名产物和 macOS 内部 DMG 放在 `internal/` 子目录中，签名发布构件保存在目标根目录并包含发布元数据。Windows 使用 `x64`，macOS 使用 `arm64` 或 `x64`。目标构建绝不读取其他目标的可变准备状态。
 
 ### 无发布签名的本地 macOS DMG
 
@@ -363,7 +363,7 @@ pnpm run package:desktop:mac:arm64:unsigned
 pnpm run package:desktop:mac:x64:unsigned
 ```
 
-添加 `--check` 仅验证本地配置和工具而不构建，或添加 `--dir` 只生成解包应用。DMG 路径为 `apps/desktop/.desktop-build/targets/<target>/unsigned-artifacts/deepseek-harness-<version>-mac-<arch>-unsigned.dmg`。所有检查通过后，命令打印 `DMG:` 及其绝对路径。打开后将应用复制到本地测试目录。
+添加 `--check` 仅验证本地配置和工具而不构建，或添加 `--dir` 只生成解包应用。DMG 路径为 `releases/<version>/macos/<architecture>/internal/<品牌>-<version>-mac-<arch>-unsigned.dmg`。所有检查通过后，命令打印 `DMG:` 及其绝对路径。打开后将应用复制到本地测试目录。
 
 这些命令忽略 `.env.macos` 和继承的发布配置，使用 `com.deepseek.harness` 作为应用 ID，并省略自动更新和强制更新配置。构建工具、标准网络代理与 `DSH_DESKTOP_NPM_REGISTRY` 仍可从 shell 提供。它们跳过 Developer ID 签名、Apple 公证、临时签名钥匙串和公证代理修改。Electron 使用无需证书的本地 ad-hoc 签名，以便修改后的可执行文件能够运行；DMG 不签名。准备阶段和组装后的应用仍执行运行时完整性与冒烟检查。本地构建不生成更新源、ZIP 或发布完成记录，上传命令无法发布这些产物。macOS 可能要求在“系统设置 → 隐私与安全性”中批准打开未经公证的应用。
 
@@ -437,7 +437,7 @@ node --input-type=module -e "import { randomBytes } from 'node:crypto'; console.
 在目标 `.env` 中配置更新地址与所选 COS bucket、SecretId、SecretKey，再打包并上传同一个目标：
 
 ```sh
-pnpm run package:desktop:mac:arm64
+pnpm run package:desktop:mac:arm64:signed
 pnpm run upload:mac:arm64
 ```
 

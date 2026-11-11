@@ -40,7 +40,7 @@ function assertSupportedTarget(target) {
 /**
  * Return the build and local artifact directories owned by one release target.
  * @param {'mac-arm64' | 'mac-x64' | 'win-x64'} target - Supported Desktop target name.
- * @returns {{ root: string, artifacts: string, unsignedArtifacts: string, runtime: string, packageSet: string, dsh: string, dshPnpm: string, electron: string, packedDsh: string, packedVendor: string, packedLandlock: string, downloads: string }} Preparation and local artifact paths plus the shared immutable download cache.
+ * @returns {{ root: string, artifacts: string, unnotarizedArtifacts: string, runtime: string, packageSet: string, dsh: string, dshPnpm: string, electron: string, packedDsh: string, packedVendor: string, packedLandlock: string, downloads: string }} Preparation and temporary artifact paths plus the shared immutable download cache.
  */
 export function desktopTargetBuildPaths(target, environment = process.env) {
   assertSupportedTarget(target)
@@ -53,7 +53,6 @@ export function desktopTargetBuildPaths(target, environment = process.env) {
   return {
     root,
     artifacts: join(root, 'artifacts'),
-    unsignedArtifacts: join(root, 'unsigned-artifacts'),
     unnotarizedArtifacts: join(root, 'unnotarized-artifacts'),
     runtime: join(root, 'runtime'),
     packageSet: join(root, 'package-set'),
@@ -94,10 +93,10 @@ export function desktopTargetReleaseArtifactsDirectory(target, version, releases
 }
 
 /**
- * Return the isolated directory for an unsigned internal build under the target's release version.
+ * Return the isolated internal directory for an unsigned or internal build under one release version.
  * @param {'mac-arm64' | 'mac-x64' | 'win-x64'} target - Supported release target.
  * @param {string} version - Validated Desktop build version.
- * @returns The directory for local internal artifacts.
+ * @returns The directory for unsigned or internal artifacts.
  */
 export function desktopTargetInternalArtifactsDirectory(target, version) {
   return join(desktopTargetReleaseArtifactsDirectory(target, version), 'internal')
@@ -150,13 +149,12 @@ export function developmentRuntimeDirectory(
 }
 
 /**
- * Select the output directory and filename suffix for one packaging mode.
- * @param {{ artifacts: string, unsignedArtifacts: string, unnotarizedArtifacts: string }} paths Target artifact directories.
- * @param {{ unsigned: boolean, skipNotarization: boolean }} mode Validated packaging mode.
+ * Select the temporary output directory and filename suffix for a signed packaging mode.
+ * @param {{ artifacts: string, unnotarizedArtifacts: string }} paths Target artifact directories.
+ * @param {{ skipNotarization: boolean }} mode Validated packaging mode.
  * @returns {{ directory: string, suffix: string }} Matching artifact destination and filename marker.
  */
 export function desktopArtifactOutput(paths, mode) {
-  if (mode.unsigned) return { directory: paths.unsignedArtifacts, suffix: '-unsigned' }
   if (mode.skipNotarization) return { directory: paths.unnotarizedArtifacts, suffix: '-unnotarized' }
   return { directory: paths.artifacts, suffix: '' }
 }

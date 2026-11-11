@@ -4,10 +4,11 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: ./build-macos.sh [--internal-dmg] [--no-preinstall-private-plugins] [--config-env NAME] [build-version]
+Usage: ./build-macos.sh [--signed | --internal-dmg] [--no-preinstall-private-plugins] [--config-env NAME] [build-version]
 
-By default, builds the signed macOS arm64 release artifacts: DMG, ZIP, ZIP blockmap,
-and update feed YAML. The local dsh-pro-auth and dsh-private-market bundles are
+By default, builds an unsigned macOS arm64 DMG without signing or notarization.
+Pass --signed to build signed release artifacts: DMG, ZIP, ZIP blockmap, and update feed YAML.
+The local dsh-pro-auth and dsh-private-market bundles are
 preinstalled by default. Use --internal-dmg to build only an unsigned internal DMG.
 Use --no-preinstall-private-plugins to omit those bundles. Without market settings,
 the private-market UI bundle is installed but its Host catalog service stays disabled.
@@ -27,12 +28,14 @@ if [[ ${1:-} == --help || ${1:-} == -h ]]; then
   exit 0
 fi
 internal_dmg=0
+signed=0
 preinstall_private_plugins=1
 config_environment=
 build_version=
 while [[ $# -gt 0 ]]; do
   case $1 in
     --internal-dmg) internal_dmg=1 ;;
+    --signed) signed=1 ;;
     --no-preinstall-private-plugins) preinstall_private_plugins=0 ;;
     --config-env)
       if [[ $# -lt 2 || -z ${2:-} ]]; then
@@ -57,6 +60,10 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+if [[ $internal_dmg -eq 1 && $signed -eq 1 ]]; then
+  printf '%s\n' '--signed cannot be combined with --internal-dmg.' >&2
+  exit 2
+fi
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 cd "$script_dir"
@@ -130,6 +137,8 @@ fi
 
 if [[ $internal_dmg -eq 1 ]]; then
   package_script=package:desktop:mac:arm64:internal-dmg
+elif [[ $signed -eq 1 ]]; then
+  package_script=package:desktop:mac:arm64:signed
 else
   package_script=package:desktop:mac:arm64
 fi

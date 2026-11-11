@@ -8,6 +8,9 @@
       "registryUrl": "https://hxflnexus.superbpm.com/repository/npm-group/"
     },
     "dsh-pro-auth": {
+      "casLoginUrl": "https://sso.superbpm.com/cas/authz/cas/login",
+      "casValidateUrl": "https://sso.superbpm.com/cas/authz/cas/p3/serviceValidate",
+      "callbackPort": 19878,
       "aicodeApiOrigin": "https://hxai2.superbpm.com",
       "autoLlmKeyEnabled": true,
       "llmKeyEnvironment": "superbpm",

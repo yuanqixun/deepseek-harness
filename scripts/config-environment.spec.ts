@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { readPrivateMarketEnvironment } from './config-environment.ts'
+import { readDesktopRuntimeEnvironment, readPrivateMarketEnvironment } from './config-environment.ts'
 
 const roots: string[] = []
 
@@ -75,5 +75,22 @@ describe('private market deployment configuration', () => {
     expect(() => readPrivateMarketEnvironment(invalidProduct, 'acme')).toThrow(/product namespace desktop/u)
     const invalidPlugin = config({ schemaVersion: 1, environment: 'acme', plugins: { privateMarket: validMarket, other: null } })
     expect(() => readPrivateMarketEnvironment(invalidPlugin, 'acme')).toThrow(/plugin namespace other/u)
+  })
+})
+
+describe('Desktop CAS callback configuration', () => {
+  const document = (callbackPort: unknown) => ({
+    schemaVersion: 1, environment: 'acme', desktop: { authProvider: 'dsh-pro-auth' },
+    plugins: { 'dsh-pro-auth': { casLoginUrl: 'https://cas.example/login', casValidateUrl: 'https://cas.example/validate',
+      aicodeApiOrigin: '', autoLlmKeyEnabled: false,
+      llmKeyEnvironment: '', modelApiKeyEnv: '', callbackPort } },
+  })
+
+  it('preserves the configured callback port', () => {
+    expect(readDesktopRuntimeEnvironment(config(document(19878)), 'acme').dshProAuth?.callbackPort).toBe(19878)
+  })
+
+  it.each([-1, 0, 65536, 1.5, '19878'])('rejects invalid callback port %s', (port) => {
+    expect(() => readDesktopRuntimeEnvironment(config(document(port)), 'acme')).toThrow(/callbackPort/u)
   })
 })

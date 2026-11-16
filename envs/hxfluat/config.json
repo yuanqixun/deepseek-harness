@@ -13,7 +13,7 @@
       "callbackPort": 19878,
       "aicodeApiOrigin": "https://hxai-uat.hxfl.com.cn",
       "autoLlmKeyEnabled": true,
-      "llmKeyEnvironment": "hxfl",
+      "llmKeyEnvironment": "hxfluat",
       "modelApiKeyEnv": "hxfl"
     }
   },

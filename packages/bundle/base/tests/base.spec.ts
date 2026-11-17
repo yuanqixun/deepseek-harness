@@ -12,6 +12,17 @@ import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import { evaluate } from '@deepseek-ai/cordis-plugin-loader'
 
 describe('dsh-base bundle', () => {
+  it('disables both official model providers only when selected by the deployment', () => {
+    const parsed = yaml.load(readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8'), { schema: entryListSchema })
+    if (!Array.isArray(parsed)) throw new TypeError('base patch must parse to a patch list')
+    const rows = parsed.flatMap((patch: { insert?: { id: string; disabled?: { __jsExpr: string } }[] }) => patch.insert ?? [])
+    for (const id of ['llm-deepseek', 'llm-deepseek-account']) {
+      const expression = rows.find(row => row.id === id)?.disabled?.__jsExpr
+      expect(expression).toBeDefined()
+      expect(evaluate({ process: { env: { DSH_DISABLE_OFFICIAL_MODELS: '1' } } }, expression!)).toBe(true)
+      expect(evaluate({ process: { env: {} } }, expression!)).toBe(false)
+    }
+  })
   it('declares a parseable patch list through the dsh.bundle.patch manifest field', () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const manifest = JSON.parse(

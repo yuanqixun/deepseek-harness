@@ -12,6 +12,7 @@ Desktop runs the Harness workspace in a native application. This reference cover
 
 ## Table of Contents
 
+
 - [Application overview](#application-overview)
 - [Terminal command](#terminal-command)
 - [Closing the window and quitting](#closing-the-window-and-quitting)
@@ -280,6 +281,8 @@ pnpm --dir apps/desktop run check:package
 ```sh
 pnpm run package:desktop
 ```
+
+Set `desktop.disableOfficialModels` to `true` to disable the built-in DeepSeek API-key and account model providers in that Desktop deployment. Select a model from an enabled provider for existing defaults and Sessions. The setting does not disable other DeepSeek services.
 
 ### Environment branding
 

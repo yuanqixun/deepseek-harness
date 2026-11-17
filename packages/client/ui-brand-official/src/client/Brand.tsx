@@ -13,17 +13,9 @@ export function OfficialBrandMark({ size }: SidebarBrandMarkOwnerProps) {
       display: 'block',
       width: size,
       height: (size * 17.04) / 23.16,
-      backgroundColor: 'currentColor',
-      maskImage: `url("${brandMark}")`,
-      maskPosition: 'center',
-      maskRepeat: 'no-repeat',
-      maskSize: 'contain',
-      WebkitMaskImage: `url("${brandMark}")`,
-      WebkitMaskPosition: 'center',
-      WebkitMaskRepeat: 'no-repeat',
-      WebkitMaskSize: 'contain',
+      objectFit: 'contain',
     } as const
-    return <span aria-hidden="true" style={style} />
+    return <img alt="" aria-hidden="true" src={brandMark} style={style} />
   }
   return <FishLogo size={size} />
 }

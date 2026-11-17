@@ -69,6 +69,7 @@ import electronUpdater from 'electron-updater'
 
 interface DesktopRuntimeConfig {
   readonly authProvider: 'deepseek-official' | 'dsh-pro-auth'
+  readonly disableOfficialModels?: boolean
   readonly dshProAuth?: {
     readonly casLoginUrl: string
     readonly casValidateUrl: string
@@ -158,6 +159,9 @@ function readDesktopRuntimeConfig(): DesktopRuntimeConfig {
     throw new Error('desktop startup: packaged application has invalid Aicode sign-in configuration')
   }
   const providers = value.llmPiAiProviders
+  if (value.disableOfficialModels !== undefined && typeof value.disableOfficialModels !== 'boolean') {
+    throw new Error('desktop startup: invalid official model provider setting')
+  }
   if (providers !== undefined && !isRecord(providers)) {
     throw new Error('desktop startup: packaged application has invalid model provider configuration')
   }
@@ -166,6 +170,7 @@ function readDesktopRuntimeConfig(): DesktopRuntimeConfig {
   }
   return {
     authProvider: value.authProvider,
+    ...(value.disableOfficialModels === undefined ? {} : { disableOfficialModels: value.disableOfficialModels }),
     ...(dshProAuth === undefined ? {} : { dshProAuth }),
     ...(isRecord(providers) ? { llmPiAiProviders: providers } : {}),
   }
@@ -474,6 +479,8 @@ async function main(): Promise<void> {
     }
     const providers = desktopRuntimeConfig.llmPiAiProviders
     if (providers !== undefined) hostEnvironment.DSH_LLM_PI_AI_PROVIDERS = JSON.stringify(providers)
+    if (desktopRuntimeConfig.disableOfficialModels === true) hostEnvironment.DSH_DISABLE_OFFICIAL_MODELS = '1'
+    else delete hostEnvironment.DSH_DISABLE_OFFICIAL_MODELS
   }
   let quitting = false
   let startup: Promise<void> | undefined

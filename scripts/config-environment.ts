@@ -17,6 +17,7 @@ export interface PrivateMarketEnvironment {
 /** Non-secret Desktop settings copied into the packaged application's metadata. */
 export interface DesktopRuntimeEnvironment {
   readonly authProvider: 'deepseek-official' | 'dsh-pro-auth'
+  readonly disableOfficialModels?: boolean
   readonly dshProAuth?: {
     readonly casLoginUrl: string
     readonly casValidateUrl: string
@@ -129,6 +130,9 @@ export function readDesktopRuntimeEnvironment(
 ): DesktopRuntimeEnvironment {
   const document = readEnvironmentDocument(configRoot, environment)
   const desktop = record(document.desktop) ? document.desktop : {}
+  if (desktop.disableOfficialModels !== undefined && typeof desktop.disableOfficialModels !== 'boolean') {
+    throw new Error('config-env: desktop.disableOfficialModels must be a boolean')
+  }
   const authProvider = desktop.authProvider ?? 'deepseek-official'
   if (authProvider !== 'deepseek-official' && authProvider !== 'dsh-pro-auth') {
     throw new Error('config-env: desktop.authProvider must be deepseek-official or dsh-pro-auth')
@@ -158,6 +162,7 @@ export function readDesktopRuntimeEnvironment(
   }
   return {
     authProvider,
+    ...(desktop.disableOfficialModels === undefined ? {} : { disableOfficialModels: desktop.disableOfficialModels }),
     ...(proAuth === undefined ? {} : { dshProAuth: proAuth }),
     ...(record(providers) ? { llmPiAiProviders: providers } : {}),
   }

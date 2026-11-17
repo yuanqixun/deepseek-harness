@@ -12,6 +12,7 @@ Desktop 在原生应用中运行 Harness 工作区。本参考文档说明应用
 
 ## 目录
 
+
 - [应用概览](#application-overview)
 - [终端命令](#terminal-command)
 - [关闭窗口与退出](#closing-the-window-and-quitting)
@@ -280,6 +281,8 @@ pnpm --dir apps/desktop run check:package
 ```sh
 pnpm run package:desktop
 ```
+
+将 `desktop.disableOfficialModels` 设为 `true`，可在该 Desktop 环境中停用内置的 DeepSeek API Key 和账号模型提供方。已有默认模型和会话需要选择已启用提供方的模型。此设置不会停用其他 DeepSeek 服务。
 
 ### 按环境配置品牌
 

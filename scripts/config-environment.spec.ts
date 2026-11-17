@@ -94,3 +94,14 @@ describe('Desktop CAS callback configuration', () => {
     expect(() => readDesktopRuntimeEnvironment(config(document(port)), 'acme')).toThrow(/callbackPort/u)
   })
 })
+
+describe('Desktop model provider selection', () => {
+  it.each(['hxfl', 'hxfluat', 'superbpm'])('%s disables official model providers', (environment) => {
+    expect(readDesktopRuntimeEnvironment(join(process.cwd(), 'envs'), environment).disableOfficialModels).toBe(true)
+  })
+  it('reads the official provider switch and rejects non-boolean values', () => {
+    const document = { schemaVersion: 1, environment: 'acme', desktop: { disableOfficialModels: true } }
+    expect(readDesktopRuntimeEnvironment(config(document), 'acme').disableOfficialModels).toBe(true)
+    expect(() => readDesktopRuntimeEnvironment(config({ ...document, desktop: { disableOfficialModels: 'true' } }), 'acme')).toThrow(/disableOfficialModels/u)
+  })
+})

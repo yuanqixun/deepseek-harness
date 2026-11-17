@@ -327,6 +327,17 @@ vi.mock('../src/background-notice.ts', () => ({ DesktopBackgroundNotice: class {
   readonly close = harness.backgroundNotice.close
   readonly dispose = harness.backgroundNotice.dispose
 } }))
+vi.mock('node:fs', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:fs')>()
+  return { ...original, readFileSync: new Proxy(original.readFileSync, {
+    apply(target, thisArg, args) {
+      if (args[0] === join('desktop-test-app', 'package.json')) {
+        return JSON.stringify({ productName: harness.app.getName() })
+      }
+      return Reflect.apply(target, thisArg, args)
+    },
+  }) }
+})
 vi.mock('node:fs/promises', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:fs/promises')>()
   return { ...original, readFile: vi.fn((path: Parameters<typeof original.readFile>[0], encoding?: 'utf8') => {

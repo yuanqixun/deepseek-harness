@@ -98,13 +98,12 @@ describe('official browser-brand plugin', () => {
     expect(name.container.querySelector('svg')).toBeNull()
   })
 
-  it('renders the selected icon-set mark using the sidebar text color', () => {
+  it('renders the selected icon-set mark with its original colors', () => {
     vi.stubEnv('DSH_CLIENT_BRAND_MARK', 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=')
     const mark = render(<OfficialBrandMark size={34} />)
-    const element = mark.container.querySelector('span')
+    const element = mark.container.querySelector('img')
     expect(element?.getAttribute('aria-hidden')).toBe('true')
     expect(element?.style.width).toBe('34px')
-    expect(element?.style.backgroundColor).toBe('currentcolor')
-    expect(element?.style.maskImage).toContain('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=')
+    expect(element?.getAttribute('src')).toBe('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=')
   })
 })

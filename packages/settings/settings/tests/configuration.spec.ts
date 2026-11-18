@@ -76,6 +76,26 @@ it('preserves configuration expressions while editing a different live field', a
   expect(restored.settings.describe().find(row => row.ns === 'first')!.value).toEqual({ count: 4, list: [] })
 })
 
+it('edits a provider inside an expression-backed dictionary', async () => {
+  const schema = z.object({ providers: z.dict(z.object({ endpoint: z.string() })).volatile() })
+  const { ctx, profile, start } = await fixture({ schema })
+  await ctx.fiber.dispose()
+  const bundle = join(profile.dir, 'node_modules', 'test-bundle', 'cordis.patch.yml')
+  const rows = JSON.parse(readFileSync(bundle, 'utf8')) as Array<{ insert: Array<{ id: string; config?: Record<string, unknown> }> }>
+  rows[0]!.insert.find(row => row.id === 'first')!.config!.providers = { __jsExpr: "({ one: { endpoint: 'old' }, two: { endpoint: 'keep' } })" }
+  writeFileSync(bundle, JSON.stringify(rows))
+  const running = await start()
+  await running.settings.mutate('first', [{ op: 'set', path: ['providers', 'one', 'endpoint'], value: 'new' }])
+  expect(running.settings.describe().find(row => row.ns === 'first')!.value).toEqual({
+    providers: { one: { endpoint: 'new' }, two: { endpoint: 'keep' } },
+  })
+  await running.fiber.dispose()
+  const restored = await start()
+  expect(restored.settings.describe().find(row => row.ns === 'first')!.value).toEqual({
+    providers: { one: { endpoint: 'new' }, two: { endpoint: 'keep' } },
+  })
+})
+
 it('edits array elements and appends without replacing redacted secrets', async () => {
   const { ctx } = await fixture()
   await ctx.settings.update('first', { list: [{ name: 'first', token: 'hidden' }] })

@@ -83,11 +83,13 @@ export type SettingsPathOp =
   | { op: 'unset'; path: readonly string[] }
 
 /** Apply one path op to a detached section, returning the next section. */
-function applyPathOp(section: Record<string, unknown>, op: SettingsPathOp, schema: z): Record<string, unknown> {
+function applyPathOp(
+  section: Record<string, unknown>, op: SettingsPathOp, schema: z, resolve: (value: unknown) => unknown,
+): Record<string, unknown> {
   const edit = (input: unknown, path: readonly string[], node?: z): unknown => {
     const [head, ...rest] = path
     if (head === undefined) return op.op === 'set' ? op.value : undefined
-    const value: unknown = input === undefined ? node?.meta.default : input
+    const value: unknown = input === undefined ? node?.meta.default : resolve(input)
     if (Array.isArray(value)) {
       if (!/^(0|[1-9][0-9]*)$/.test(head) || (Number(head) > value.length || Number(head) === value.length && (rest.length > 0 || op.op === 'unset'))) {
         throw new TypeError(`Config array index "${head}" is out of range`)
@@ -366,18 +368,20 @@ export class SettingsForms extends Service {
    * @param expectedRevision Revision returned by describe.
    */
   async mutate(ns: string, ops: readonly SettingsPathOp[], expectedRevision?: number): Promise<void> {
-    await this.write(ns, (current, base, schema) => ops.reduce((value, op) => {
-      if (op.op === 'set') return applyPathOp(value, op, schema)
-      const parent = op.path.slice(0, -1).reduce<unknown>((node, key) => member(node, key), value)
-      if (Array.isArray(parent)) return applyPathOp(value, op, schema)
-      const inherited = op.path.reduce<unknown>((node, key) => member(node, key, true), base)
-      return applyPathOp(value, inherited === undefined ? op : { op: 'set', path: op.path, value: inherited }, schema)
+    await this.write(ns, (current, base, schema, entryContext) => ops.reduce((value, op) => {
+      const resolve = (input: unknown): unknown => isPlainObject(input) && Object.keys(input).length === 1 && typeof input.__jsExpr === 'string'
+        ? interpolate(entryContext, input) : input
+      if (op.op === 'set') return applyPathOp(value, op, schema, resolve)
+      const parent = resolve(op.path.slice(0, -1).reduce<unknown>((node, key) => member(resolve(node), key), value))
+      if (Array.isArray(parent)) return applyPathOp(value, op, schema, resolve)
+      const inherited = op.path.reduce<unknown>((node, key) => member(resolve(node), key, true), base)
+      return applyPathOp(value, inherited === undefined ? op : { op: 'set', path: op.path, value: inherited }, schema, resolve)
     }, current), expectedRevision, ops.map(op => op.path))
   }
 
   private async write(
     ns: string,
-    change: (current: Record<string, unknown>, base: Record<string, unknown>, schema: z) => Record<string, unknown>,
+    change: (current: Record<string, unknown>, base: Record<string, unknown>, schema: z, entryContext: Context) => Record<string, unknown>,
     expected?: number, paths: readonly (readonly string[])[] = [],
   ): Promise<void> {
     const entry = this.ownerContext.configEditor.entries().find(row => row.options.id === ns)
@@ -394,9 +398,11 @@ export class SettingsForms extends Service {
       if (expected !== undefined && descriptor.revision !== expected) {
         throw new SettingsConflictError(ns as SettingsNamespace, expected, descriptor.revision)
       }
+      const fiber = entry.fiber
+      if (fiber === undefined) throw new Error(`Plugin entry "${ns}" is no longer configurable`)
       const current = projectForm(form, raw) as Record<string, unknown>
       const base = projectForm(form, inherited) as Record<string, unknown>
-      const next = cloneJsonShaped(change(current, base, schema))
+      const next = cloneJsonShaped(change(current, base, schema, fiber.ctx))
       const validatePaths = (value: Record<string, unknown>, node: z, path: string[] = []): void => {
         for (const [key, child] of Object.entries(value)) {
           const target = [...path, key]

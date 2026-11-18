@@ -35,7 +35,7 @@
     "disableOfficialModels": true,
     "authProvider": "dsh-pro-auth",
     "branding": {
-      "displayName": "华租办公-UAT",
+      "displayName": "AI工作助手-UAT",
       "iconSet": "hxfl"
     },
     "updates": {

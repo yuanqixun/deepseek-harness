@@ -35,7 +35,7 @@
     "disableOfficialModels": true,
     "authProvider": "dsh-pro-auth",
     "branding": {
-      "displayName": "华租办公",
+      "displayName": "AI工作助手",
       "iconSet": "hxfl"
     },
     "updates": {

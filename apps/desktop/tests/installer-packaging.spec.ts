@@ -1,5 +1,6 @@
 import { readInstallerLocales } from '../scripts/installer-locales.mjs'
 import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { readFileSync } from 'node:fs'
 import { Arch, Platform } from 'electron-builder'
 import { AppInfo, Packager } from 'app-builder-lib'
@@ -120,6 +121,26 @@ describe('installer preparation preserves application dependencies', () => {
     expect(config.win.icon.replaceAll('\\', '/')).toContain('/brand-sets/dsh/icon-windows.png')
     expect(config.mac.icon.replaceAll('\\', '/')).toContain('/brand-sets/dsh/icon-macos.png')
     expect(config.extraResources.find(resource => resource.to === 'tray.ico')?.from.replaceAll('\\', '/')).toContain('/brand-sets/dsh/tray-windows.ico')
+  })
+
+  it('passes the selected installer artwork to Windows installer preparation', async () => {
+    execute.mockClear()
+    execute.mockImplementationOnce(async () => { throw new Error('installer preparation intercepted') })
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    const config = createElectronBuilderConfig({
+      DSH_DESKTOP_APP_ID: 'com.example.installer',
+      DSH_DESKTOP_BRANDING: JSON.stringify({ displayName: 'AI工作助手-UAT', iconSet: 'hxfl-uat' }),
+      DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
+      DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
+      DSH_DESKTOP_UNSIGNED: '1',
+    }, 'win32', 'x64')
+    await expect(config.beforeBuild()).rejects.toThrow('installer preparation intercepted')
+    expect(execute).toHaveBeenCalledWith('powershell.exe', expect.arrayContaining([
+      '-IconSetDirectory', fileURLToPath(new URL('../resources/brand-sets/hxfl-uat/installer', import.meta.url)),
+    ]), expect.anything())
+    expect(execute).not.toHaveBeenCalledWith('powershell.exe', expect.arrayContaining([
+      '-DisplayName',
+    ]), expect.anything())
   })
 
   it('packages every preload entry point the shell loads', async () => {

@@ -34,7 +34,7 @@
     "authProvider": "dsh-pro-auth",
     "branding": {
       "displayName": "金租办公",
-      "iconSet": "hxfl"
+      "iconSet": "hxfl-local"
     },
     "updates": {
       "distribution": "dshwork",

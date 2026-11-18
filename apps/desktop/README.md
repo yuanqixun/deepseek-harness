@@ -286,18 +286,18 @@ Set `desktop.disableOfficialModels` to `true` to disable the built-in DeepSeek A
 
 ### Environment branding
 
-The selected `config.json` may set `desktop.branding.displayName`, `iconSet`, and the optional `artifactNameBase`. The `local` and `hxfl` environments use “金租办公” in the application and sidebar brand name, with the `hxfl` artwork; `superbpm` uses “信舟办公” with the `superbpm` artwork. Environments without these values keep the DSH defaults. An empty value is treated as unconfigured. When `displayName` is set and `artifactNameBase` is omitted, the display name also becomes the installer filename base; set `artifactNameBase` separately when release filenames need an ASCII prefix. Select an environment with `--config-env <name>` to package its configuration.
+The selected `config.json` may set `desktop.branding.displayName`, `iconSet`, and the optional `artifactNameBase`. Environments without these values keep the DSH defaults. An empty value is treated as unconfigured. When `displayName` is set and `artifactNameBase` is omitted, the display name also becomes the installer filename base; set `artifactNameBase` separately when release filenames need an ASCII prefix. Select an environment with `--config-env <name>` to package its configuration.
 
 ```json
 "desktop": {
   "branding": {
     "displayName": "金租办公",
-    "iconSet": "hxfl"
+    "iconSet": "hxfl-local"
   }
 }
 ```
 
-Each icon set lives under `resources/brand-sets/<iconSet>/` and contains `sidebar-mark.svg`, `icon-windows.png`, `icon-macos.png`, `tray-windows.ico`, and all five PNG files under `installer/`. The sidebar mark can differ by set and uses the sidebar text color. Add a complete set before selecting it; packaging rejects missing resources. To package and upload the `local` environment, select it in both commands with `--config-env local`.
+Each icon set lives under `resources/brand-sets/<iconSet>/` and contains `sidebar-mark.svg`, `icon-windows.png`, `icon-macos.png`, `tray-windows.ico`, and all five PNG files under `installer/`. The installer artwork contains the logo and product name and is used for the welcome and progress screens. Update those images when changing the product name. Add a complete set before selecting it; packaging rejects missing resources. To package and upload the `local` environment, select it in both commands with `--config-env local`.
 
 ```sh
 pnpm --dir apps/desktop run package:win:x64 --config-env local

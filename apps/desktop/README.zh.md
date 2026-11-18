@@ -286,18 +286,18 @@ pnpm run package:desktop
 
 ### 按环境配置品牌
 
-所选 `config.json` 可在 `desktop.branding` 下设置 `displayName`、`iconSet` 和可选的 `artifactNameBase`。`local` 和 `hxfl` 环境会在应用和侧栏品牌名称中显示“金租办公”，并使用 `hxfl` 图标；`superbpm` 使用“信舟办公”和 `superbpm` 图标。未设置这些值的环境继续使用 DSH 默认值。空值按未配置处理。设置 `displayName` 后若省略 `artifactNameBase`，安装文件名基础名称也使用显示名称；如果发布文件名需要 ASCII 前缀，可单独设置 `artifactNameBase`。使用 `--config-env <name>` 选择对应环境打包。
+所选 `config.json` 可在 `desktop.branding` 下设置 `displayName`、`iconSet` 和可选的 `artifactNameBase`。未设置这些值的环境继续使用 DSH 默认值。空值按未配置处理。设置 `displayName` 后若省略 `artifactNameBase`，安装文件名基础名称也使用显示名称；如果发布文件名需要 ASCII 前缀，可单独设置 `artifactNameBase`。使用 `--config-env <name>` 选择对应环境打包。
 
 ```json
 "desktop": {
   "branding": {
     "displayName": "金租办公",
-    "iconSet": "hxfl"
+    "iconSet": "hxfl-local"
   }
 }
 ```
 
-每套图标放在 `resources/brand-sets/<iconSet>/`，其中包含 `sidebar-mark.svg`、`icon-windows.png`、`icon-macos.png`、`tray-windows.ico` 以及 `installer/` 下的五张 PNG 图片。侧栏标记可按套装替换，并使用侧栏文字颜色显示。选择图标套装前须补齐全部资源；缺少文件会使打包失败。打包和上传 `local` 环境时，都通过 `--config-env local` 选择该环境。
+每套图标放在 `resources/brand-sets/<iconSet>/`，其中包含 `sidebar-mark.svg`、`icon-windows.png`、`icon-macos.png`、`tray-windows.ico` 以及 `installer/` 下的五张 PNG 图片。安装器图片包含图标和软件名称，用于欢迎页和安装进度页；修改软件名称时须同步更新这些图片。选择图标套装前须补齐全部资源；缺少文件会使打包失败。打包和上传 `local` 环境时，都通过 `--config-env local` 选择该环境。
 
 ```sh
 pnpm --dir apps/desktop run package:win:x64 --config-env local

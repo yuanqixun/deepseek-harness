@@ -36,7 +36,7 @@
     "authProvider": "dsh-pro-auth",
     "branding": {
       "displayName": "AI工作助手-UAT",
-      "iconSet": "hxfl"
+      "iconSet": "hxfl-uat"
     },
     "updates": {
       "distribution": "dshwork",

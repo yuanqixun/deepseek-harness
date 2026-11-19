@@ -4,6 +4,7 @@ import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
 
 import { existsSync, readFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -196,6 +197,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 let backendReady = false
 /** Error-level console output of the primary window, attached to crash reports. */
 const rendererConsole = new RendererConsoleTail()
+
+if (!process.env.DSH_HOME?.trim()) process.env.DSH_HOME = join(homedir(), '.dshhxfl')
 
 // Keep Electron's legacy per-user storage location when productName changes between releases.
 const legacyUserDataPath = join(app.getPath('appData'), 'DeepSeek Harness')

@@ -27,8 +27,8 @@
   en: 3724c53da4f7647b
   zh: 76ae549d43c99bb4
 /deepseek-harness-desktop/key-technical-decisions/bundled-workspace-dependencies:
-  en: 31a4d702a46b116b
-  zh: 725e7f3c9d56ce51
+  en: efa596fd53cc21c9
+  zh: 40f51cbc1f771d45
 /deepseek-harness-desktop/bundled-command-runtime:
   en: 372297005b57a08b
   zh: 074a635ac17e4362
@@ -72,8 +72,8 @@
   en: 02f7b3c68f18a7f6
   zh: 6f9f9f4866fd365b
 /deepseek-harness-desktop/windows-installer-interface:
-  en: 8b4408d24bb8c1d4
-  zh: 22eeb5f015995183
+  en: 604dd20b7363c82c
+  zh: 958b187d12683cb8
 /deepseek-harness-desktop/windows-installer-interface/windows-ev-signing:
   en: 64836513eb7eda6e
   zh: 6ebb9184a7aa51de

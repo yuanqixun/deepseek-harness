@@ -344,6 +344,17 @@ function startStartupProfile(fixture: StartupFixture, args: readonly string[]) {
 describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', () => {
   testProfileResolution('lib')
 
+  it('initializes the default profile under .dshhxfl', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'dsh-default-home-'))
+    try {
+      const result = await runBuiltBin(['web', '--dump-default-config'], { HOME: home, USERPROFILE: home, DSH_HOME: undefined })
+      expect(result.code).toBe(0)
+      expect(existsSync(join(home, '.dshhxfl', 'profiles', 'web', 'package.json'))).toBe(true)
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
   it('requires a profile and rejects removed flags', async () => {
     const bare = await runBuiltBin()
     expect(bare.code).toBe(1)

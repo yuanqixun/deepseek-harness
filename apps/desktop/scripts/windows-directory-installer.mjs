@@ -80,7 +80,12 @@ export function installWindowsDirectoryInstaller() {
     const uninstaller = join(directory, 'uninstaller.nsh')
     await writeFile(uninstaller, directoryUninstaller(await readFile(join(templates, 'uninstaller.nsh'), 'utf8')))
     adapted = replaceOnce(adapted, '!include "uninstaller.nsh"', `!include "${uninstaller}"`)
-    return `!define DSH_UPDATER_CACHE_NAME "${this.packager.appInfo.updaterCacheDirName}"\n!define DSH_SEVENZIP_PATH "${tool}"\n!define DSH_SEVENZIP_LICENSE_DIR "${dirname(dirname(sourceTool))}"\n${await compute.call(this, adapted, ...args)}`
+    const updaterCacheDirName = process.env.DSH_DESKTOP_UPDATER_CACHE_NAME
+    if (updaterCacheDirName !== undefined && !/^[A-Za-z0-9-]+$/u.test(updaterCacheDirName)) {
+      throw new Error('desktop package: DSH_DESKTOP_UPDATER_CACHE_NAME must contain only letters, digits, and hyphens')
+    }
+    const resolvedUpdaterCacheDirName = updaterCacheDirName ?? this.packager.appInfo.updaterCacheDirName
+    return `!define DSH_UPDATER_CACHE_NAME "${resolvedUpdaterCacheDirName}"\n!define DSH_SEVENZIP_PATH "${tool}"\n!define DSH_SEVENZIP_LICENSE_DIR "${dirname(dirname(sourceTool))}"\n${await compute.call(this, adapted, ...args)}`
   }
 }
 

@@ -25,6 +25,7 @@
         "api": "openai-completions",
         "baseURL": "https://aigw.hxfl.com.cn/v1",
         "models": [
+          { "id": "hxfl-vision" },
           { "id": "hxfl-lite" },
           { "id": "hxfl-pro" }
         ]
@@ -34,6 +35,12 @@
   "desktop": {
     "disableOfficialModels": true,
     "authProvider": "dsh-pro-auth",
+    "windows": {
+      "appId": "com.deepseek.dsh",
+      "installDirectory": "D:\\dsh-hxfl",
+      "dshHome": "%USERPROFILE%\\.dsh-hxfl",
+      "userDataDirectory": "%APPDATA%\\dsh-hxfl"
+    },
     "branding": {
       "displayName": "AI工作助手",
       "iconSet": "hxfl"

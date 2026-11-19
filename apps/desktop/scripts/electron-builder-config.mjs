@@ -2,11 +2,12 @@ import { readInstallerLocales, renderInstallerStrings } from './installer-locale
 import { officePackageDirectories } from '../../../scripts/libreoffice-packages.mjs'
 import { createHash, X509Certificate } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rm, writeFile } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { dump, load } from 'js-yaml'
 import {
   resolveDesktopAppId,
   resolveMacOSNotarizationEnvironment,
@@ -35,6 +36,7 @@ import { preserveWindowsRuntimeSignature, signWindowsCode } from './windows-runt
 import { prepareWindowsAsarUnpack, verifyWindowsAsarUnpack } from './windows-asar-unpack.mjs'
 import { recordPackagingEvent } from './packaging-run.mjs'
 import { desktopBrandingFromEnvironment, resolveDesktopIconSet } from './desktop-branding-environment.mjs'
+import { resolveDesktopWindowsEnvironment } from './desktop-windows-environment.mjs'
 import {
   resolveMacOSAppUpdateFeed,
   verifyMacOSAppUpdateConfig,
@@ -61,6 +63,11 @@ export function createElectronBuilderConfig(
   if (env.DSH_DESKTOP_RUNTIME_CONFIG !== undefined) {
     try { desktopRuntimeConfig = JSON.parse(env.DSH_DESKTOP_RUNTIME_CONFIG) }
     catch (error) { throw new Error('desktop package: invalid DSH_DESKTOP_RUNTIME_CONFIG', { cause: error }) }
+  }
+  let desktopWindowsEnvironment
+  if (env.DSH_DESKTOP_ISOLATION_CONFIG !== undefined) {
+    try { desktopWindowsEnvironment = resolveDesktopWindowsEnvironment(JSON.parse(env.DSH_DESKTOP_ISOLATION_CONFIG)) }
+    catch (error) { throw new Error('desktop package: invalid DSH_DESKTOP_ISOLATION_CONFIG', { cause: error }) }
   }
   const appId = resolveDesktopAppId(env)
   const targetPlatform = env.DSH_DESKTOP_TARGET_PLATFORM
@@ -153,6 +160,7 @@ export function createElectronBuilderConfig(
       dshDesktopBranding: branding,
       dshDesktopAuthProvider: env.DSH_DESKTOP_AUTH_PROVIDER ?? 'deepseek-official',
       ...(desktopRuntimeConfig === undefined ? {} : { dshDesktopRuntimeConfig: desktopRuntimeConfig }),
+      ...(desktopWindowsEnvironment === undefined ? {} : { dshDesktopWindowsEnvironment: desktopWindowsEnvironment }),
       ...(privateUpdateConfig === undefined ? {} : { dshPrivateDesktopUpdates: privateUpdateConfig }),
       ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
       ...buildVersion === productVersion ? {} : { version: buildVersion },
@@ -176,6 +184,18 @@ export function createElectronBuilderConfig(
         env: scrubWindowsSigningEnvironment(env), windowsHide: true,
       })
       await writeFile(join(buildPaths.root, 'installer-ui', 'strings.nsh'), renderInstallerStrings(readInstallerLocales()), 'utf8')
+      const installerSettings = join(buildPaths.root, 'installer-ui', 'installation.nsh')
+      await rm(installerSettings, { force: true })
+      const settings = [
+        '!define DSH_PYTHON_RUNTIME_DIRECTORY "$LOCALAPPDATA\\DeepSeek Harness\\Python\\3.14.10"',
+        `!define DSH_PYTHON_APPLICATION_ID "${appId}"`,
+        ...(desktopWindowsEnvironment === undefined ? [] : [
+          `!define DSH_DEFAULT_INSTALL_DIRECTORY "${desktopWindowsEnvironment.installDirectory}"`,
+          `!define DSH_WINDOWS_DSH_HOME_DIRECTORY "${desktopWindowsEnvironment.dshHome}"`,
+          `!define DSH_WINDOWS_USER_DATA_DIRECTORY "${desktopWindowsEnvironment.userDataDirectory}"`,
+        ]),
+      ]
+      await writeFile(installerSettings, `${settings.join('\n')}\n`, 'utf8')
       const pythonInstaller = readFileSync(windowsPythonInstaller)
       const pythonInstallerHash = createHash('sha256').update(pythonInstaller).digest('hex').toUpperCase()
       if (pythonInstallerHash !== '92480239264744FE0386A1BD8275786FEFA126E3129E56A68E22B52C73329965') {
@@ -255,6 +275,15 @@ export function createElectronBuilderConfig(
     afterPack: async context => {
       const { verifyDesktopRuntime } = await import('../lib/types/runtime-tree.js')
       const resourcesDir = context.packager.getResourcesDir(context.appOutDir)
+      if (resolvedPlatform === 'win32' && update !== undefined && env.DSH_DESKTOP_UPDATER_CACHE_NAME !== undefined) {
+        const updateConfigPath = join(resourcesDir, 'app-update.yml')
+        const updateConfig = load(await readFile(updateConfigPath, 'utf8'))
+        if (typeof updateConfig !== 'object' || updateConfig === null || Array.isArray(updateConfig)) {
+          throw new Error('desktop package: Windows updater metadata must be a YAML mapping')
+        }
+        updateConfig.updaterCacheDirName = env.DSH_DESKTOP_UPDATER_CACHE_NAME
+        await writeFile(updateConfigPath, dump(updateConfig), 'utf8')
+      }
       if (resolvedPlatform === 'darwin' && update !== undefined) {
         await writeMacOSAppUpdateConfig(resourcesDir, resolveMacOSAppUpdateFeed(context.packager.config.publish),
           context.packager.appInfo.updaterCacheDirName)

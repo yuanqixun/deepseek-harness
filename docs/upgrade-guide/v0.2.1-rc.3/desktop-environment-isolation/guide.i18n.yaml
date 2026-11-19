@@ -1,0 +1,16 @@
+# Bilingual-pair consistency record for guide.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.1-rc.3/desktop-environment-isolation/guide.md
+/:
+  en: 358824f553346e4f
+  zh: 9e18468f9a6c7eb7
+/windows-desktop-environment-isolation:
+  en: be8b616a9f82ba79
+  zh: 558afb96e3f2b972
+/windows-desktop-environment-isolation/change:
+  en: e0c23ad0264a0f31
+  zh: e6c420f6896129c3
+/windows-desktop-environment-isolation/migration:
+  en: ad3072b75208ffdb
+  zh: 792936cba9d1f0ca

@@ -25,6 +25,7 @@
         "api": "openai-completions",
         "baseURL": "https://aigw.hxfl.com.cn/v1",
         "models": [
+          { "id": "hxfl-vision" },
           { "id": "hxfl-lite" },
           { "id": "hxfl-pro" }
         ]
@@ -34,6 +35,12 @@
   "desktop": {
     "disableOfficialModels": true,
     "authProvider": "dsh-pro-auth",
+    "windows": {
+      "appId": "com.deepseek.dsh.hxfluat",
+      "installDirectory": "D:\\dsh-hxfl-uat",
+      "dshHome": "%USERPROFILE%\\.dsh-hxfl-uat",
+      "userDataDirectory": "%APPDATA%\\dsh-hxfl-uat"
+    },
     "branding": {
       "displayName": "AI工作助手-UAT",
       "iconSet": "hxfl-uat"

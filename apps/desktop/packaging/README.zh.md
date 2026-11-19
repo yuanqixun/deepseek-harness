@@ -79,6 +79,8 @@ macOS 和 Windows 未签名安装包使用与本地 Web 构建相同的本地化
 
 不选择机器 preset 时，打包、上传以及手动 macOS 签名检查（本地 macOS 未签名构建除外）使用 `apps/desktop/.env.windows` 或 `.env.macos`，由目标平台选择。macOS package 命令默认生成未签名包；签名发布产物使用带 `:signed` 的命令。复制对应的 [Windows 模板](../.env.windows.example) 或 [macOS 模板](../.env.macos.example)，填写本机配置；Git 忽略这两个本地文件，安装产物也不包含它们。发布字段只从选定的配置文件读取，不回退到系统或 shell 中的同名变量；`PATH`、代理和构建工具环境仍保留。发布版本是命令参数而非发布字段，上传从打包写下的完成记录中读取它。文件使用 UTF-8，支持 BOM；相对证书、SignTool、Apple API Key 和钥匙串路径以 `apps/desktop` 为基准，变量值不做 shell 展开，包含 `#` 或空格的密码需要引号。Windows CI 读取相同的机器 preset。
 
+使用 `--config-env hxfl`、`hxfluat` 或 `superbpm` 选择的 Windows 构建会读取对应环境配置中的 `desktop.windows`。其中 `appId`、`installDirectory`、`dshHome` 和 `userDataDirectory` 字段分别设置 Electron 应用标识、首次安装目录、Harness 主目录和 Electron 用户数据目录。`hxfl` 保留现有 Windows 标识和数据位置；UAT 与 Superbpm 使用独立标识和数据路径。`envs/local` 保持不配置该对象，Windows 本地打包继续使用机器配置中的应用标识和默认目录。
+
 每条打包命令在构建与下载前检查应用 ID 以及该模式需要的更新与签名配置，随后探测本次运行要用的外部工具：归档读取工具，以及 Windows 目标的安装器编译器。macOS 签名打包会检查身份、Team ID、一套完整公证凭据、`CSC_LINK` 指定的可读本地 p12 文件、显式配置的 `CSC_KEY_PASSWORD`，以及引用的 API Key 和钥匙串文件；Windows 检查公开代码签名证书、SignTool 文件、容器名称和 PIN 格式。仅准备 Windows 资源以及两个平台上的未签名打包均不要求签名凭据。配置检查不验证 PIN 是否正确、Token 是否登录、钥匙串是否解锁或 Apple 是否接受凭据；实际签名与公证负责这些检查。未选择机器 preset 时，`--build-version auto` 会访问目标 bucket，`--check` 下同样如此。单独运行相同检查：
 
 ```sh
@@ -271,7 +273,7 @@ Windows dotenv 或机器 preset 中的 `DSH_DESKTOP_WINDOWS_COMPRESSION_LEVEL` �
 
 NSIS 在安装阶段清理临时解压目录，完成后才显示完成页或自动启动应用。已安装的生产依赖保持为普通文件；启动时不会再次解压。安装仍会写入完整的应用目录树。
 
-Windows 安装包会在 `resources/` 中携带 Python 3.14.10 64 位完整安装器和安装助手。助手以静默方式运行 Python 安装器，使用 `InstallAllUsers=0`、`Include_pip=1`，并将 DSH 安装目录设为 `TargetDir`；之后检查 `python.exe` 和 pip，再把安装目录及其 `Scripts` 加入当前用户 PATH。Python 安装或 PATH 写入失败会使 DSH 安装失败。卸载时调用 Python 自带卸载程序，并且只移除这两条由安装器管理的 PATH 项。本地 `build-win64.ps1` 从同级 `offline` 目录读取 `python-3.14.10-amd64.exe`；直接运行 Windows 打包流程时使用 `DSH_DESKTOP_PYTHON_INSTALLER`，或使用相同的同级默认路径。Windows Actions 工作流会从 Python.org 下载并校验同一份固定版本的安装器。Python 3.14 的完整安装器已被官方标记为弃用，Python 3.16 起不再提供；后续版本应迁移到 Python install manager。
+Windows 安装包会在 `resources/` 中携带 Python 3.14.10 64 位完整安装器和安装助手。助手会在 `%LOCALAPPDATA%\DeepSeek Harness\Python\3.14.10` 安装一份当前用户运行时，检查 `python.exe` 和 pip，并将运行时目录及其 `Scripts` 加入当前用户 PATH。每个 Desktop 应用按应用 ID 登记运行时所有权；卸载时移除该应用登记，其他已登记应用仍在时保留共享运行时和 PATH 项。最后一个应用卸载时，只有当前用户 Python 注册表指向这份受管运行时才会调用 Python 自带卸载程序并移除 PATH 项；如果 Python 由其他注册项管理，则保留运行时和 PATH。本地 `build-win64.ps1` 从同级 `offline` 目录读取 `python-3.14.10-amd64.exe`；直接运行 Windows 打包流程时使用 `DSH_DESKTOP_PYTHON_INSTALLER`，或使用相同的同级默认路径。Windows Actions 工作流会从 Python.org 下载并校验同一份固定版本的安装器。Python 3.14 的完整安装器已被官方标记为弃用，Python 3.16 起不再提供；后续版本应迁移到 Python install manager。
 
 <a id="desktop-runtime-preparation"></a>
 

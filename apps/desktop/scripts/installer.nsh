@@ -3,6 +3,14 @@
 !define INSTALLER_SOURCE_DIR "${__FILEDIR__}\..\installer"
 !define /ifndef INSTALLER_BUILD_DIR "${__FILEDIR__}\..\.desktop-build\targets\win-x64\installer-ui"
 
+!include /NONFATAL "${INSTALLER_BUILD_DIR}\installation.nsh"
+!ifndef DSH_PYTHON_RUNTIME_DIRECTORY
+  !define DSH_PYTHON_RUNTIME_DIRECTORY "$LOCALAPPDATA\DeepSeek Harness\Python\3.14.10"
+!endif
+!ifndef DSH_PYTHON_APPLICATION_ID
+  !define DSH_PYTHON_APPLICATION_ID "${APP_GUID}"
+!endif
+
 ManifestDPIAware true
 !ifndef BUILD_UNINSTALLER
   !define MUI_CUSTOMFUNCTION_GUIINIT InstallerGuiInit
@@ -44,6 +52,14 @@ ManifestDPIAware true
   !insertmacro setInstallModePerUser
   StrCpy $hasPerMachineInstallation 0
   StrCpy $hasPerUserInstallation 1
+  !ifdef DSH_DEFAULT_INSTALL_DIRECTORY
+    ReadRegStr $0 HKCU "${INSTALL_REGISTRY_KEY}" "InstallLocation"
+    !insertmacro GetDParameter $R0
+    ${If} $0 == ""
+    ${AndIf} $R0 == ""
+      StrCpy $INSTDIR "${DSH_DEFAULT_INSTALL_DIRECTORY}"
+    ${EndIf}
+  !endif
   StrCpy $InstallerPath $INSTDIR
   StrCpy $InstallerTheme "auto"
   ${GetParameters} $0
@@ -88,7 +104,17 @@ ManifestDPIAware true
 !macroend
 
 !macro customUnInstall
-  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$INSTDIR\resources\python-runtime-installer.ps1" -Operation uninstall -Installer "$INSTDIR\resources\python-installer.exe" -Destination "$INSTDIR\python-3.14.10"' $0
+  ReadEnvStr $UnHome DSH_HOME
+  !ifdef DSH_WINDOWS_DSH_HOME_DIRECTORY
+    ${If} $UnHome == ""
+      ExpandEnvStrings $UnHome "${DSH_WINDOWS_DSH_HOME_DIRECTORY}"
+    ${EndIf}
+  !endif
+  StrCpy $R1 "$APPDATA\DeepSeek Harness"
+  !ifdef DSH_WINDOWS_USER_DATA_DIRECTORY
+    ExpandEnvStrings $R1 "${DSH_WINDOWS_USER_DATA_DIRECTORY}"
+  !endif
+  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$INSTDIR\resources\python-runtime-installer.ps1" -Operation uninstall -Installer "$INSTDIR\resources\python-installer.exe" -Destination "${DSH_PYTHON_RUNTIME_DIRECTORY}" -ApplicationId "${DSH_PYTHON_APPLICATION_ID}" -ProtectedHarnessHome "$UnHome" -ProtectedUserData "$R1"' $0
   ${If} $0 != 0
     DetailPrint "Python PATH cleanup failed with exit code $0"
   ${EndIf}
@@ -242,7 +268,17 @@ ManifestDPIAware true
   ${EndIf}
   !insertmacro InstallerPublishStage 4
   !insertmacro dshFinishDirectories
-  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$INSTDIR\resources\python-runtime-installer.ps1" -Operation install -Installer "$INSTDIR\resources\python-installer.exe" -Destination "$INSTDIR\python-3.14.10"' $1
+  ReadEnvStr $R2 DSH_HOME
+  !ifdef DSH_WINDOWS_DSH_HOME_DIRECTORY
+    ${If} $R2 == ""
+      ExpandEnvStrings $R2 "${DSH_WINDOWS_DSH_HOME_DIRECTORY}"
+    ${EndIf}
+  !endif
+  StrCpy $R3 "$APPDATA\DeepSeek Harness"
+  !ifdef DSH_WINDOWS_USER_DATA_DIRECTORY
+    ExpandEnvStrings $R3 "${DSH_WINDOWS_USER_DATA_DIRECTORY}"
+  !endif
+  ExecWait '"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$INSTDIR\resources\python-runtime-installer.ps1" -Operation install -Installer "$INSTDIR\resources\python-installer.exe" -Destination "${DSH_PYTHON_RUNTIME_DIRECTORY}" -ApplicationId "${DSH_PYTHON_APPLICATION_ID}" -ProtectedHarnessHome "$R2" -ProtectedUserData "$R3"' $1
   ${If} $1 != 0
     SetErrors
     StrCpy $0 1

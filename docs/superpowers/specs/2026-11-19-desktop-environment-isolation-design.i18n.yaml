@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-11-19-desktop-environment-isolation-design.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/superpowers/specs/2026-11-19-desktop-environment-isolation-design.md
+/desktop-environment-isolation-design:
+  en: f3094cf24576cfe3
+  zh: 6405d01e856aa223
+/desktop-environment-isolation-design/intent:
+  en: de52e25c0e38a9d3
+  zh: 0ff779bb0a7ea182
+/desktop-environment-isolation-design/goals-and-limits:
+  en: 1885da11bfc4e030
+  zh: 1d112a912a1f57d6
+/desktop-environment-isolation-design/approaches:
+  en: f66973aeff85f7bf
+  zh: b1d0036463d29d84
+/desktop-environment-isolation-design/selected-configuration-and-behavior:
+  en: 100124c4330e6785
+  zh: 102e0bf0221ded80
+/desktop-environment-isolation-design/implementation:
+  en: ede9c4ea48941812
+  zh: f9f7dc455b04d259

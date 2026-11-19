@@ -66,8 +66,9 @@ extern "C" __declspec(dllexport) int __cdecl InstallerReportExtractFailure(
 }
 
 // Returns a Win32 error code; no cleanup request may traverse a linked root or touch the protected root.
-extern "C" __declspec(dllexport) DWORD __cdecl UninstallRemoveData(LPCWSTR path, LPCWSTR installation, LPCWSTR protectedRoot) {
-    return uninstall_data::Remove(path, installation, protectedRoot);
+extern "C" __declspec(dllexport) DWORD __cdecl UninstallRemoveData(
+    LPCWSTR path, LPCWSTR installation, LPCWSTR protectedRoot, LPCWSTR additionalProtectedRoot) {
+    return uninstall_data::Remove(path, installation, protectedRoot, additionalProtectedRoot);
 }
 
 // Returns a Win32 error code; only ordinary empty directories strictly below the stop directory are removed.

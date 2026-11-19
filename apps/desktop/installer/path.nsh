@@ -117,9 +117,97 @@ FunctionEnd
 !macroend
 !insertmacro InstallerValidatePathFunction ""
 
+; Reject an installation directory that would overlap either configured user-data directory.
+Function InstallerCheckPathOverlap
+    System::Call 'kernel32::GetFullPathNameW(w "$0", i ${NSIS_MAX_STRLEN}, w .r1, p 0) i.r2'
+    ${If} $2 < 4
+    ${OrIf} $2 >= ${NSIS_MAX_STRLEN}
+        StrCpy $InstallerError "$(INSTALLER_PATH_INVALID)"
+        Return
+    ${EndIf}
+    StrCpy $0 $1
+    System::Call 'kernel32::lstrcmpiW(w "$0", w "$InstallerPath") i.r1'
+    ${If} $1 == 0
+        StrCpy $InstallerError "$(INSTALLER_PATH_INVALID)"
+        Return
+    ${EndIf}
+    StrLen $2 $InstallerPath
+    StrCpy $3 $0 $2
+    System::Call 'kernel32::lstrcmpiW(w "$3", w "$InstallerPath") i.r1'
+    ${If} $1 == 0
+        StrCpy $3 $0 1 $2
+        ${If} $3 == "\"
+            StrCpy $InstallerError "$(INSTALLER_PATH_INVALID)"
+            Return
+        ${EndIf}
+    ${EndIf}
+    StrLen $2 $0
+    StrCpy $3 $InstallerPath $2
+    System::Call 'kernel32::lstrcmpiW(w "$3", w "$0") i.r1'
+    ${If} $1 == 0
+        StrCpy $3 $InstallerPath 1 $2
+        ${If} $3 == "\"
+            StrCpy $InstallerError "$(INSTALLER_PATH_INVALID)"
+        ${EndIf}
+    ${EndIf}
+FunctionEnd
+
+Function InstallerValidateDataPaths
+    ReadEnvStr $0 DSH_HOME
+    !ifdef DSH_WINDOWS_DSH_HOME_DIRECTORY
+        ${If} $0 == ""
+            ExpandEnvStrings $0 "${DSH_WINDOWS_DSH_HOME_DIRECTORY}"
+        ${EndIf}
+    !endif
+    ${If} $0 != ""
+        Call InstallerCheckPathOverlap
+        ${If} $InstallerError != ""
+            Return
+        ${EndIf}
+    !endif
+    StrCpy $0 "$APPDATA\DeepSeek Harness"
+    !ifdef DSH_WINDOWS_USER_DATA_DIRECTORY
+        ExpandEnvStrings $0 "${DSH_WINDOWS_USER_DATA_DIRECTORY}"
+    !endif
+    Call InstallerCheckPathOverlap
+    ${If} $InstallerError != ""
+        Return
+    ${EndIf}
+    StrCpy $0 "${DSH_PYTHON_RUNTIME_DIRECTORY}"
+    Call InstallerCheckPathOverlap
+    ${If} $InstallerError != ""
+        Return
+    ${EndIf}
+    Push $InstallerPath
+    StrCpy $InstallerPath "${DSH_PYTHON_RUNTIME_DIRECTORY}"
+    ReadEnvStr $0 DSH_HOME
+    !ifdef DSH_WINDOWS_DSH_HOME_DIRECTORY
+        ${If} $0 == ""
+            ExpandEnvStrings $0 "${DSH_WINDOWS_DSH_HOME_DIRECTORY}"
+        ${EndIf}
+    !endif
+    ${If} $0 != ""
+        Call InstallerCheckPathOverlap
+        ${If} $InstallerError != ""
+            Pop $InstallerPath
+            Return
+        ${EndIf}
+    !endif
+    StrCpy $0 "$APPDATA\DeepSeek Harness"
+    !ifdef DSH_WINDOWS_USER_DATA_DIRECTORY
+        ExpandEnvStrings $0 "${DSH_WINDOWS_USER_DATA_DIRECTORY}"
+    !endif
+    Call InstallerCheckPathOverlap
+    Pop $InstallerPath
+FunctionEnd
+
 ; A new installation requires an empty directory; updates require the registered executable.
 Function InstallerPreflight
     Call InstallerValidatePath
+    ${If} $InstallerError != ""
+        Return
+    ${EndIf}
+    Call InstallerValidateDataPaths
     ${If} $InstallerError != ""
         Return
     ${EndIf}

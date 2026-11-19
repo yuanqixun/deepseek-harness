@@ -25,6 +25,7 @@
         "api": "openai-completions",
         "baseURL": "https://litellm.superbpm.com/v1",
         "models": [
+          { "id": "hxfl-vision" },
           { "id": "hxfl-lite" },
           { "id": "hxfl-pro" }
         ]
@@ -34,6 +35,12 @@
   "desktop": {
     "disableOfficialModels": true,
     "authProvider": "dsh-pro-auth",
+    "windows": {
+      "appId": "com.deepseek.dsh.superbpm",
+      "installDirectory": "D:\\dsh-superbpm",
+      "dshHome": "%USERPROFILE%\\.dsh-superbpm",
+      "userDataDirectory": "%APPDATA%\\dsh-superbpm"
+    },
     "branding": {
       "displayName": "信舟办公",
       "iconSet": "superbpm"

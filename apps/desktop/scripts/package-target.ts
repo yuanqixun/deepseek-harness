@@ -34,6 +34,7 @@ import { readDesktopRuntimeEnvironment, readPrivateMarketEnvironment } from '../
 import { readPrivateDesktopUpdates } from './private-desktop-update-environment.mjs'
 import { verifyPrivateDesktopUpdateArtifacts } from './private-desktop-update-artifacts.mjs'
 import { DEFAULT_DESKTOP_DISPLAY_NAME, DESKTOP_BRANDING_ENV, desktopBrandingFromEnvironment, readDesktopBranding, resolveDesktopIconSet } from './desktop-branding-environment.mjs'
+import { readDesktopWindowsEnvironment } from './desktop-windows-environment.mjs'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const REPOSITORY_ROOT = resolve(APP_ROOT, '..', '..')
@@ -445,6 +446,17 @@ async function main(): Promise<void> {
     environment.DSH_DESKTOP_AUTH_PROVIDER = selectedAuthProvider
     environment.DSH_DESKTOP_RUNTIME_CONFIG = JSON.stringify(selectedRuntimeConfig)
     selectedBranding = readDesktopBranding(configRoot, configEnvironment)
+    if (target.platform === 'win32') {
+      const desktop = isRecord(document.desktop) ? document.desktop : undefined
+      if (desktop !== undefined && 'windows' in desktop) {
+        const selectedWindowsEnvironment = readDesktopWindowsEnvironment(document)
+        environment.DSH_DESKTOP_APP_ID = selectedWindowsEnvironment.appId
+        environment.DSH_DESKTOP_ISOLATION_CONFIG = JSON.stringify(selectedWindowsEnvironment)
+        environment.DSH_DESKTOP_UPDATER_CACHE_NAME = `dsh-${selectedWindowsEnvironment.appId.toLowerCase().replaceAll('.', '-')}-updater`
+      } else if (configEnvironment !== 'local') {
+        throw new Error(`desktop package: ${configEnvironment}/config.json must define desktop.windows for Windows packaging`)
+      }
+    }
     resolveDesktopIconSet(join(APP_ROOT, 'resources', 'brand-sets'), selectedBranding.iconSet)
     environment[DESKTOP_BRANDING_ENV] = JSON.stringify(selectedBranding)
     if (isRecord(document.desktop) && 'updates' in document.desktop) {

@@ -25,6 +25,7 @@ import {
   type MenuItemConstructorOptions,
 } from 'electron'
 import { resolveDesktopPaths } from './paths.ts'
+import { resolveDesktopWindowsDataPaths } from './desktop-windows-environment.ts'
 import { DesktopProjectManager } from './project-manager.ts'
 import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError } from './host-process.ts'
 import { DesktopPlatformView, PLATFORM_IPC, platformBounds } from './platform-view.ts'
@@ -92,6 +93,16 @@ let shuttingDown = false
  */
 let skipQuitConfirmation = false
 let windowsLanguage: string | undefined
+const desktopWindowsDataPaths = readDesktopWindowsDataPaths()
+if (!process.env.DSH_HOME?.trim()) {
+  process.env.DSH_HOME = desktopWindowsDataPaths?.dshHome ?? join(homedir(), '.dshhxfl')
+}
+const desktopUserDataPath = desktopWindowsDataPaths?.userDataDirectory ?? join(app.getPath('appData'), 'DeepSeek Harness')
+app.setPath('userData', desktopUserDataPath)
+app.setPath('sessionData', desktopUserDataPath)
+app.setAppLogsPath(process.platform === 'darwin'
+  ? join(app.getPath('home'), 'Library', 'Logs', 'DeepSeek Harness')
+  : join(desktopUserDataPath, 'logs'))
 const desktopDisplayName = readDesktopDisplayName()
 const desktopRuntimeConfig = readDesktopRuntimeConfig()
 const desktopAuthProvider = desktopRuntimeConfig.authProvider
@@ -177,6 +188,16 @@ function readDesktopRuntimeConfig(): DesktopRuntimeConfig {
   }
 }
 
+function readDesktopWindowsDataPaths(): ReturnType<typeof resolveDesktopWindowsDataPaths> | undefined {
+  if (!app.isPackaged || process.platform !== 'win32') return undefined
+  let manifest: unknown
+  try { manifest = JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')) }
+  catch (error) { throw new Error('desktop startup: cannot read packaged Windows environment settings', { cause: error }) }
+  if (!isRecord(manifest)) throw new Error('desktop startup: packaged application manifest must be an object')
+  const value = manifest.dshDesktopWindowsEnvironment
+  return value === undefined ? undefined : resolveDesktopWindowsDataPaths(value)
+}
+
 function isDesktopProAuthConfig(value: unknown): value is NonNullable<DesktopRuntimeConfig['dshProAuth']> {
   return isRecord(value) && typeof value.casLoginUrl === 'string' && typeof value.casValidateUrl === 'string'
     && (value.callbackPort === undefined || (typeof value.callbackPort === 'number'
@@ -197,18 +218,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 let backendReady = false
 /** Error-level console output of the primary window, attached to crash reports. */
 const rendererConsole = new RendererConsoleTail()
-
-if (!process.env.DSH_HOME?.trim()) process.env.DSH_HOME = join(homedir(), '.dshhxfl')
-
-// Keep Electron's legacy per-user storage location when productName changes between releases.
-const legacyUserDataPath = join(app.getPath('appData'), 'DeepSeek Harness')
-app.setPath('userData', legacyUserDataPath)
-app.setPath('sessionData', legacyUserDataPath)
-// Platform-conventional logs directory (macOS ~/Library/Logs/<name>, otherwise under userData);
-// set before ready so the first fatal report already resolves under it.
-app.setAppLogsPath(process.platform === 'darwin'
-  ? join(app.getPath('home'), 'Library', 'Logs', 'DeepSeek Harness')
-  : join(legacyUserDataPath, 'logs'))
 
 function currentDesktopLocale(): ReturnType<typeof resolveDesktopLocale> {
   return resolveDesktopLocale(windowsLanguage ?? app.getLocale(), desktopDisplayName)

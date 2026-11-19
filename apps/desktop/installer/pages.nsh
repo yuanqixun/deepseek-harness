@@ -268,6 +268,9 @@ Function InstallerValidateEditedPath
     ${EndIf}
     ${NSD_GetText} $InstallerEdit $InstallerPath
     Call InstallerValidatePath
+    ${If} $InstallerError == ""
+        Call InstallerValidateDataPaths
+    ${EndIf}
     ${NSD_SetText} $InstallerStatus "$InstallerError"
     !insertmacro InstallerPlace $InstallerStatus 48 542 504 42
     ShowWindow $InstallerStatus 5
